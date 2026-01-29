@@ -27,3 +27,12 @@ def test_markdown_includes_role_divs_and_tags() -> None:
     assert "::: {#role-" in content
     assert ".tag-infra" in content
     assert "## Experience" in content
+
+
+def test_markdown_formats_year_dates() -> None:
+    sot = load_sot(Path("sot.sample"))
+    variant = load_variant(Path("config/variants/base.yaml"))
+
+    content = build_markdown(sot, variant)
+
+    assert "2014 — 2018" in content

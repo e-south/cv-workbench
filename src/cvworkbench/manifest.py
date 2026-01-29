@@ -29,6 +29,7 @@ def build_manifest(
     sot_path: Path,
     formats: list[str],
     output_paths: dict[str, Path],
+    resume_path: Path,
     pdf_engine: str | None,
     repo_root: Path,
 ) -> dict[str, Any]:
@@ -50,6 +51,10 @@ def build_manifest(
             for fmt in formats
             if fmt in output_paths
         },
+        "resume": {
+            "path": resume_path.name,
+            "hash": _hash_file(resume_path),
+        },
         "sot_hashes": _hash_sot(sot_path),
         "variant_hash": _hash_file(variant_path),
         "git": {"commit": _git_commit(repo_root)},
@@ -68,7 +73,10 @@ def write_manifest(path: Path, data: dict[str, Any]) -> None:
 
 
 def _hash_sot(sot_path: Path) -> dict[str, str]:
-    return {filename: _hash_file(sot_path / filename) for filename in REQUIRED_FILES}
+    return {
+        filename: _hash_file(sot_path / filename)
+        for filename in REQUIRED_FILES.keys()
+    }
 
 
 def _hash_file(path: Path) -> str:

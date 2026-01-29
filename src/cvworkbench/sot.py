@@ -16,21 +16,21 @@ from typing import Any
 
 import yaml
 
-REQUIRED_FILES = [
-    "person.yaml",
-    "experience.yaml",
-    "projects.yaml",
-    "skills.yaml",
-    "education.yaml",
-]
+REQUIRED_FILES = {
+    "person.yaml": "person",
+    "experience.yaml": "experience",
+    "projects.yaml": "projects",
+    "skills.yaml": "skills",
+    "education.yaml": "education",
+}
 
 
 def load_sot(sot_path: Path) -> dict[str, Any]:
     data: dict[str, Any] = {}
 
-    for filename in REQUIRED_FILES:
+    for filename, key in REQUIRED_FILES.items():
         path = sot_path / filename
-        data[filename.removesuffix(".yaml")] = _load_yaml(path)
+        data[key] = _load_yaml(path)
 
     return data
 

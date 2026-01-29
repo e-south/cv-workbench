@@ -16,10 +16,18 @@ from typing import Annotated
 
 import typer
 
-from cvworkbench.config import resolve_sot_path
+from cvworkbench.config import (
+    resolve_default_variant,
+    resolve_dist_path,
+    resolve_pdf_engine,
+    resolve_sot_path,
+    resolve_variant_path,
+)
+from cvworkbench.paths import filters_dir, output_path
 from cvworkbench.pipeline import build_documents
-from cvworkbench.rendering import RenderError
+from cvworkbench.rendering import RenderError, render_document
 from cvworkbench.validation import validate_sot
+from cvworkbench.variants import load_variant
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -126,8 +134,67 @@ def build(
 
 
 @app.command()
-def render() -> None:
-    _not_implemented("render")
+def render(
+    canonical: Annotated[
+        Path,
+        typer.Option(
+            "--canonical",
+            help="Path to canonical markdown input",
+        ),
+    ],
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    variant: Annotated[
+        str | None,
+        typer.Option(
+            "--variant",
+            help="Variant id to render",
+        ),
+    ] = None,
+    formats: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--format",
+            help="Output formats to render (repeatable or comma-separated)",
+        ),
+    ] = None,
+) -> None:
+    if not canonical.exists():
+        typer.echo(f"ERROR: Canonical markdown not found: {canonical}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        resolved_variant = variant or resolve_default_variant(config)
+        variant_path = resolve_variant_path(resolved_variant, config)
+        resolved = load_variant(variant_path)
+        dist_dir = resolve_dist_path(config) / resolved.id
+        dist_dir.mkdir(parents=True, exist_ok=True)
+        pdf_engine = resolve_pdf_engine(config)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    parsed_formats = _parse_formats(formats) or resolved.outputs
+    filters_path = filters_dir()
+    for fmt in parsed_formats:
+        output_file = output_path(dist_dir, resolved, fmt)
+        try:
+            render_document(
+                canonical,
+                output_file,
+                resolved,
+                filters_path,
+                fmt,
+                pdf_engine,
+            )
+        except RenderError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
 
 
 @app.command()

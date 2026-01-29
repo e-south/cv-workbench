@@ -1,9 +1,9 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/tests/test_manifest.py
+cv-workbench/tests/test_resume.py
 
-Tests build manifest generation.
+Tests JSON Resume materialization.
 
 Module Author(s): Eric J. South
 --------------------------------------------------------------------------------
@@ -17,7 +17,7 @@ from pathlib import Path
 from cvworkbench.pipeline import build_documents
 
 
-def test_manifest_written() -> None:
+def test_resume_written_to_run_dir() -> None:
     result = build_documents(
         sot_path=Path("sot.sample"),
         config_path=Path("config/workbench.yaml"),
@@ -25,11 +25,9 @@ def test_manifest_written() -> None:
         formats=["md"],
     )
 
-    manifest_path = result.dist_dir / "manifest.json"
-    assert manifest_path.exists()
+    resume_path = result.run_dir / "resume.json"
+    assert resume_path.exists()
 
-    data = json.loads(manifest_path.read_text())
-    assert data["variant"]["id"] == "base"
-    assert "sot_hashes" in data
-    assert data["resume"]["path"] == "resume.json"
-    assert "hash" in data["resume"]
+    payload = json.loads(resume_path.read_text())
+    assert payload["basics"]["name"] == "Alex Example"
+    assert payload["work"][0]["name"] == "Acme Systems"

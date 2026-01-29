@@ -209,8 +209,8 @@ def _build_education(lines: list[str], sot: dict[str, Any]) -> None:
 
 
 def _format_dates(item: dict[str, Any]) -> str:
-    start = _string(item.get("start"))
-    end = _string(item.get("end"))
+    start = _date_string(item.get("start"))
+    end = _date_string(item.get("end"))
     if start and end:
         return f"{start} — {end}"
     if start:
@@ -222,6 +222,14 @@ def _string(value: Any) -> str:
     if not isinstance(value, str):
         return ""
     return value.strip()
+
+
+def _date_string(value: Any) -> str:
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return value.strip()
+    return ""
 
 
 def _slugify(value: Any) -> str:

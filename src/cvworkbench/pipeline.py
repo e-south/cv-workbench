@@ -24,7 +24,9 @@ from cvworkbench.config import (
 )
 from cvworkbench.manifest import build_manifest, write_manifest
 from cvworkbench.markdown import build_markdown
+from cvworkbench.paths import filters_dir, output_path
 from cvworkbench.rendering import render_document
+from cvworkbench.resume import build_resume, write_resume
 from cvworkbench.sot import load_sot
 from cvworkbench.variants import Variant, load_variant
 
@@ -56,25 +58,28 @@ def build_documents(
     run_dir = _create_run_dir(resolve_runs_path(config_path))
     canonical_path = run_dir / "canonical.md"
     canonical_path.write_text(markdown)
+    resume_payload = build_resume(sot)
+    resume_path = run_dir / "resume.json"
+    write_resume(resume_path, resume_payload)
 
     dist_dir = resolve_dist_path(config_path) / variant.id
     dist_dir.mkdir(parents=True, exist_ok=True)
 
-    filters_dir = _filters_dir()
+    filters_path = filters_dir()
     pdf_engine = resolve_pdf_engine(config_path)
     output_paths: dict[str, Path] = {}
 
     for fmt in selected_formats:
-        output_path = _output_path(dist_dir, variant, fmt)
+        output_file = output_path(dist_dir, variant, fmt)
         render_document(
             canonical_path,
-            output_path,
+            output_file,
             variant,
-            filters_dir,
+            filters_path,
             fmt,
             pdf_engine,
         )
-        output_paths[fmt] = output_path
+        output_paths[fmt] = output_file
 
     manifest = build_manifest(
         variant=variant,
@@ -82,6 +87,7 @@ def build_documents(
         sot_path=sot_path,
         formats=selected_formats,
         output_paths=output_paths,
+        resume_path=resume_path,
         pdf_engine=pdf_engine,
         repo_root=config_path.parent.parent,
     )
@@ -102,15 +108,3 @@ def _create_run_dir(runs_root: Path) -> Path:
     run_dir = runs_root / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
-
-
-def _output_path(dist_dir: Path, variant: Variant, fmt: str) -> Path:
-    extension = fmt
-    if fmt == "md":
-        extension = "md"
-    filename = f"{variant.output_name}.{extension}"
-    return dist_dir / filename
-
-
-def _filters_dir() -> Path:
-    return Path(__file__).resolve().parents[2] / "build" / "filters"
