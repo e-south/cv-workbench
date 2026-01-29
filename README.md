@@ -26,8 +26,8 @@ eval "$(/usr/libexec/path_helper)"
 ```bash
 uv sync --locked
 uv run cvw --help
-uv run cvw doctor
 uv run cvw init
+uv run cvw doctor
 uv run cvw quickstart
 uv run cvw validate --sot-path ./sot.sample
 uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf

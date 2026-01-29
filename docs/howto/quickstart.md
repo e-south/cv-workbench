@@ -22,13 +22,19 @@ eval "$(/usr/libexec/path_helper)"
 uv sync --locked
 ```
 
-## 2) Confirm the runtime toolchain
+## 2) Initialize the workspace
+
+```bash
+uv run cvw init
+```
+
+## 3) Confirm the runtime toolchain
 
 ```bash
 uv run cvw doctor
 ```
 
-## 3) Build a sample CV
+## 4) Build a sample CV
 
 ```bash
 uv run cvw quickstart
@@ -48,7 +54,7 @@ templates) if they are missing.
 - `runs/<timestamp>/resume.json`
 - `runs/<timestamp>/selection.json`
 
-## 4) Build explicitly (recommended for automation)
+## 5) Build explicitly (recommended for automation)
 
 ```bash
 uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf
@@ -62,7 +68,7 @@ uv run cvw build --plain --sot-path ./sot.sample --variant base --format md
 uv run cvw build --json --sot-path ./sot.sample --variant base --format md
 ```
 
-## 5) Sync to your site (local-first)
+## 6) Sync to your site (local-first)
 
 ```bash
 uv run cvw sync --variant base --site /path/to/astro-site

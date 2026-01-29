@@ -65,6 +65,13 @@ def init_project(root: Path) -> InitResult:
         statuses,
         "publish_config",
     )
+    site_sync_target = config_target / "site-sync.yaml"
+    _copy_file_from_template(
+        template_root / "config" / "site-sync.yaml",
+        site_sync_target,
+        statuses,
+        "site_sync_config",
+    )
 
     registry_target = root / "registry" / "contexts"
     if not registry_target.exists():
@@ -87,7 +94,7 @@ def _resolve_template_root() -> Path:
     env_value = os.environ.get("CVW_TEMPLATE_DIR")
     if env_value:
         return Path(env_value)
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 
 def resolve_template_root() -> Path:

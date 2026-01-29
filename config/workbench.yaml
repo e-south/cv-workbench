@@ -1,7 +1,7 @@
 project:
   name: cv-workbench
 paths:
-  sot: ../cv-sot
+  sot: ../sot
   dist: ../dist
   runs: ../runs
   registry: ../registry

@@ -74,6 +74,21 @@ def _write_minimal_config(root: Path) -> None:
         )
         + "\n"
     )
+    (config_dir / "site-sync.yaml").write_text(
+        "\n".join(
+            [
+                "site:",
+                "  repo_path: ../site",
+                "  publish_variant: base",
+                "  cv_markdown: src/content/cv/cv.md",
+                "  cv_pdf_dir: public/cv",
+                "  cv_pdf_name: cv.pdf",
+                "  cv_page: src/content/page-cv/cv.md",
+                "  cv_page_frontmatter_key: cvPdf",
+            ]
+        )
+        + "\n"
+    )
 
 
 def test_quickstart_builds_sample(tmp_path: Path, monkeypatch) -> None:

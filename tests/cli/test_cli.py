@@ -143,3 +143,35 @@ def test_cli_module_entrypoint() -> None:
 
     assert result.returncode == 0
     assert "Usage" in result.stdout
+
+
+def test_doctor_reports_missing_config(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["doctor", "--plain", "--config", str(tmp_path / "missing.yaml")],
+    )
+
+    assert result.exit_code != 0
+    assert "Config file not found" in result.stderr
+
+
+def test_job_add_reports_missing_config(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "job",
+            "add",
+            "--plain",
+            "--url",
+            "https://example.com/context",
+            "--config",
+            str(tmp_path / "missing.yaml"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Config file not found" in result.stderr

@@ -20,6 +20,8 @@ import typer
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, resolve_selection_path
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.config import (
+    resolve_default_variant,
+    resolve_dist_path,
     resolve_pdf_engine,
     resolve_sot_path,
     resolve_sync_mode,
@@ -298,7 +300,11 @@ def doctor(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
-    checks = run_doctor(config)
+    try:
+        checks = run_doctor(config)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     rows: list[tuple[str, str | Path]] = []
     missing: list[str] = []
     for check in checks:
@@ -453,7 +459,7 @@ def job_add(
     configure_output_mode(plain, json_output)
     try:
         entry = add_url_context(url, config)
-    except RegistryError as exc:
+    except (FileNotFoundError, ValueError, RegistryError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 

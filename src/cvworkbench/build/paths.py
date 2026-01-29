@@ -17,7 +17,7 @@ from cvworkbench.variants import Variant
 
 
 def filters_dir() -> Path:
-    return Path(__file__).resolve().parents[2] / "build" / "filters"
+    return Path(__file__).resolve().parents[3] / "build" / "filters"
 
 
 def output_path(dist_dir: Path, variant: Variant, fmt: str) -> Path:

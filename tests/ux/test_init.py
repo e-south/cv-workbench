@@ -15,6 +15,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from cvworkbench.ops.scaffold import resolve_template_root
 from cvworkbench.cli import app
 
 
@@ -68,6 +69,21 @@ def _write_minimal_config(root: Path) -> None:
         )
         + "\n"
     )
+    (config_dir / "site-sync.yaml").write_text(
+        "\n".join(
+            [
+                "site:",
+                "  repo_path: ../site",
+                "  publish_variant: base",
+                "  cv_markdown: src/content/cv/cv.md",
+                "  cv_pdf_dir: public/cv",
+                "  cv_pdf_name: cv.pdf",
+                "  cv_page: src/content/page-cv/cv.md",
+                "  cv_page_frontmatter_key: cvPdf",
+            ]
+        )
+        + "\n"
+    )
 
 
 def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
@@ -87,4 +103,12 @@ def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
     assert (root / "sot").exists()
     assert (root / "config/workbench.yaml").exists()
     assert (root / "config/variants/base.yaml").exists()
+    assert (root / "config/site-sync.yaml").exists()
     assert (root / "registry/contexts").exists()
+
+
+def test_default_template_root_contains_scaffold() -> None:
+    template_root = resolve_template_root()
+
+    assert (template_root / "sot.sample").exists()
+    assert (template_root / "config/workbench.yaml").exists()
