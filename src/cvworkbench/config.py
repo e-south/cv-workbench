@@ -50,6 +50,7 @@ def resolve_sot_path(sot_path: Path | None, config_path: Path) -> Path:
     if sot_path is not None:
         return sot_path
 
+    config_path = resolve_config_path(config_path)
     config = load_config(config_path)
     paths = config.get("paths", {})
     if not isinstance(paths, dict):
@@ -63,6 +64,7 @@ def resolve_sot_path(sot_path: Path | None, config_path: Path) -> Path:
 
 
 def resolve_dist_path(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
     config = load_config(config_path)
     paths = config.get("paths", {})
     if not isinstance(paths, dict):
@@ -73,6 +75,7 @@ def resolve_dist_path(config_path: Path) -> Path:
 
 
 def resolve_runs_path(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
     config = load_config(config_path)
     paths = config.get("paths", {})
     if not isinstance(paths, dict):
@@ -83,6 +86,7 @@ def resolve_runs_path(config_path: Path) -> Path:
 
 
 def resolve_registry_path(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
     config = load_config(config_path)
     paths = config.get("paths", {})
     if not isinstance(paths, dict):
@@ -93,6 +97,7 @@ def resolve_registry_path(config_path: Path) -> Path:
 
 
 def resolve_default_variant(config_path: Path) -> str:
+    config_path = resolve_config_path(config_path)
     config = load_config(config_path)
     variants = config.get("variants", {})
     if not isinstance(variants, dict):
@@ -108,11 +113,13 @@ def resolve_default_variant(config_path: Path) -> str:
 def resolve_variant_path(variant_id: str, config_path: Path) -> Path:
     if not variant_id.strip():
         raise ValueError("Variant id is required")
+    config_path = resolve_config_path(config_path)
     variant_dir = config_path.parent / "variants"
     return variant_dir / f"{variant_id}.yaml"
 
 
 def resolve_pdf_engine(config_path: Path) -> str | None:
+    config_path = resolve_config_path(config_path)
     config = load_config(config_path)
     render = config.get("render", {})
     if not isinstance(render, dict):
@@ -125,6 +132,7 @@ def resolve_pdf_engine(config_path: Path) -> str | None:
 
 
 def resolve_sync_mode(config_path: Path) -> str:
+    config_path = resolve_config_path(config_path)
     config = load_config(config_path)
     site = config.get("site", {})
     if not isinstance(site, dict):
