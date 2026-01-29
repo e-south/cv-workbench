@@ -24,11 +24,14 @@ eval "$(/usr/libexec/path_helper)"
 ```
 
 ```bash
-uv sync --frozen
+uv sync --locked
 uv run cvw --help
 uv run cvw validate --sot-path ./sot.sample
-uv run cvw render --canonical runs/<timestamp>/canonical.md --format html,docx
+uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf
 ```
+
+Build output locations are printed after `cvw build` completes, and artifacts
+are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
 
 ## SoT layout
 
@@ -77,10 +80,8 @@ apply consistently to bullets and cover-letter sections.
 
 ## Dependency management
 
-- Locked install (recommended): `uv sync --frozen`
+- Locked install (recommended): `uv sync --locked`
 - Update dependencies: `uv lock` then `uv sync`
-
-Note: uv uses `--frozen` for locked installs (it will not modify `uv.lock`).
 
 ## Repo structure
 

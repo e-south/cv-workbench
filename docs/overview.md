@@ -13,6 +13,9 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 
 Each command is single-purpose and composable.
 
+`cvw build` prints the dist/run output paths so you can immediately locate the
+generated CV artifacts and manifests.
+
 Variants can target different document types (resume, cover-letter). Tag filters
 apply to bullet entries and cover-letter sections for consistent selection.
 
@@ -26,10 +29,8 @@ default markers (co-first `*`, corresponding `†`, senior `‡`).
 
 ## Dependency management
 
-- Locked install (recommended): `uv sync --frozen`
+- Locked install (recommended): `uv sync --locked`
 - Update dependencies: `uv lock` then `uv sync`
-
-uv uses `--frozen` for locked installs (it will not modify `uv.lock`).
 
 ## Optional SoT sections
 
