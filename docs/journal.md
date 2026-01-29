@@ -34,3 +34,4 @@
 - Added Rich summary panels (rounded cyan) for validate/tailor/apply/diff outputs, with console sizing to avoid path truncation
 - Added test utilities and package init for ANSI-safe CLI assertions; updated diff/render/sync CLI tests
 - Locked dependencies after adding Rich to core requirements
+- Drafted UX + ingestion design plan for local-first commands and URL registry pipeline
