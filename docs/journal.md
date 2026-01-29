@@ -29,3 +29,4 @@
 - Extended SoT schema and outputs for publications, honors, service, teaching, conferences, and references
 - Resolved config paths relative to config file and hashed optional SoT files in manifests
 - Added author role markers for publications via a Pandoc filter
+- Added snippet support (`snippets.yaml` + `snippets/`) for summary overrides and section/letter inserts, with manifest hashing
