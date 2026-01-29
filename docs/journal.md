@@ -20,3 +20,5 @@
 - Added strict schema validation with pydantic models and extra-field rejection
 - Implemented render command plus shared path helpers
 - Fixed markdown date formatting for year-only values
+- Added sync, diff, and tailor command implementations with tests
+- Added site sync config publish variant support and design notes
