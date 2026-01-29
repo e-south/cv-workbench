@@ -65,6 +65,8 @@ def test_sync_local_updates_site(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
+    assert "sync_mode: local" in result.stdout
+    assert "pdf_url: /cv/cv.pdf" in result.stdout
     assert (site_repo / "src/content/cv/cv.md").read_text() == "new\n"
     assert (site_repo / "public/cv/cv.pdf").read_bytes() == b"new"
     assert "cvPdf: /cv/cv.pdf" in (site_repo / "src/content/page-cv/cv.md").read_text()

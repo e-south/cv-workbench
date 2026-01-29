@@ -49,3 +49,17 @@ def test_validate_fails_on_missing_required_file(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "experience.yaml" in result.stderr
+
+
+def test_build_prints_output_locations() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["build", "--variant", "base", "--format", "md", "--sot-path", "sot.sample"],
+    )
+
+    assert result.exit_code == 0
+    assert "output_md:" in result.stdout
+    assert "cv.md" in result.stdout
+    assert "run_dir:" in result.stdout

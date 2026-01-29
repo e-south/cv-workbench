@@ -27,9 +27,9 @@ from cvworkbench.config import (
 )
 from cvworkbench.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
 from cvworkbench.paths import filters_dir, output_path
-from cvworkbench.pipeline import build_documents
+from cvworkbench.pipeline import BuildResult, build_documents
 from cvworkbench.rendering import RenderError, render_document
-from cvworkbench.syncing import SyncError, sync_site
+from cvworkbench.syncing import SyncError, SyncResult, sync_site
 from cvworkbench.tailor import TailorError, tailor_job
 from cvworkbench.validation import validate_sot
 from cvworkbench.variants import load_variant
@@ -50,6 +50,55 @@ def _parse_formats(values: list[str] | None) -> list[str] | None:
         parts = [part.strip() for part in value.split(",") if part.strip()]
         formats.extend(parts)
     return formats
+
+
+def _echo_kv(key: str, value: str | Path) -> None:
+    typer.echo(f"{key}: {value}")
+
+
+def _print_build_summary(result: BuildResult) -> None:
+    _echo_kv("variant", result.variant.id)
+    _echo_kv("formats", ",".join(result.formats))
+    _echo_kv("outputs_dir", result.dist_dir)
+    _echo_kv("run_dir", result.run_dir)
+    _echo_kv("canonical", result.canonical_path)
+    _echo_kv("resume_json", result.run_dir / "resume.json")
+    _echo_kv("manifest_dist", result.dist_dir / "manifest.json")
+    _echo_kv("manifest_run", result.run_dir / "manifest.json")
+    for fmt in result.formats:
+        output_file = output_path(result.dist_dir, result.variant, fmt)
+        _echo_kv(f"output_{fmt}", output_file)
+
+
+def _print_render_summary(
+    canonical: Path,
+    variant: str,
+    dist_dir: Path,
+    outputs: dict[str, Path],
+) -> None:
+    _echo_kv("variant", variant)
+    _echo_kv("outputs_dir", dist_dir)
+    _echo_kv("canonical", canonical)
+    for fmt, path in outputs.items():
+        _echo_kv(f"output_{fmt}", path)
+
+
+def _print_sync_summary(result: SyncResult) -> None:
+    plan = result.plan
+    changed_files = len(plan.copy_ops)
+    if plan.frontmatter_content:
+        changed_files += 1
+    status = "no_changes"
+    if plan.has_changes():
+        status = "pr_created" if result.mode == "pr" else "applied"
+
+    _echo_kv("sync_mode", result.mode)
+    _echo_kv("sync_status", status)
+    _echo_kv("site_repo", result.site.repo_path)
+    _echo_kv("pdf_url", plan.pdf_url)
+    _echo_kv("files_updated", str(changed_files))
+    if result.branch:
+        _echo_kv("branch", result.branch)
 
 
 @app.command()
@@ -127,7 +176,7 @@ def build(
 
     parsed_formats = _parse_formats(formats)
     try:
-        build_documents(
+        result = build_documents(
             sot_path=resolved,
             config_path=config,
             variant_id=variant,
@@ -136,6 +185,7 @@ def build(
     except (ValueError, RenderError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    _print_build_summary(result)
 
 
 @app.command()
@@ -186,6 +236,7 @@ def render(
 
     parsed_formats = _parse_formats(formats) or resolved.outputs
     filters_path = filters_dir()
+    output_files: dict[str, Path] = {}
     for fmt in parsed_formats:
         output_file = output_path(dist_dir, resolved, fmt)
         try:
@@ -200,6 +251,8 @@ def render(
         except RenderError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
+        output_files[fmt] = output_file
+    _print_render_summary(canonical, resolved.id, dist_dir, output_files)
 
 
 @app.command()
@@ -407,7 +460,7 @@ def sync(
     ] = Path("config/site-sync.yaml"),
 ) -> None:
     try:
-        sync_site(
+        result = sync_site(
             config_path=config,
             site_config_path=site_config,
             mode=mode,
@@ -415,3 +468,4 @@ def sync(
     except (SyncError, RenderError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    _print_sync_summary(result)

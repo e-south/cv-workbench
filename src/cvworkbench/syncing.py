@@ -69,6 +69,14 @@ class SyncPlan:
         return bool(self.copy_ops) or self.frontmatter_content != ""
 
 
+@dataclass(frozen=True)
+class SyncResult:
+    mode: str
+    site: SiteSyncConfig
+    plan: SyncPlan
+    branch: str | None
+
+
 def load_site_sync(path: Path) -> SiteSyncConfig:
     if not path.exists():
         raise SyncError(f"Site config not found: {path}")
@@ -102,7 +110,7 @@ def sync_site(
     config_path: Path,
     site_config_path: Path,
     mode: str,
-) -> None:
+) -> SyncResult:
     site = load_site_sync(site_config_path)
     variant_path = resolve_variant_path(site.publish_variant, config_path)
     variant = load_variant(variant_path)
@@ -116,9 +124,11 @@ def sync_site(
         raise SyncError(f"Missing PDF output: {source_pdf}")
 
     plan = _plan_sync(site, source_md, source_pdf)
+    branch_name: str | None = None
     if mode == "local":
-        _apply_plan(plan)
-        return
+        if plan.has_changes():
+            _apply_plan(plan)
+        return SyncResult(mode=mode, site=site, plan=plan, branch=None)
 
     if mode != "pr":
         raise SyncError(f"Unknown sync mode: {mode}")
@@ -127,7 +137,7 @@ def sync_site(
     _ensure_clean_repo(site.repo_path)
 
     if not plan.has_changes():
-        return
+        return SyncResult(mode=mode, site=site, plan=plan, branch=None)
 
     branch_name = _branch_name()
     _run_git(site.repo_path, ["switch", "-c", branch_name])
@@ -136,26 +146,26 @@ def sync_site(
     for _, dest in plan.copy_ops:
         _run_git(site.repo_path, ["add", str(dest)])
 
-    if not _git_has_changes(site.repo_path):
-        return
+    if _git_has_changes(site.repo_path):
+        _run_git(site.repo_path, ["commit", "-m", "Update CV artifacts"])
+        _run_git(site.repo_path, ["push", "-u", "origin", branch_name])
 
-    _run_git(site.repo_path, ["commit", "-m", "Update CV artifacts"])
-    _run_git(site.repo_path, ["push", "-u", "origin", branch_name])
+        repo_slug = _github_repo(site.repo_path)
+        _run_gh(
+            site.repo_path,
+            [
+                "pr",
+                "create",
+                "--repo",
+                repo_slug,
+                "--title",
+                "Update CV artifacts",
+                "--body",
+                "Automated update from cv-workbench.",
+            ],
+        )
 
-    repo_slug = _github_repo(site.repo_path)
-    _run_gh(
-        site.repo_path,
-        [
-            "pr",
-            "create",
-            "--repo",
-            repo_slug,
-            "--title",
-            "Update CV artifacts",
-            "--body",
-            "Automated update from cv-workbench.",
-        ],
-    )
+    return SyncResult(mode=mode, site=site, plan=plan, branch=branch_name)
 
 
 def _plan_sync(site: SiteSyncConfig, source_md: Path, source_pdf: Path) -> SyncPlan:

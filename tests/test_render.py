@@ -42,3 +42,5 @@ def test_render_writes_output(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert output_path.exists()
+    assert "output_md:" in result.stdout
+    assert "cv.md" in result.stdout
