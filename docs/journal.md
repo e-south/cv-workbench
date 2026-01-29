@@ -22,3 +22,4 @@
 - Fixed markdown date formatting for year-only values
 - Added sync, diff, and tailor command implementations with tests
 - Added site sync config publish variant support and design notes
+- Added optional PR-based sync integration test gated by environment variables
