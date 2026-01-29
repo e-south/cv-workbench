@@ -109,7 +109,7 @@ variants not listed there.
 - `registry/`: local context registry for ingested URLs (ignored by git)
 - `reviews/`: review packs (DOCX/PDF + checklist, ignored by git)
 - `build/`: templates, filters, styles, scripts
-- `docs/`: architecture, site contract, security
+- `docs/`: concepts, how-to guides, reference, and plans
 - `sot.sample/`: fake data for tests and examples
 - `src/`: CLI and core logic
 
