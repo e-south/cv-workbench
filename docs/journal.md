@@ -31,3 +31,6 @@
 - Added author role markers for publications via a Pandoc filter
 - Added snippet support (`snippets.yaml` + `snippets/`) for summary overrides and section/letter inserts, with manifest hashing
 - Added CLI output summaries for build/render/sync to surface artifact locations and sync status
+- Added Rich summary panels (rounded cyan) for validate/tailor/apply/diff outputs, with console sizing to avoid path truncation
+- Added test utilities and package init for ANSI-safe CLI assertions; updated diff/render/sync CLI tests
+- Locked dependencies after adding Rich to core requirements

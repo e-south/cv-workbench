@@ -17,6 +17,7 @@ from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 
+from tests.utils import strip_ansi
 
 def test_sync_local_updates_site(tmp_path: Path) -> None:
     site_repo = tmp_path / "site"
@@ -65,8 +66,9 @@ def test_sync_local_updates_site(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert "sync_mode: local" in result.stdout
-    assert "pdf_url: /cv/cv.pdf" in result.stdout
+    output = strip_ansi(result.stdout)
+    assert "sync_mode: local" in output
+    assert "pdf_url: /cv/cv.pdf" in output
     assert (site_repo / "src/content/cv/cv.md").read_text() == "new\n"
     assert (site_repo / "public/cv/cv.pdf").read_bytes() == b"new"
     assert "cvPdf: /cv/cv.pdf" in (site_repo / "src/content/page-cv/cv.md").read_text()

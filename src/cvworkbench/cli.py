@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
 from cvworkbench.apply import ApplyError, apply_draft
+from cvworkbench.cli_output import print_summary
 from cvworkbench.config import (
     resolve_default_variant,
     resolve_dist_path,
@@ -30,7 +31,7 @@ from cvworkbench.paths import filters_dir, output_path
 from cvworkbench.pipeline import BuildResult, build_documents
 from cvworkbench.rendering import RenderError, render_document
 from cvworkbench.syncing import SyncError, SyncResult, sync_site
-from cvworkbench.tailor import TailorError, tailor_job
+from cvworkbench.tailor import DraftPaths, TailorError, tailor_job
 from cvworkbench.validation import validate_sot
 from cvworkbench.variants import load_variant
 
@@ -52,22 +53,21 @@ def _parse_formats(values: list[str] | None) -> list[str] | None:
     return formats
 
 
-def _echo_kv(key: str, value: str | Path) -> None:
-    typer.echo(f"{key}: {value}")
-
-
 def _print_build_summary(result: BuildResult) -> None:
-    _echo_kv("variant", result.variant.id)
-    _echo_kv("formats", ",".join(result.formats))
-    _echo_kv("outputs_dir", result.dist_dir)
-    _echo_kv("run_dir", result.run_dir)
-    _echo_kv("canonical", result.canonical_path)
-    _echo_kv("resume_json", result.run_dir / "resume.json")
-    _echo_kv("manifest_dist", result.dist_dir / "manifest.json")
-    _echo_kv("manifest_run", result.run_dir / "manifest.json")
+    rows: list[tuple[str, str | Path]] = [
+        ("variant", result.variant.id),
+        ("formats", ",".join(result.formats)),
+        ("outputs_dir", result.dist_dir),
+        ("run_dir", result.run_dir),
+        ("canonical", result.canonical_path),
+        ("resume_json", result.run_dir / "resume.json"),
+        ("manifest_dist", result.dist_dir / "manifest.json"),
+        ("manifest_run", result.run_dir / "manifest.json"),
+    ]
     for fmt in result.formats:
         output_file = output_path(result.dist_dir, result.variant, fmt)
-        _echo_kv(f"output_{fmt}", output_file)
+        rows.append((f"output_{fmt}", output_file))
+    print_summary("build", rows)
 
 
 def _print_render_summary(
@@ -76,11 +76,14 @@ def _print_render_summary(
     dist_dir: Path,
     outputs: dict[str, Path],
 ) -> None:
-    _echo_kv("variant", variant)
-    _echo_kv("outputs_dir", dist_dir)
-    _echo_kv("canonical", canonical)
+    rows: list[tuple[str, str | Path]] = [
+        ("variant", variant),
+        ("outputs_dir", dist_dir),
+        ("canonical", canonical),
+    ]
     for fmt, path in outputs.items():
-        _echo_kv(f"output_{fmt}", path)
+        rows.append((f"output_{fmt}", path))
+    print_summary("render", rows)
 
 
 def _print_sync_summary(result: SyncResult) -> None:
@@ -92,13 +95,67 @@ def _print_sync_summary(result: SyncResult) -> None:
     if plan.has_changes():
         status = "pr_created" if result.mode == "pr" else "applied"
 
-    _echo_kv("sync_mode", result.mode)
-    _echo_kv("sync_status", status)
-    _echo_kv("site_repo", result.site.repo_path)
-    _echo_kv("pdf_url", plan.pdf_url)
-    _echo_kv("files_updated", str(changed_files))
+    rows: list[tuple[str, str | Path]] = [
+        ("sync_mode", result.mode),
+        ("sync_status", status),
+        ("site_repo", result.site.repo_path),
+        ("pdf_url", plan.pdf_url),
+        ("files_updated", str(changed_files)),
+    ]
     if result.branch:
-        _echo_kv("branch", result.branch)
+        rows.append(("branch", result.branch))
+    print_summary("sync", rows)
+
+
+def _print_validate_summary(sot_path: Path) -> None:
+    print_summary(
+        "validate",
+        [
+            ("status", "ok"),
+            ("sot_path", sot_path),
+        ],
+    )
+
+
+def _print_diff_summary(summary: dict[str, Any]) -> None:
+    side_a = summary.get("a", {})
+    side_b = summary.get("b", {})
+    rows: list[tuple[str, str | Path]] = [
+        ("artifact_a", str(side_a.get("artifact", ""))),
+        ("artifact_b", str(side_b.get("artifact", ""))),
+        ("path_a", str(side_a.get("path", ""))),
+        ("path_b", str(side_b.get("path", ""))),
+        ("equal", str(summary.get("equal", ""))),
+        ("additions", str(summary.get("additions", ""))),
+        ("deletions", str(summary.get("deletions", ""))),
+    ]
+    print_summary("diff", rows)
+
+
+def _print_tailor_summary(paths: DraftPaths, output_dir: Path, base_variant: str) -> None:
+    print_summary(
+        "tailor",
+        [
+            ("draft_dir", output_dir),
+            ("base_variant", base_variant),
+            ("variant", paths.variant_path),
+            ("patch", paths.patch_path),
+            ("job", paths.job_path),
+            ("prompt", paths.prompt_path),
+        ],
+    )
+
+
+def _print_apply_summary(draft_dir: Path, patch_path: Path, status: str, sot_path: Path) -> None:
+    print_summary(
+        "apply",
+        [
+            ("draft_dir", draft_dir),
+            ("patch", patch_path),
+            ("status", status),
+            ("sot_path", sot_path),
+        ],
+    )
 
 
 @app.command()
@@ -129,6 +186,7 @@ def validate(
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
         raise typer.Exit(code=1)
+    _print_validate_summary(resolved)
 
 
 @app.command()
@@ -287,7 +345,7 @@ def tailor(
     ] = Path("config/workbench.yaml"),
 ) -> None:
     try:
-        tailor_job(
+        paths = tailor_job(
             job_path=job,
             base_variant_id=base_variant,
             output_dir=out,
@@ -296,6 +354,7 @@ def tailor(
     except TailorError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    _print_tailor_summary(paths, out, base_variant)
 
 
 @app.command()
@@ -316,10 +375,14 @@ def apply(
     ],
 ) -> None:
     try:
+        patch_path = draft / "patch.diff"
+        patch_empty = patch_path.exists() and not patch_path.read_text().strip()
         apply_draft(draft_dir=draft, sot_path=sot_path)
     except ApplyError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    status = "no_changes" if patch_empty else "applied"
+    _print_apply_summary(draft, patch_path, status, sot_path)
 
 
 @app.command()
@@ -431,6 +494,7 @@ def diff(
         typer.echo(f"ERROR: Unknown output format: {output_format}", err=True)
         raise typer.Exit(code=1)
 
+    _print_diff_summary(summary)
     if diff_text:
         typer.echo(diff_text)
 
