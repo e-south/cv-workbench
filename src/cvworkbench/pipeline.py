@@ -22,6 +22,7 @@ from cvworkbench.config import (
     resolve_runs_path,
     resolve_variant_path,
 )
+from cvworkbench.manifest import build_manifest, write_manifest
 from cvworkbench.markdown import build_markdown
 from cvworkbench.rendering import render_document
 from cvworkbench.sot import load_sot
@@ -61,6 +62,7 @@ def build_documents(
 
     filters_dir = _filters_dir()
     pdf_engine = resolve_pdf_engine(config_path)
+    output_paths: dict[str, Path] = {}
 
     for fmt in selected_formats:
         output_path = _output_path(dist_dir, variant, fmt)
@@ -72,6 +74,19 @@ def build_documents(
             fmt,
             pdf_engine,
         )
+        output_paths[fmt] = output_path
+
+    manifest = build_manifest(
+        variant=variant,
+        variant_path=variant_path,
+        sot_path=sot_path,
+        formats=selected_formats,
+        output_paths=output_paths,
+        pdf_engine=pdf_engine,
+        repo_root=config_path.parent.parent,
+    )
+    write_manifest(dist_dir / "manifest.json", manifest)
+    write_manifest(run_dir / "manifest.json", manifest)
 
     return BuildResult(
         variant=variant,
