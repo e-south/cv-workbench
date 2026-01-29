@@ -43,6 +43,12 @@ Tags are normalized (case/punctuation-insensitive). Namespaced tags such as
 `domain:synthetic-biology` also register the namespace tag (`domain`) for
 broader include/exclude rules.
 
+Publication author roles are marked during rendering via
+`build/filters/author_roles.lua` (co-first `*`, corresponding `†`, senior `‡`).
+
+Paths in `config/workbench.yaml` are resolved relative to the config file
+location (for example, `../dist` is relative to `config/`).
+
 ## Outputs
 
 Build artifacts are written under `dist/` and `runs/` and are always ignored by

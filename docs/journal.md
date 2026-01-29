@@ -27,3 +27,5 @@
 - Added draft signals generation and apply command
 - Added HTML/DOCX render coverage
 - Extended SoT schema and outputs for publications, honors, service, teaching, conferences, and references
+- Resolved config paths relative to config file and hashed optional SoT files in manifests
+- Added author role markers for publications via a Pandoc filter

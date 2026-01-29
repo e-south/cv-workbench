@@ -21,6 +21,9 @@ Tags are normalized (case/punctuation-insensitive) and can be namespaced using
 tags also register the namespace as a tag, enabling broader include/exclude
 rules like `domain`.
 
+Publication author roles are rendered via `build/filters/author_roles.lua` with
+default markers (co-first `*`, corresponding `†`, senior `‡`).
+
 ## Dependency management
 
 - Locked install (recommended): `uv sync --frozen`
