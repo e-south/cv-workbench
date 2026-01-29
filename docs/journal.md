@@ -13,3 +13,5 @@
 - Pre-commit uses ruff + gitleaks
 - Documented uv lock and locked installs via `uv sync --frozen`
 - Added canonical markdown materialization scaffolding and variant metadata defaults
+- Added build pipeline with Pandoc filters for tag selection and bullet limits
+- Documented Pandoc and LaTeX prerequisites for PDF rendering

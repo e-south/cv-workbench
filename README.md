@@ -14,6 +14,14 @@ Key goals:
 Requirements:
 - Python 3.12
 - uv (https://docs.astral.sh/uv/)
+- Pandoc (for rendering)
+- LaTeX engine (xelatex) for PDF output
+
+macOS (Homebrew):
+```bash
+brew install pandoc mactex-no-gui
+eval "$(/usr/libexec/path_helper)"
+```
 
 ```bash
 uv sync --frozen

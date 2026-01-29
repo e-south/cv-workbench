@@ -132,8 +132,13 @@ def _build_experience(lines: list[str], sot: dict[str, Any]) -> None:
                     continue
                 bullet_id = _slugify(bullet.get("id"))
                 tag_classes = _tag_classes(bullet.get("tags"))
-                attr = _format_attributes(bullet_id, tag_classes)
-                lines.append(f"- [{bullet_text}]{attr}")
+                div_attr = _format_div_attributes(
+                    f"bullet-{bullet_id}",
+                    ["bullet", *tag_classes],
+                )
+                lines.append(f"::: {div_attr}")
+                lines.append(f"- {bullet_text}")
+                lines.append(":::")
 
         lines.append(":::")
         lines.append("")
@@ -247,7 +252,7 @@ def _tag_classes(tags: Any) -> list[str]:
     return classes
 
 
-def _format_attributes(element_id: str, classes: list[str]) -> str:
+def _format_div_attributes(element_id: str, classes: list[str]) -> str:
     parts: list[str] = []
     if element_id:
         parts.append(f"#{element_id}")

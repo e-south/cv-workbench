@@ -7,7 +7,7 @@ paths:
 variants:
   default: base
 render:
-  pdf_engine: latex
+  pdf_engine: xelatex
   formats:
     - md
     - pdf
