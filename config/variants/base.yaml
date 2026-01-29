@@ -3,6 +3,8 @@ variant:
   include_tags: []
   exclude_tags:
     - private
+  output_name: cv
+  document_type: resume
   max_bullets_per_role: 4
   order:
     - summary

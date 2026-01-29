@@ -12,3 +12,4 @@
 - LLM integration via Codex CLI
 - Pre-commit uses ruff + gitleaks
 - Documented uv lock and locked installs via `uv sync --frozen`
+- Added canonical markdown materialization scaffolding and variant metadata defaults
