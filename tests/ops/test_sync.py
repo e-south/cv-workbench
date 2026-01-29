@@ -19,6 +19,7 @@ from cvworkbench.cli import app
 
 from tests.utils import strip_ansi
 
+
 def test_sync_local_updates_site(tmp_path: Path) -> None:
     site_repo = tmp_path / "site"
     (site_repo / "src/content/cv").mkdir(parents=True)
@@ -27,9 +28,7 @@ def test_sync_local_updates_site(tmp_path: Path) -> None:
 
     (site_repo / "src/content/cv/cv.md").write_text("old\n")
     (site_repo / "public/cv/cv.pdf").write_bytes(b"old")
-    (site_repo / "src/content/page-cv/cv.md").write_text(
-        "---\ncvPdf: /cv/old.pdf\n---\ncontent\n"
-    )
+    (site_repo / "src/content/page-cv/cv.md").write_text("---\ncvPdf: /cv/old.pdf\n---\ncontent\n")
 
     dist_dir = tmp_path / "dist" / "base"
     dist_dir.mkdir(parents=True, exist_ok=True)
@@ -123,9 +122,7 @@ def test_sync_defaults_to_config_mode(tmp_path: Path) -> None:
 
     (site_repo / "src/content/cv/cv.md").write_text("old\n")
     (site_repo / "public/cv/cv.pdf").write_bytes(b"old")
-    (site_repo / "src/content/page-cv/cv.md").write_text(
-        "---\ncvPdf: /cv/old.pdf\n---\ncontent\n"
-    )
+    (site_repo / "src/content/page-cv/cv.md").write_text("---\ncvPdf: /cv/old.pdf\n---\ncontent\n")
 
     dist_dir = tmp_path / "dist" / "base"
     dist_dir.mkdir(parents=True, exist_ok=True)

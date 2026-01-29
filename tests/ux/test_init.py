@@ -23,10 +23,18 @@ def _write_minimal_sot_sample(root: Path) -> None:
     sot_sample = root / "sot.sample"
     sot_sample.mkdir(parents=True)
     (sot_sample / "person.yaml").write_text("id: sample\nname: Sample\n")
-    (sot_sample / "experience.yaml").write_text("roles:\n  - id: role\n    company: Co\n    title: Title\n    start: 2020\n    bullets:\n      - id: b1\n        text: Did work\n        tags: [core]\n")
-    (sot_sample / "projects.yaml").write_text("projects:\n  - id: p1\n    name: Project\n    summary: Summary\n    tags: [core]\n")
-    (sot_sample / "skills.yaml").write_text("skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n")
-    (sot_sample / "education.yaml").write_text("education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [core]\n")
+    (sot_sample / "experience.yaml").write_text(
+        "roles:\n  - id: role\n    company: Co\n    title: Title\n    start: 2020\n    bullets:\n      - id: b1\n        text: Did work\n        tags: [core]\n"
+    )
+    (sot_sample / "projects.yaml").write_text(
+        "projects:\n  - id: p1\n    name: Project\n    summary: Summary\n    tags: [core]\n"
+    )
+    (sot_sample / "skills.yaml").write_text(
+        "skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n"
+    )
+    (sot_sample / "education.yaml").write_text(
+        "education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [core]\n"
+    )
     (sot_sample / "letters.yaml").write_text(
         "letters:\n  - id: base\n    title: Base\n    salutation: Hello\n    closing: Thanks\n    sections:\n      - id: intro\n        text: Text\n        tags: [core]\n"
     )

@@ -21,7 +21,14 @@ from typing import Any
 
 import json
 
-from cvworkbench.config import resolve_dist_path, resolve_runs_path, resolve_variant_path
+from cvworkbench.config import (
+    resolve_drafts_path,
+    resolve_dist_path,
+    resolve_project_path,
+    resolve_reviews_path,
+    resolve_runs_path,
+    resolve_variant_path,
+)
 from cvworkbench.build.paths import output_path
 from cvworkbench.variants import Variant, load_variant
 
@@ -68,7 +75,11 @@ def build_review_pack(
     if not selection_path.exists():
         raise ReviewError(f"Missing selection metadata: {selection_path}")
 
-    target_dir = out_dir or (Path("reviews") / variant.id)
+    reviews_root = resolve_reviews_path(config_path)
+    if out_dir is None:
+        target_dir = reviews_root / variant.id
+    else:
+        target_dir = resolve_project_path(out_dir, config_path)
     if target_dir.exists():
         raise ReviewError(f"Review pack already exists: {target_dir}")
     target_dir.mkdir(parents=True, exist_ok=False)
@@ -104,7 +115,8 @@ def import_docx_review(
         raise ReviewError(f"Canonical markdown not found: {canonical_path}")
 
     imported_markdown = _convert_docx_to_markdown(docx_path)
-    draft_dir = Path("drafts") / f"import-{_timestamp()}"
+    drafts_root = resolve_drafts_path(config_path)
+    draft_dir = drafts_root / f"import-{_timestamp()}"
     draft_dir.mkdir(parents=True, exist_ok=False)
 
     imported_path = draft_dir / "imported.md"
@@ -206,7 +218,9 @@ def _diff_text(canonical_path: Path, imported_markdown: str) -> str:
 
 
 def _which(command: str) -> str | None:
-    result = subprocess.run(["/usr/bin/which", command], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["/usr/bin/which", command], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
         return None
     return result.stdout.strip()

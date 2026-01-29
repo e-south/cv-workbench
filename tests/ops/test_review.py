@@ -17,6 +17,7 @@ from typer.testing import CliRunner
 
 import cvworkbench.ops.review as review_module
 from cvworkbench.cli import app
+from cvworkbench.config import resolve_drafts_path, resolve_reviews_path
 
 
 def _write_minimal_config(root: Path) -> Path:
@@ -61,14 +62,14 @@ def test_reviewpack_creates_bundle(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
         )
 
     assert result.exit_code == 0
-    out_dir = Path(cwd) / "reviews" / "base"
+    out_dir = resolve_reviews_path(config_path) / "base"
     assert (out_dir / "cv.docx").exists()
     assert (out_dir / "cv.pdf").exists()
     assert (out_dir / "review.md").exists()
@@ -89,7 +90,7 @@ def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -105,7 +106,7 @@ def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
         )
 
     assert result.exit_code == 0
-    drafts_dir = Path(cwd) / "drafts"
+    drafts_dir = resolve_drafts_path(config_path)
     assert drafts_dir.exists()
     patch_files = list(drafts_dir.rglob("patch.diff"))
     assert patch_files

@@ -20,6 +20,7 @@ from cvworkbench.cli import app
 
 from tests.utils import strip_ansi
 
+
 def test_diff_resume_json_output() -> None:
     runs_root = Path("runs")
     run_a = runs_root / "2026-01-01T00-00-00Z"

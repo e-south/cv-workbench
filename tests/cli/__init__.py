@@ -8,4 +8,3 @@ CLI-related tests for cv-workbench.
 Module Author(s): Eric J. South
 --------------------------------------------------------------------------------
 """
-

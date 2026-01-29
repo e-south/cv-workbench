@@ -4,6 +4,8 @@ paths:
   sot: ../sot
   dist: ../dist
   runs: ../runs
+  drafts: ../drafts
+  reviews: ../reviews
   registry: ../registry
 variants:
   default: base

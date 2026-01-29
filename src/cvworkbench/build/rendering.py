@@ -98,7 +98,9 @@ def _run(args: list[str]) -> None:
 
 
 def _which(command: str) -> str | None:
-    result = subprocess.run(["/usr/bin/which", command], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["/usr/bin/which", command], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
         return None
     return result.stdout.strip()

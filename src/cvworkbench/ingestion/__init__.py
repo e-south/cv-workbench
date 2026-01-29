@@ -8,4 +8,3 @@ Context ingestion and registry helpers.
 Module Author(s): Eric J. South
 --------------------------------------------------------------------------------
 """
-

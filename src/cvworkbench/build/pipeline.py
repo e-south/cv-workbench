@@ -65,15 +65,11 @@ def build_documents(
     resume_path = run_dir / "resume.json"
     write_resume(resume_path, resume_payload)
     selection_path = run_dir / "selection.json"
-    selection_path.write_text(
-        json.dumps(selection, indent=2, sort_keys=True) + "\n"
-    )
+    selection_path.write_text(json.dumps(selection, indent=2, sort_keys=True) + "\n")
 
     dist_dir = resolve_dist_path(config_path) / variant.id
     dist_dir.mkdir(parents=True, exist_ok=True)
-    (dist_dir / "selection.json").write_text(
-        json.dumps(selection, indent=2, sort_keys=True) + "\n"
-    )
+    (dist_dir / "selection.json").write_text(json.dumps(selection, indent=2, sort_keys=True) + "\n")
 
     filters_path = filters_dir()
     pdf_engine = resolve_pdf_engine(config_path)

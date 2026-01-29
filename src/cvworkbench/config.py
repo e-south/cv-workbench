@@ -96,6 +96,32 @@ def resolve_registry_path(config_path: Path) -> Path:
     return _resolve_from_config(config_path, value)
 
 
+def resolve_drafts_path(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    paths = config.get("paths", {})
+    if not isinstance(paths, dict):
+        raise ValueError("Config field paths must be a mapping")
+
+    value = paths.get("drafts")
+    if value:
+        return _resolve_from_config(config_path, value)
+    return resolve_project_root(config_path) / "drafts"
+
+
+def resolve_reviews_path(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    paths = config.get("paths", {})
+    if not isinstance(paths, dict):
+        raise ValueError("Config field paths must be a mapping")
+
+    value = paths.get("reviews")
+    if value:
+        return _resolve_from_config(config_path, value)
+    return resolve_project_root(config_path) / "reviews"
+
+
 def resolve_default_variant(config_path: Path) -> str:
     config_path = resolve_config_path(config_path)
     config = load_config(config_path)
@@ -141,6 +167,20 @@ def resolve_sync_mode(config_path: Path) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Config field site.sync_mode must be a string")
     return value.strip()
+
+
+def resolve_project_root(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
+    config_dir = config_path.parent
+    if config_dir.name == "config":
+        return config_dir.parent.resolve()
+    return config_dir.resolve()
+
+
+def resolve_project_path(path: Path, config_path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return (resolve_project_root(config_path) / path).resolve()
 
 
 def _resolve_from_config(config_path: Path, value: str) -> Path:

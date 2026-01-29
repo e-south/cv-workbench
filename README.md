@@ -1,5 +1,7 @@
 # cv-workbench
 
+[![CI](https://github.com/e-south/cv-workbench/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/e-south/cv-workbench/actions/workflows/ci.yml?query=branch%3Amain)
+
 A lean, decoupled CV/Resume workbench. This repo is the public engine; real CV
 content lives in a private Source of Truth (SoT) directory outside this repo.
 
@@ -42,6 +44,11 @@ uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf
 
 Build output locations are printed after `cvw build` completes, and artifacts
 are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
+
+Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
+nearest `config/workbench.yaml` by walking up parent directories, so outputs
+still land under the configured `dist/`, `runs/`, `drafts/`, and `reviews/`
+paths.
 
 See the full walkthrough at `docs/howto/quickstart.md`.
 

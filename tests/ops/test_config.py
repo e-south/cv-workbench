@@ -13,7 +13,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cvworkbench.config import resolve_config_path, resolve_dist_path, resolve_runs_path, resolve_sot_path
+from cvworkbench.config import (
+    resolve_config_path,
+    resolve_dist_path,
+    resolve_drafts_path,
+    resolve_project_path,
+    resolve_project_root,
+    resolve_reviews_path,
+    resolve_runs_path,
+    resolve_sot_path,
+)
 
 
 def test_config_paths_resolve_relative_to_config_dir(tmp_path: Path) -> None:
@@ -54,3 +63,18 @@ def test_resolve_config_path_searches_parent_dirs(tmp_path: Path, monkeypatch) -
     resolved = resolve_config_path(Path("config/workbench.yaml"))
 
     assert resolved == config_path.resolve()
+
+
+def test_project_paths_default_to_repo_root(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text("paths:\n  sot: ../sot\nvariants:\n  default: base\n")
+
+    assert resolve_project_root(config_path) == tmp_path.resolve()
+    assert resolve_drafts_path(config_path) == (tmp_path / "drafts").resolve()
+    assert resolve_reviews_path(config_path) == (tmp_path / "reviews").resolve()
+    assert (
+        resolve_project_path(Path("drafts/demo"), config_path)
+        == (tmp_path / "drafts" / "demo").resolve()
+    )

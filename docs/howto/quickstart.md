@@ -54,6 +54,10 @@ templates) if they are missing.
 - `runs/<timestamp>/resume.json`
 - `runs/<timestamp>/selection.json`
 
+You can run these commands from any subdirectory inside the repo. The CLI walks
+up to the nearest `config/workbench.yaml` and resolves outputs relative to that
+configuration.
+
 ## 5) Build explicitly (recommended for automation)
 
 ```bash

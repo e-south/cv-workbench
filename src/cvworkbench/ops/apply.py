@@ -57,7 +57,9 @@ def _run_patch(patch_exe: str, cwd: Path, patch_path: Path, *, dry_run: bool) ->
 
 
 def _which(command: str) -> str | None:
-    result = subprocess.run(["/usr/bin/which", command], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["/usr/bin/which", command], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
         return None
     return result.stdout.strip()

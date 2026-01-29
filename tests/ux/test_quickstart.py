@@ -28,7 +28,9 @@ def _write_minimal_sot_sample(root: Path) -> None:
     (sot_sample / "projects.yaml").write_text(
         "projects:\n  - id: p1\n    name: Project\n    summary: Summary\n    tags: [core]\n"
     )
-    (sot_sample / "skills.yaml").write_text("skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n")
+    (sot_sample / "skills.yaml").write_text(
+        "skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n"
+    )
     (sot_sample / "education.yaml").write_text(
         "education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [core]\n"
     )

@@ -286,7 +286,9 @@ def _build_teaching_meta(raw: Any) -> list[dict[str, Any]]:
             "course": _text(entry.get("course")),
             "role": _text(entry.get("role")),
             "term": _text(entry.get("term")),
-            "enrollment": entry.get("enrollment") if isinstance(entry.get("enrollment"), int) else None,
+            "enrollment": entry.get("enrollment")
+            if isinstance(entry.get("enrollment"), int)
+            else None,
             "evaluation": _text(entry.get("evaluation")),
             "summary": _text(entry.get("summary")),
             "tags": _text_list(entry.get("tags")),

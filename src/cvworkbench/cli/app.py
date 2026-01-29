@@ -20,9 +20,11 @@ import typer
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, resolve_selection_path
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.config import (
+    resolve_config_path,
     resolve_default_variant,
     resolve_dist_path,
     resolve_pdf_engine,
+    resolve_project_path,
     resolve_sot_path,
     resolve_sync_mode,
     resolve_variant_path,
@@ -996,16 +998,21 @@ def tailor(
 ) -> None:
     configure_output_mode(plain, json_output)
     try:
+        resolved_out = resolve_project_path(out, config)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    try:
         paths = tailor_job(
             job_path=job,
             base_variant_id=base_variant,
-            output_dir=out,
+            output_dir=resolved_out,
             config_path=config,
         )
     except TailorError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    _print_tailor_summary(paths, out, base_variant)
+    _print_tailor_summary(paths, resolved_out, base_variant)
 
 
 @app.command()
@@ -1224,15 +1231,17 @@ def sync(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
-    selected_mode = mode or resolve_sync_mode(config)
     try:
+        resolved_config = resolve_config_path(config)
+        resolved_site = resolve_config_path(site_config)
+        selected_mode = mode or resolve_sync_mode(resolved_config)
         result = sync_site(
-            config_path=config,
-            site_config_path=site_config,
+            config_path=resolved_config,
+            site_config_path=resolved_site,
             mode=selected_mode,
-            publish_config_path=config.parent / "publish.yaml",
+            publish_config_path=resolved_config.parent / "publish.yaml",
         )
-    except (SyncError, RenderError) as exc:
+    except (FileNotFoundError, SyncError, RenderError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _print_sync_summary(result)

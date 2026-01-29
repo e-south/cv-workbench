@@ -48,11 +48,7 @@ def build_manifest(
             "order": list(variant.order),
         },
         "formats": list(formats),
-        "outputs": {
-            fmt: output_paths[fmt].name
-            for fmt in formats
-            if fmt in output_paths
-        },
+        "outputs": {fmt: output_paths[fmt].name for fmt in formats if fmt in output_paths},
         "resume": {
             "path": resume_path.name,
             "hash": _hash_file(resume_path),
@@ -76,10 +72,7 @@ def write_manifest(path: Path, data: dict[str, Any]) -> None:
 
 
 def _hash_sot(sot_path: Path) -> dict[str, str]:
-    hashes = {
-        filename: _hash_file(sot_path / filename)
-        for filename in REQUIRED_FILES.keys()
-    }
+    hashes = {filename: _hash_file(sot_path / filename) for filename in REQUIRED_FILES.keys()}
     for filename in OPTIONAL_FILES.keys():
         path = sot_path / filename
         if path.exists():

@@ -19,6 +19,7 @@ from cvworkbench.cli import app
 
 from tests.utils import strip_ansi
 
+
 def test_render_writes_output(tmp_path: Path) -> None:
     canonical_path = tmp_path / "canonical.md"
     canonical_path.write_text("# Sample\n")

@@ -16,9 +16,10 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-DateValue = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | Annotated[
-    int, Field(gt=0)
-]
+DateValue = (
+    Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+    | Annotated[int, Field(gt=0)]
+)
 NonEmptyStrList = Annotated[list[NonEmptyStr], Field(min_length=1)]
 
 
