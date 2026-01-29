@@ -13,6 +13,9 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 
 Each command is single-purpose and composable.
 
+Variants can target different document types (resume, cover-letter). Tag filters
+apply to bullet entries and cover-letter sections for consistent selection.
+
 ## Dependency management
 
 - Locked install (recommended): `uv sync --frozen`

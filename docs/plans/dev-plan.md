@@ -15,10 +15,24 @@
 - validate/build/render implemented with Pandoc + Lua filters.
 - JSON Resume materialization emitted to `runs/<timestamp>/resume.json`.
 - Manifests include SoT hashes, variant hash, and resume hash.
+- sync/diff/tailor scaffolding implemented with tests.
+- Cover-letter variants and tag filtering supported.
+- HTML/DOCX render paths supported via Pandoc defaults.
+- Draft signals generation and apply command implemented.
+
+## Gap audit (original spec → status)
+- CLI surface: validate/build/render/tailor/diff/sync — Done
+- Strict SoT schema validation — Done
+- Variant selection + filters — Done (bullets + cover-letter sections)
+- Multi-format output (md/pdf/html/docx) — Done
+- Local + PR sync — Done (PR default, publish_variant enforced)
+- AI proposal-only flow — Drafts only, apply done
+- Apply step — Done
+- Job ingestion signals — Done
+- Manifest audit fields for AI steps — Pending
+- Cover letters / CV variants — In progress (demo + semantics)
+- Security posture docs — Pending
 
 ## Next todos
-- Implement `sync` (local + PR modes) against the site contract.
-- Add `diff` for variant comparisons (selection + output diffs).
-- Add `tailor` scaffolding (proposal-only, Codex CLI shell-out).
-- Expand render targets (HTML/DOCX) if/when needed.
-- Add site contract tests and fixture coverage for cover letters and CV variants.
+- Extend manifest/logging for AI artifacts (prompt metadata, diff summary).
+- Expand demo SoT and docs to cover cover letters and multi-variant examples.

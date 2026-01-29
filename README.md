@@ -27,6 +27,7 @@ eval "$(/usr/libexec/path_helper)"
 uv sync --frozen
 uv run cvw --help
 uv run cvw validate --sot-path ./sot.sample
+uv run cvw render --canonical runs/<timestamp>/canonical.md --format html,docx
 ```
 
 ## SoT layout
@@ -39,6 +40,9 @@ Provide a private SoT directory (not tracked in git). Example data lives in
 Build artifacts are written under `dist/` and `runs/` and are always ignored by
 git. Each run includes a canonical markdown file and a `resume.json` artifact.
 Use `cvw sync` to push selected outputs into your site repo.
+
+Variants can target multiple document types (resume, cover-letter). Tag filters
+apply consistently to bullets and cover-letter sections.
 
 ## Dependency management
 

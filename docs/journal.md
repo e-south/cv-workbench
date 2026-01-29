@@ -23,3 +23,6 @@
 - Added sync, diff, and tailor command implementations with tests
 - Added site sync config publish variant support and design notes
 - Added optional PR-based sync integration test gated by environment variables
+- Added cover-letter SoT support with variant configuration and tag filtering
+- Added draft signals generation and apply command
+- Added HTML/DOCX render coverage
