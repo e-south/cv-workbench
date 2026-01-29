@@ -37,7 +37,8 @@ Provide a private SoT directory (not tracked in git). Example data lives in
 ## Outputs
 
 Build artifacts are written under `dist/` and `runs/` and are always ignored by
-git. Use `cvw sync` to push selected outputs into your site repo.
+git. Each run includes a canonical markdown file and a `resume.json` artifact.
+Use `cvw sync` to push selected outputs into your site repo.
 
 ## Dependency management
 

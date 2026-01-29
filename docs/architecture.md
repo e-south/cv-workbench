@@ -7,7 +7,7 @@ This workbench separates three planes:
 - Compiled to JSON Resume internally
 
 2) Deterministic build pipeline
-- Validate SoT
+- Validate SoT with strict schema checks
 - Materialize canonical markdown
 - Apply Pandoc Lua filters for variants
 - Render outputs (PDF via Pandoc -> LaTeX by default)

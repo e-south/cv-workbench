@@ -16,3 +16,7 @@
 - Added build pipeline with Pandoc filters for tag selection and bullet limits
 - Documented Pandoc and LaTeX prerequisites for PDF rendering
 - Added manifest generation with SoT hashes and tool metadata written to dist/ and runs/
+- Added JSON Resume materialization to run outputs and tracked resume hashes in manifests
+- Added strict schema validation with pydantic models and extra-field rejection
+- Implemented render command plus shared path helpers
+- Fixed markdown date formatting for year-only values
