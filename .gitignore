@@ -22,6 +22,8 @@ dist/
 runs/
 drafts/
 jobs/
+registry/
+reviews/
 
 # Env files
 .env

@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from cvworkbench.config import resolve_dist_path, resolve_variant_path
 from cvworkbench.paths import output_path
+from cvworkbench.publish import PublishError, load_publish_config
 from cvworkbench.variants import load_variant
 
 
@@ -110,8 +111,18 @@ def sync_site(
     config_path: Path,
     site_config_path: Path,
     mode: str,
+    publish_config_path: Path | None = None,
 ) -> SyncResult:
     site = load_site_sync(site_config_path)
+    if publish_config_path is not None:
+        try:
+            publish = load_publish_config(publish_config_path)
+        except PublishError as exc:
+            raise SyncError(str(exc)) from exc
+        if site.publish_variant not in publish.variants:
+            raise SyncError(
+                f"Publish variant '{site.publish_variant}' is not allowed by publish config"
+            )
     variant_path = resolve_variant_path(site.publish_variant, config_path)
     variant = load_variant(variant_path)
     dist_dir = resolve_dist_path(config_path) / variant.id

@@ -16,9 +16,13 @@ This workbench separates three planes:
 - Apply Pandoc Lua filters for variants (bullets and cover-letter sections)
 - Render outputs (PDF via Pandoc -> LaTeX by default)
 - Emit a local run manifest
+- Emit selection metadata for explainable filtering
 
 3) Optional AI assistance
 - Proposes drafts only (variants + patches)
 - Never mutates SoT without explicit apply step
 
 Outputs are always treated as build artifacts and are never committed.
+
+Local context ingestion writes extracted text, deterministic signals, and draft
+strategy files under `registry/contexts/` for auditability.

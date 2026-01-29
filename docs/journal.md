@@ -35,3 +35,11 @@
 - Added test utilities and package init for ANSI-safe CLI assertions; updated diff/render/sync CLI tests
 - Locked dependencies after adding Rich to core requirements
 - Drafted UX + ingestion design plan for local-first commands and URL registry pipeline
+- Added output modes (`--plain`, `--json`) and local-first sync defaults from config
+- Added `doctor`, `init`, and `quickstart` commands with template-based scaffolding
+- Added URL ingestion registry (`job add`) with Trafilatura extraction, signals, and strategy drafts
+- Added publish gating via `config/publish.yaml` and sync enforcement
+- Added tags tooling (`tags list|stats|lint`) with namespaced tag support
+- Added selection metadata output and `explain` command
+- Added review workflows (`reviewpack`, `import-docx`) with patch proposals
+- Added selection.json and review/registry gitignore entries

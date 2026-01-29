@@ -26,12 +26,29 @@ eval "$(/usr/libexec/path_helper)"
 ```bash
 uv sync --locked
 uv run cvw --help
+uv run cvw doctor
+uv run cvw init
+uv run cvw quickstart
 uv run cvw validate --sot-path ./sot.sample
 uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf
 ```
 
 Build output locations are printed after `cvw build` completes, and artifacts
 are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
+
+Local sync is the default. Use `--mode pr` explicitly to open a PR in your site
+repo.
+
+To ingest a job or other context URL:
+```bash
+uv run cvw job add --url https://example.com/job
+```
+
+To generate a review bundle and import DOCX edits as a patch proposal:
+```bash
+uv run cvw reviewpack --variant base
+uv run cvw import-docx --from reviews/base/cv.docx
+```
 
 ## SoT layout
 
@@ -78,6 +95,9 @@ Use `cvw sync` to push selected outputs into your site repo.
 Variants can target multiple document types (resume, cover-letter). Tag filters
 apply consistently to bullets and cover-letter sections.
 
+Publishable variants are gated by `config/publish.yaml`. Sync refuses to publish
+variants not listed there.
+
 ## Dependency management
 
 - Locked install (recommended): `uv sync --locked`
@@ -86,6 +106,8 @@ apply consistently to bullets and cover-letter sections.
 ## Repo structure
 
 - `config/`: global config and variants
+- `registry/`: local context registry for ingested URLs (ignored by git)
+- `reviews/`: review packs (DOCX/PDF + checklist, ignored by git)
 - `build/`: templates, filters, styles, scripts
 - `docs/`: architecture, site contract, security
 - `sot.sample/`: fake data for tests and examples

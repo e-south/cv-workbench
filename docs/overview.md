@@ -5,19 +5,32 @@ lives in a private SoT directory and is never committed here.
 
 The CLI is designed as a clean tool surface for MCP and other orchestration:
 - validate
+- init
+- quickstart
+- doctor
 - build
 - render
 - tailor
 - diff
 - sync
+- explain
+- reviewpack
+- import-docx
+- job add
+- tags (list/lint/stats)
 
 Each command is single-purpose and composable.
 
 `cvw build` prints the dist/run output paths so you can immediately locate the
 generated CV artifacts and manifests.
 
+Selection metadata is written to `selection.json` for explainable filtering.
+
 Variants can target different document types (resume, cover-letter). Tag filters
 apply to bullet entries and cover-letter sections for consistent selection.
+
+URL ingestion creates local registry entries under `registry/contexts/` and
+stores extracted text, deterministic signals, and a draft strategy file.
 
 Tags are normalized (case/punctuation-insensitive) and can be namespaced using
 `namespace:value` syntax (for example, `domain:synthetic-biology`). Namespaced

@@ -28,11 +28,19 @@ def test_cli_help_lists_commands() -> None:
     assert result.exit_code == 0
     output = strip_ansi(result.stdout)
     assert "validate" in output
+    assert "init" in output
+    assert "quickstart" in output
+    assert "doctor" in output
     assert "build" in output
     assert "render" in output
     assert "tailor" in output
     assert "diff" in output
     assert "sync" in output
+    assert "explain" in output
+    assert "reviewpack" in output
+    assert "import-docx" in output
+    assert "job" in output
+    assert "tags" in output
 
 
 def test_validate_succeeds_with_sample_sot() -> None:

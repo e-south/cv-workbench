@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from cvworkbench.markdown import build_markdown
 from cvworkbench.paths import filters_dir, output_path
 from cvworkbench.rendering import render_document
 from cvworkbench.resume import build_resume, write_resume
+from cvworkbench.selection import build_selection
 from cvworkbench.sot import load_sot
 from cvworkbench.variants import Variant, load_variant
 
@@ -54,6 +56,7 @@ def build_documents(
 
     sot = load_sot(sot_path)
     markdown = build_markdown(sot, variant)
+    selection = build_selection(sot, variant)
 
     run_dir = _create_run_dir(resolve_runs_path(config_path))
     canonical_path = run_dir / "canonical.md"
@@ -61,9 +64,16 @@ def build_documents(
     resume_payload = build_resume(sot)
     resume_path = run_dir / "resume.json"
     write_resume(resume_path, resume_payload)
+    selection_path = run_dir / "selection.json"
+    selection_path.write_text(
+        json.dumps(selection, indent=2, sort_keys=True) + "\n"
+    )
 
     dist_dir = resolve_dist_path(config_path) / variant.id
     dist_dir.mkdir(parents=True, exist_ok=True)
+    (dist_dir / "selection.json").write_text(
+        json.dumps(selection, indent=2, sort_keys=True) + "\n"
+    )
 
     filters_path = filters_dir()
     pdf_engine = resolve_pdf_engine(config_path)

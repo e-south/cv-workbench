@@ -66,6 +66,16 @@ def resolve_runs_path(config_path: Path) -> Path:
     return _resolve_from_config(config_path, value)
 
 
+def resolve_registry_path(config_path: Path) -> Path:
+    config = load_config(config_path)
+    paths = config.get("paths", {})
+    if not isinstance(paths, dict):
+        raise ValueError("Config field paths must be a mapping")
+
+    value = paths.get("registry", "registry")
+    return _resolve_from_config(config_path, value)
+
+
 def resolve_default_variant(config_path: Path) -> str:
     config = load_config(config_path)
     variants = config.get("variants", {})
@@ -95,6 +105,17 @@ def resolve_pdf_engine(config_path: Path) -> str | None:
     value = render.get("pdf_engine")
     if not isinstance(value, str) or not value.strip():
         return None
+    return value.strip()
+
+
+def resolve_sync_mode(config_path: Path) -> str:
+    config = load_config(config_path)
+    site = config.get("site", {})
+    if not isinstance(site, dict):
+        raise ValueError("Config field site must be a mapping")
+    value = site.get("sync_mode", "local")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Config field site.sync_mode must be a string")
     return value.strip()
 
 
