@@ -43,7 +43,7 @@ def resolve_sot_path(sot_path: Path | None, config_path: Path) -> Path:
     if not value:
         raise ValueError("Config field paths.sot is required when --sot-path is not set")
 
-    return Path(value)
+    return _resolve_from_config(config_path, value)
 
 
 def resolve_dist_path(config_path: Path) -> Path:
@@ -53,7 +53,7 @@ def resolve_dist_path(config_path: Path) -> Path:
         raise ValueError("Config field paths must be a mapping")
 
     value = paths.get("dist", "dist")
-    return Path(value)
+    return _resolve_from_config(config_path, value)
 
 
 def resolve_runs_path(config_path: Path) -> Path:
@@ -63,7 +63,7 @@ def resolve_runs_path(config_path: Path) -> Path:
         raise ValueError("Config field paths must be a mapping")
 
     value = paths.get("runs", "runs")
-    return Path(value)
+    return _resolve_from_config(config_path, value)
 
 
 def resolve_default_variant(config_path: Path) -> str:
@@ -96,3 +96,11 @@ def resolve_pdf_engine(config_path: Path) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     return value.strip()
+
+
+def _resolve_from_config(config_path: Path, value: str) -> Path:
+    base = config_path.parent
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return (base / path).resolve()

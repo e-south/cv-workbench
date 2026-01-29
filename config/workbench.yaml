@@ -2,14 +2,11 @@ project:
   name: cv-workbench
 paths:
   sot: ../cv-sot
-  dist: ./dist
-  runs: ./runs
+  dist: ../dist
+  runs: ../runs
 variants:
   default: base
 render:
   pdf_engine: xelatex
-  formats:
-    - md
-    - pdf
 site:
   sync_mode: pr
