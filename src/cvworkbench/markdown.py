@@ -554,13 +554,21 @@ def _format_authors(raw: Any) -> str:
         name = _string(author.get("name"))
         if not name:
             continue
+        classes = ["author"]
         roles = author.get("roles")
-        if isinstance(roles, list) and roles:
-            role_text = ", ".join(_string(role) for role in roles if _string(role))
-            if role_text:
-                formatted.append(f"{name} ({role_text})")
-                continue
-        formatted.append(name)
+        if isinstance(roles, list):
+            for role in roles:
+                role_text = _string(role)
+                if not role_text:
+                    continue
+                role_class = slugify(role_text)
+                if role_class:
+                    classes.append(f"role-{role_class}")
+        class_attr = " ".join(f".{klass}" for klass in classes if klass)
+        if class_attr:
+            formatted.append(f"[{name}]{{{class_attr}}}")
+        else:
+            formatted.append(name)
     return ", ".join(formatted)
 
 

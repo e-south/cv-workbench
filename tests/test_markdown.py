@@ -46,3 +46,12 @@ def test_markdown_includes_namespaced_tags() -> None:
 
     assert ".tag-domain" in content
     assert ".tag-domain-synthetic-biology" in content
+
+
+def test_markdown_includes_author_role_classes() -> None:
+    sot = load_sot(Path("sot.sample"))
+    variant = load_variant(Path("config/variants/base.yaml"))
+
+    content = build_markdown(sot, variant)
+
+    assert "[Alex Example]{.author .role-self .role-co-first}" in content
