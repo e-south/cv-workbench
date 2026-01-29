@@ -1,0 +1,13 @@
+skills:
+  - id: languages
+    name: Languages
+    keywords:
+      - Python
+      - TypeScript
+      - Go
+  - id: platforms
+    name: Platforms
+    keywords:
+      - AWS
+      - Kubernetes
+      - Postgres

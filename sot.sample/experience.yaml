@@ -1,0 +1,35 @@
+roles:
+  - id: acme-platform
+    company: Acme Systems
+    title: Staff Software Engineer
+    location: Remote
+    start: 2022-01
+    end: 2025-12
+    bullets:
+      - id: acme-01
+        text: Built a multi-region deployment pipeline that cut release time by 40%.
+        tags:
+          - infra
+          - automation
+      - id: acme-02
+        text: Led incident response improvements that reduced MTTR by 35%.
+        tags:
+          - reliability
+          - leadership
+  - id: rocket-data
+    company: Rocket Data
+    title: Senior Software Engineer
+    location: New York, NY
+    start: 2019-06
+    end: 2021-12
+    bullets:
+      - id: rocket-01
+        text: Implemented a streaming ingestion service processing 2B events/day.
+        tags:
+          - backend
+          - data
+      - id: rocket-02
+        text: Partnered with product to launch a revenue dashboard for sales teams.
+        tags:
+          - analytics
+          - collaboration

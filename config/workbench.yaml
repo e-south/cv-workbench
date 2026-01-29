@@ -1,0 +1,15 @@
+project:
+  name: cv-workbench
+paths:
+  sot: ../cv-sot
+  dist: ./dist
+  runs: ./runs
+variants:
+  default: base
+render:
+  pdf_engine: latex
+  formats:
+    - md
+    - pdf
+site:
+  sync_mode: pr

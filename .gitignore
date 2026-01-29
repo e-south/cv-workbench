@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# Virtual environments
+.venv/
+
+# OS / editor
+.DS_Store
+
+# Workbench private inputs and artifacts
+sot/
+dist/
+runs/
+
+# Env files
+.env
+.env.*
+
+# Tooling
+.gitleaks.toml.bak

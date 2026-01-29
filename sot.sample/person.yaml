@@ -1,0 +1,16 @@
+id: alex-example
+name: Alex Example
+label: Staff Software Engineer
+email: alex@example.com
+location:
+  city: Sample City
+  region: CA
+  country: US
+links:
+  - label: GitHub
+    url: https://github.com/example
+  - label: LinkedIn
+    url: https://linkedin.com/in/example
+summary: >
+  Platform-focused engineer with a track record of shipping reliable services,
+  scaling systems, and mentoring teams.

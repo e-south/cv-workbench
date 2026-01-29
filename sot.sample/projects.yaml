@@ -1,0 +1,13 @@
+projects:
+  - id: ops-portal
+    name: Ops Portal
+    summary: Internal portal for operational visibility and on-call tooling.
+    tags:
+      - platform
+      - internal
+  - id: cv-toolkit
+    name: Resume Toolkit
+    summary: Template-driven resume generator with deterministic builds.
+    tags:
+      - tooling
+      - docs

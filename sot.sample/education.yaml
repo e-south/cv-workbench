@@ -1,0 +1,7 @@
+education:
+  - id: example-state
+    institution: Example State University
+    area: Computer Science
+    study_type: BS
+    start: 2014
+    end: 2018
