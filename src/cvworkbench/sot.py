@@ -22,6 +22,7 @@ REQUIRED_FILES = {
     "projects.yaml": "projects",
     "skills.yaml": "skills",
     "education.yaml": "education",
+    "letters.yaml": "letters",
 }
 
 

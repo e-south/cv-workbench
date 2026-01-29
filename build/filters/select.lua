@@ -12,8 +12,14 @@ Module Author(s): Eric J. South
 local include_tags = {}
 local exclude_tags = {}
 
-local function to_list(meta, key)
-  local value = meta[key]
+local function to_list(meta, keys)
+  local value = nil
+  for _, key in ipairs(keys) do
+    if meta[key] ~= nil then
+      value = meta[key]
+      break
+    end
+  end
   if not value then
     return {}
   end
@@ -69,21 +75,15 @@ local function has_any(tags, set)
   return false
 end
 
-function Meta(meta)
-  include_tags = to_set(to_list(meta, "include_tags"))
-  exclude_tags = to_set(to_list(meta, "exclude_tags"))
-  return meta
-end
-
-function Div(div)
-  local has_bullet = false
+local function filter_div(div)
+  local is_filterable = false
   for _, class in ipairs(div.attr.classes) do
-    if class == "bullet" then
-      has_bullet = true
+    if class == "bullet" or class == "section" then
+      is_filterable = true
       break
     end
   end
-  if not has_bullet then
+  if not is_filterable then
     return nil
   end
 
@@ -98,4 +98,13 @@ function Div(div)
 
   clean_div(div)
   return div
+end
+
+function Pandoc(doc)
+  include_tags = to_set(to_list(doc.meta, { "include_tags", "include-tags" }))
+  exclude_tags = to_set(to_list(doc.meta, { "exclude_tags", "exclude-tags" }))
+  local wrapper = pandoc.Div(doc.blocks)
+  local walked = pandoc.walk_block(wrapper, { Div = filter_div })
+  doc.blocks = walked.content
+  return doc
 end

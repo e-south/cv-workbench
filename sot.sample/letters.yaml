@@ -1,0 +1,16 @@
+letters:
+  - id: default-cover-letter
+    title: Cover Letter
+    salutation: Dear Hiring Manager,
+    closing: Sincerely,
+    sections:
+      - id: opening
+        text: Systems with clear ownership and measurable outcomes are where I do my best work.
+        tags:
+          - leadership
+          - general
+      - id: impact
+        text: Hands-on incident response has taught me how to stabilize platforms and coach teams through change.
+        tags:
+          - reliability
+          - operations

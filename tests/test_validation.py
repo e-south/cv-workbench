@@ -90,3 +90,21 @@ def _write_minimal_sot(tmp_path: Path, *, extra_person_field: bool) -> None:
         )
         + "\n"
     )
+
+    (tmp_path / "letters.yaml").write_text(
+        "\n".join(
+            [
+                "letters:",
+                "  - id: default-letter",
+                "    title: Cover Letter",
+                "    salutation: Dear Hiring Manager,",
+                "    closing: Sincerely,",
+                "    sections:",
+                "      - id: intro",
+                "        text: Intro text.",
+                "        tags:",
+                "          - general",
+            ]
+        )
+        + "\n"
+    )

@@ -27,6 +27,7 @@ class Variant:
     outputs: list[str]
     output_name: str
     document_type: str
+    letter_id: str | None
 
 
 DEFAULT_ORDER = ["summary", "experience", "projects", "skills", "education"]
@@ -52,6 +53,7 @@ def load_variant(path: Path) -> Variant:
     max_bullets = _optional_int(variant_data.get("max_bullets_per_role"))
     output_name = _optional_str(variant_data.get("output_name"), default="cv")
     document_type = _optional_str(variant_data.get("document_type"), default="resume")
+    letter_id = _optional_str_or_none(variant_data.get("letter_id"))
 
     return Variant(
         id=variant_id,
@@ -62,6 +64,7 @@ def load_variant(path: Path) -> Variant:
         outputs=outputs,
         output_name=output_name,
         document_type=document_type,
+        letter_id=letter_id,
     )
 
 
@@ -105,4 +108,12 @@ def _optional_str(value: object, default: str) -> str:
         return default
     if not isinstance(value, str) or not value.strip():
         return default
+    return value
+
+
+def _optional_str_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
     return value

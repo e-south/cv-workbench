@@ -1,0 +1,11 @@
+variant:
+  id: cover-letter
+  document_type: cover-letter
+  letter_id: default-cover-letter
+  outputs:
+    - md
+    - pdf
+  output_name: cover-letter
+  include_tags: []
+  exclude_tags: []
+  order: []

@@ -101,9 +101,29 @@ class Education(StrictModel):
     education: Annotated[list[EducationEntry], Field(min_length=1)]
 
 
+class LetterSection(StrictModel):
+    id: NonEmptyStr
+    heading: NonEmptyStr | None = None
+    text: NonEmptyStr
+    tags: NonEmptyStrList
+
+
+class Letter(StrictModel):
+    id: NonEmptyStr
+    title: NonEmptyStr
+    salutation: NonEmptyStr
+    closing: NonEmptyStr
+    sections: Annotated[list[LetterSection], Field(min_length=1)]
+
+
+class Letters(StrictModel):
+    letters: Annotated[list[Letter], Field(min_length=1)]
+
+
 class SotData(StrictModel):
     person: Person
     experience: Experience
     projects: Projects
     skills: Skills
     education: Education
+    letters: Letters

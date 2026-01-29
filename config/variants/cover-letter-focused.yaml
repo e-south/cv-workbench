@@ -1,0 +1,11 @@
+variant:
+  id: cover-letter-focused
+  document_type: cover-letter
+  letter_id: default-cover-letter
+  outputs:
+    - md
+  output_name: cover-letter
+  include_tags:
+    - leadership
+  exclude_tags: []
+  order: []

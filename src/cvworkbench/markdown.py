@@ -17,6 +17,12 @@ from cvworkbench.variants import Variant
 
 
 def build_markdown(sot: dict[str, Any], variant: Variant) -> str:
+    if variant.document_type == "cover-letter":
+        return _build_cover_letter_markdown(sot, variant)
+    return _build_resume_markdown(sot, variant)
+
+
+def _build_resume_markdown(sot: dict[str, Any], variant: Variant) -> str:
     lines: list[str] = []
 
     person = sot.get("person", {})
@@ -48,6 +54,78 @@ def build_markdown(sot: dict[str, Any], variant: Variant) -> str:
     if not content.endswith("\n"):
         content += "\n"
     return content
+
+
+def _build_cover_letter_markdown(sot: dict[str, Any], variant: Variant) -> str:
+    if not variant.letter_id:
+        raise ValueError("Cover letter variants must define letter_id")
+
+    lines: list[str] = []
+    person = sot.get("person", {})
+    name = person.get("name", "")
+    if name:
+        lines.append(f"# {name}")
+        lines.append("")
+
+    contact_line = _build_contact_line(person)
+    if contact_line:
+        lines.append(contact_line)
+        lines.append("")
+
+    letters = _find_letter(sot, variant.letter_id)
+    title = _string(letters.get("title"))
+    if title:
+        lines.append(f"## {title}")
+        lines.append("")
+
+    salutation = _string(letters.get("salutation"))
+    if salutation:
+        lines.append(salutation)
+        lines.append("")
+
+    sections = letters.get("sections")
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            section_id = _slugify(section.get("id"))
+            tag_classes = _tag_classes(section.get("tags"))
+            div_attr = _format_div_attributes(
+                f"section-{section_id}",
+                ["section", *tag_classes],
+            )
+            lines.append(f"::: {div_attr}")
+            heading = _string(section.get("heading"))
+            if heading:
+                lines.append(f"### {heading}")
+            text = _string(section.get("text"))
+            if text:
+                lines.append(text)
+            lines.append(":::")
+            lines.append("")
+
+    closing = _string(letters.get("closing"))
+    if closing:
+        lines.append(closing)
+        lines.append("")
+
+    content = "\n".join(lines).strip()
+    if not content.endswith("\n"):
+        content += "\n"
+    return content
+
+
+def _find_letter(sot: dict[str, Any], letter_id: str) -> dict[str, Any]:
+    letters_data = sot.get("letters", {})
+    letters = letters_data.get("letters")
+    if not isinstance(letters, list):
+        raise ValueError("letters.letters must be a list")
+    for letter in letters:
+        if not isinstance(letter, dict):
+            continue
+        if letter.get("id") == letter_id:
+            return letter
+    raise ValueError(f"Letter not found: {letter_id}")
 
 
 def _build_contact_line(person: dict[str, Any]) -> str:
