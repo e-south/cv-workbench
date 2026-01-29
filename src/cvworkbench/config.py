@@ -18,6 +18,7 @@ import yaml
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
+    config_path = resolve_config_path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
@@ -28,6 +29,21 @@ def load_config(config_path: Path) -> dict[str, Any]:
         raise ValueError("Config must be a YAML mapping")
 
     return raw
+
+
+def resolve_config_path(config_path: Path) -> Path:
+    if config_path.is_absolute():
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        return config_path
+
+    if config_path.exists():
+        return config_path.resolve()
+
+    resolved = _find_config_in_parents(config_path)
+    if resolved is None:
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    return resolved
 
 
 def resolve_sot_path(sot_path: Path | None, config_path: Path) -> Path:
@@ -125,3 +141,14 @@ def _resolve_from_config(config_path: Path, value: str) -> Path:
     if path.is_absolute():
         return path
     return (base / path).resolve()
+
+
+def _find_config_in_parents(config_path: Path) -> Path | None:
+    current = Path.cwd().resolve()
+    while True:
+        candidate = current / config_path
+        if candidate.exists():
+            return candidate.resolve()
+        if current.parent == current:
+            return None
+        current = current.parent
