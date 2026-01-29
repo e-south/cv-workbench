@@ -11,9 +11,9 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 DateValue = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | Annotated[
@@ -126,6 +126,51 @@ class Letters(StrictModel):
     letters: Annotated[list[Letter], Field(min_length=1)]
 
 
+SnippetScope = Literal["summary", "section-intro", "letter-open", "letter-close"]
+SectionId = Literal[
+    "summary",
+    "experience",
+    "projects",
+    "skills",
+    "education",
+    "publications",
+    "conferences",
+    "honors",
+    "service",
+    "teaching",
+    "references",
+]
+
+
+class Snippet(StrictModel):
+    id: NonEmptyStr
+    scope: SnippetScope
+    section: SectionId | None = None
+    text: NonEmptyStr | None = None
+    path: NonEmptyStr | None = None
+    tags: NonEmptyStrList | None = None
+
+    @model_validator(mode="after")
+    def _validate_scope(self) -> "Snippet":
+        if self.scope == "section-intro" and not self.section:
+            raise ValueError("section-intro snippets require section")
+        if self.scope != "section-intro" and self.section is not None:
+            raise ValueError("section is only valid for section-intro snippets")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_content(self) -> "Snippet":
+        has_text = bool(self.text)
+        has_path = bool(self.path)
+        if has_text == has_path:
+            raise ValueError("snippet must define exactly one of text or path")
+        return self
+
+
+class Snippets(StrictModel):
+    snippets: Annotated[list[Snippet], Field(min_length=1)]
+
+
 class Author(StrictModel):
     name: NonEmptyStr
     roles: NonEmptyStrList | None = None
@@ -232,6 +277,7 @@ class SotData(StrictModel):
     skills: Skills
     education: Education
     letters: Letters
+    snippets: Snippets | None = None
     publications: Publications | None = None
     honors: Honors | None = None
     service: Service | None = None

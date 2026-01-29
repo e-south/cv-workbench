@@ -52,6 +52,9 @@ def validate_sot(sot_path: Path) -> list[str]:
         SotData.model_validate(payload)
     except ValidationError as exc:
         errors.extend(_format_errors(exc))
+        return errors
+
+    _validate_snippet_paths(payload, sot_path, errors)
 
     return errors
 
@@ -87,3 +90,31 @@ def _format_errors(exc: ValidationError) -> list[str]:
         else:
             errors.append(message)
     return errors
+
+
+def _validate_snippet_paths(payload: dict[str, Any], sot_path: Path, errors: list[str]) -> None:
+    snippets_block = payload.get("snippets")
+    if not isinstance(snippets_block, dict):
+        return
+    snippets = snippets_block.get("snippets")
+    if not isinstance(snippets, list):
+        return
+
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            continue
+        path_value = snippet.get("path")
+        if path_value is None:
+            continue
+        if not isinstance(path_value, str) or not path_value.strip():
+            errors.append("snippets: snippet path must be a string")
+            continue
+        path = Path(path_value)
+        if path.is_absolute() or ".." in path.parts:
+            errors.append(f"snippets: invalid snippet path: {path_value}")
+            continue
+        full_path = sot_path / path_value
+        if not full_path.exists():
+            snippet_id = snippet.get("id")
+            label = f"snippets.{snippet_id}" if snippet_id else "snippets"
+            errors.append(f"{label}: snippet path not found: {path_value}")

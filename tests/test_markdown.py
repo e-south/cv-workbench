@@ -55,3 +55,22 @@ def test_markdown_includes_author_role_classes() -> None:
     content = build_markdown(sot, variant)
 
     assert "[Alex Example]{.author .role-self .role-co-first}" in content
+
+
+def test_markdown_uses_summary_snippet_when_present() -> None:
+    sot = load_sot(Path("sot.sample"))
+    variant = load_variant(Path("config/variants/base.yaml"))
+
+    content = build_markdown(sot, variant)
+
+    assert "Snippet summary override for sample" in content
+    assert "Platform-focused engineer with a track record" not in content
+
+
+def test_markdown_includes_section_intro_snippet() -> None:
+    sot = load_sot(Path("sot.sample"))
+    variant = load_variant(Path("config/variants/base.yaml"))
+
+    content = build_markdown(sot, variant)
+
+    assert "Selected experience across research and industry." in content

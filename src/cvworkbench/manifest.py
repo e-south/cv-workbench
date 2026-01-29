@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from cvworkbench.sot import OPTIONAL_FILES, REQUIRED_FILES
 from cvworkbench.variants import Variant
 
@@ -56,6 +58,7 @@ def build_manifest(
             "hash": _hash_file(resume_path),
         },
         "sot_hashes": _hash_sot(sot_path),
+        "snippet_hashes": _hash_snippets(sot_path),
         "variant_hash": _hash_file(variant_path),
         "git": {"commit": _git_commit(repo_root)},
         "tools": {
@@ -84,11 +87,46 @@ def _hash_sot(sot_path: Path) -> dict[str, str]:
     return hashes
 
 
+def _hash_snippets(sot_path: Path) -> dict[str, str]:
+    snippets_path = sot_path / "snippets.yaml"
+    if not snippets_path.exists():
+        return {}
+    raw = yaml.safe_load(snippets_path.read_text())
+    if raw is None:
+        raise ValueError("snippets.yaml is empty")
+    if not isinstance(raw, dict):
+        raise ValueError("snippets.yaml must be a YAML mapping")
+    snippets = raw.get("snippets")
+    if not isinstance(snippets, list):
+        raise ValueError("snippets.snippets must be a list")
+
+    hashes: dict[str, str] = {}
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            continue
+        path_value = snippet.get("path")
+        if isinstance(path_value, str) and path_value.strip():
+            path = sot_path / path_value
+            hashes[path_value] = _hash_file(path)
+            continue
+        text_value = snippet.get("text")
+        if isinstance(text_value, str) and text_value.strip():
+            snippet_id = snippet.get("id") or "snippet"
+            hashes[f"inline:{snippet_id}"] = _hash_text(text_value)
+    return hashes
+
+
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(8192), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _hash_text(text: str) -> str:
+    digest = hashlib.sha256()
+    digest.update(text.encode("utf-8"))
     return digest.hexdigest()
 
 

@@ -32,6 +32,7 @@ OPTIONAL_FILES = {
     "teaching.yaml": "teaching",
     "conferences.yaml": "conferences",
     "references.yaml": "references",
+    "snippets.yaml": "snippets",
 }
 
 
@@ -48,6 +49,9 @@ def load_sot(sot_path: Path) -> dict[str, Any]:
             continue
         data[key] = _load_yaml(path)
 
+    if "snippets" in data:
+        data["snippets"] = _resolve_snippets(data["snippets"], sot_path)
+
     return data
 
 
@@ -59,3 +63,29 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         raise ValueError(f"{path.name} must be a YAML mapping")
 
     return raw
+
+
+def _resolve_snippets(snippet_data: dict[str, Any], sot_path: Path) -> dict[str, Any]:
+    snippets = snippet_data.get("snippets")
+    if not isinstance(snippets, list):
+        raise ValueError("snippets.snippets must be a list")
+
+    resolved: list[dict[str, Any]] = []
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            raise ValueError("snippets.snippets entries must be mappings")
+        if "text" in snippet and "path" in snippet:
+            raise ValueError("snippets cannot include both text and path")
+        if "path" not in snippet:
+            resolved.append(snippet)
+            continue
+        path_value = snippet.get("path")
+        if not isinstance(path_value, str) or not path_value.strip():
+            raise ValueError("snippet path must be a string")
+        snippet_path = sot_path / path_value
+        if not snippet_path.exists():
+            raise ValueError(f"snippet path not found: {path_value}")
+        content = snippet_path.read_text().strip()
+        resolved.append({**snippet, "text": content, "path": None})
+
+    return {"snippets": resolved}

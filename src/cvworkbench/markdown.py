@@ -18,12 +18,17 @@ from cvworkbench.variants import Variant
 
 
 def build_markdown(sot: dict[str, Any], variant: Variant) -> str:
+    snippets = _extract_snippets(sot)
     if variant.document_type == "cover-letter":
-        return _build_cover_letter_markdown(sot, variant)
-    return _build_resume_markdown(sot, variant)
+        return _build_cover_letter_markdown(sot, variant, snippets)
+    return _build_resume_markdown(sot, variant, snippets)
 
 
-def _build_resume_markdown(sot: dict[str, Any], variant: Variant) -> str:
+def _build_resume_markdown(
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> str:
     lines: list[str] = []
 
     person = sot.get("person", {})
@@ -55,7 +60,7 @@ def _build_resume_markdown(sot: dict[str, Any], variant: Variant) -> str:
         builder = section_builders.get(section)
         if builder is None:
             continue
-        builder(lines, sot)
+        builder(lines, sot, variant, snippets)
 
     content = "\n".join(lines).strip()
     if not content.endswith("\n"):
@@ -63,7 +68,11 @@ def _build_resume_markdown(sot: dict[str, Any], variant: Variant) -> str:
     return content
 
 
-def _build_cover_letter_markdown(sot: dict[str, Any], variant: Variant) -> str:
+def _build_cover_letter_markdown(
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> str:
     if not variant.letter_id:
         raise ValueError("Cover letter variants must define letter_id")
 
@@ -90,6 +99,11 @@ def _build_cover_letter_markdown(sot: dict[str, Any], variant: Variant) -> str:
         lines.append(salutation)
         lines.append("")
 
+    opening_snippet = _select_snippet_text(snippets, variant, scope="letter-open", section=None)
+    if opening_snippet:
+        lines.append(opening_snippet)
+        lines.append("")
+
     sections = letters.get("sections")
     if isinstance(sections, list):
         for section in sections:
@@ -110,6 +124,11 @@ def _build_cover_letter_markdown(sot: dict[str, Any], variant: Variant) -> str:
                 lines.append(text)
             lines.append(":::")
             lines.append("")
+
+    closing_snippet = _select_snippet_text(snippets, variant, scope="letter-close", section=None)
+    if closing_snippet:
+        lines.append(closing_snippet)
+        lines.append("")
 
     closing = _string(letters.get("closing"))
     if closing:
@@ -171,19 +190,31 @@ def _build_contact_line(person: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
-def _build_summary(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_summary(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     person = sot.get("person", {})
-    summary = person.get("summary")
-    if not isinstance(summary, str) or not summary.strip():
+    summary = _select_snippet_text(snippets, variant, scope="summary", section=None)
+    if not summary:
+        summary = _string(person.get("summary"))
+    if not summary:
         return
 
     lines.append("## Summary")
     lines.append("")
-    lines.append(summary.strip())
+    lines.append(summary)
     lines.append("")
 
 
-def _build_experience(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_experience(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     experience = sot.get("experience", {})
     roles = experience.get("roles")
     if not isinstance(roles, list) or not roles:
@@ -191,6 +222,7 @@ def _build_experience(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Experience")
     lines.append("")
+    _append_section_intro(lines, "experience", variant, snippets)
 
     for role in roles:
         if not isinstance(role, dict):
@@ -233,7 +265,12 @@ def _build_experience(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_projects(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_projects(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     projects = sot.get("projects", {})
     items = projects.get("projects")
     if not isinstance(items, list) or not items:
@@ -241,6 +278,7 @@ def _build_projects(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Projects")
     lines.append("")
+    _append_section_intro(lines, "projects", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -259,7 +297,12 @@ def _build_projects(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_skills(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_skills(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     skills = sot.get("skills", {})
     items = skills.get("skills")
     if not isinstance(items, list) or not items:
@@ -267,6 +310,7 @@ def _build_skills(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Skills")
     lines.append("")
+    _append_section_intro(lines, "skills", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -278,7 +322,12 @@ def _build_skills(lines: list[str], sot: dict[str, Any]) -> None:
     lines.append("")
 
 
-def _build_education(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_education(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     education = sot.get("education", {})
     items = education.get("education")
     if not isinstance(items, list) or not items:
@@ -286,6 +335,7 @@ def _build_education(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Education")
     lines.append("")
+    _append_section_intro(lines, "education", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -327,7 +377,12 @@ def _build_education(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_publications(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_publications(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     publications = sot.get("publications", {})
     items = publications.get("publications")
     if not isinstance(items, list) or not items:
@@ -335,6 +390,7 @@ def _build_publications(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Publications")
     lines.append("")
+    _append_section_intro(lines, "publications", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -363,7 +419,12 @@ def _build_publications(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_conferences(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_conferences(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     conferences = sot.get("conferences", {})
     items = conferences.get("conferences")
     if not isinstance(items, list) or not items:
@@ -371,6 +432,7 @@ def _build_conferences(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Conferences & Workshops")
     lines.append("")
+    _append_section_intro(lines, "conferences", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -399,7 +461,12 @@ def _build_conferences(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_honors(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_honors(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     honors = sot.get("honors", {})
     items = honors.get("honors")
     if not isinstance(items, list) or not items:
@@ -407,6 +474,7 @@ def _build_honors(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Honors & Awards")
     lines.append("")
+    _append_section_intro(lines, "honors", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -433,7 +501,12 @@ def _build_honors(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_service(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_service(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     service = sot.get("service", {})
     items = service.get("service")
     if not isinstance(items, list) or not items:
@@ -441,6 +514,7 @@ def _build_service(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Service & Leadership")
     lines.append("")
+    _append_section_intro(lines, "service", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -467,7 +541,12 @@ def _build_service(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_teaching(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_teaching(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     teaching = sot.get("teaching", {})
     items = teaching.get("teaching")
     if not isinstance(items, list) or not items:
@@ -475,6 +554,7 @@ def _build_teaching(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## Teaching")
     lines.append("")
+    _append_section_intro(lines, "teaching", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -504,7 +584,12 @@ def _build_teaching(lines: list[str], sot: dict[str, Any]) -> None:
         lines.append("")
 
 
-def _build_references(lines: list[str], sot: dict[str, Any]) -> None:
+def _build_references(
+    lines: list[str],
+    sot: dict[str, Any],
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
     references = sot.get("references", {})
     items = references.get("references")
     if not isinstance(items, list) or not items:
@@ -512,6 +597,7 @@ def _build_references(lines: list[str], sot: dict[str, Any]) -> None:
 
     lines.append("## References")
     lines.append("")
+    _append_section_intro(lines, "references", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -542,6 +628,90 @@ def _build_references(lines: list[str], sot: dict[str, Any]) -> None:
 
         lines.append(":::")
         lines.append("")
+
+
+def _extract_snippets(sot: dict[str, Any]) -> list[dict[str, Any]]:
+    snippets_block = sot.get("snippets")
+    if not isinstance(snippets_block, dict):
+        return []
+    snippets = snippets_block.get("snippets")
+    if not isinstance(snippets, list):
+        return []
+    return snippets
+
+
+def _append_section_intro(
+    lines: list[str],
+    section: str,
+    variant: Variant,
+    snippets: list[dict[str, Any]],
+) -> None:
+    intro = _select_snippet_text(snippets, variant, scope="section-intro", section=section)
+    if not intro:
+        return
+    lines.append(intro)
+    lines.append("")
+
+
+def _select_snippet_text(
+    snippets: list[dict[str, Any]],
+    variant: Variant,
+    *,
+    scope: str,
+    section: str | None,
+) -> str:
+    matches: list[tuple[str, str]] = []
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            continue
+        if snippet.get("scope") != scope:
+            continue
+        if section is not None and snippet.get("section") != section:
+            continue
+        if section is None and snippet.get("section") not in (None, ""):
+            continue
+        if not _snippet_matches_variant(snippet, variant):
+            continue
+        text = _string(snippet.get("text"))
+        if not text:
+            continue
+        snippet_id = _string(snippet.get("id")) or "snippet"
+        matches.append((snippet_id, text))
+
+    if len(matches) > 1:
+        ids = ", ".join(snippet_id for snippet_id, _ in matches)
+        label = f"{scope}:{section}" if section else scope
+        raise ValueError(f"Multiple snippets matched {label}: {ids}")
+
+    return matches[0][1] if matches else ""
+
+
+def _snippet_matches_variant(snippet: dict[str, Any], variant: Variant) -> bool:
+    tag_set = _expand_tag_set(snippet.get("tags"))
+    if variant.exclude_tags and _has_any(tag_set, variant.exclude_tags):
+        return False
+    if not variant.include_tags:
+        return True
+    return _has_any(tag_set, variant.include_tags)
+
+
+def _expand_tag_set(raw_tags: Any) -> set[str]:
+    if not isinstance(raw_tags, list):
+        return set()
+    classes: set[str] = set()
+    for tag in raw_tags:
+        if not isinstance(tag, str):
+            continue
+        for klass in tag_classes(tag):
+            classes.add(klass)
+    return classes
+
+
+def _has_any(tag_set: set[str], tags: list[str]) -> bool:
+    for tag in tags:
+        if tag in tag_set:
+            return True
+    return False
 
 
 def _format_authors(raw: Any) -> str:

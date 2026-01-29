@@ -1,0 +1,14 @@
+snippets:
+  - id: summary
+    scope: summary
+    path: snippets/summary.md
+  - id: experience-intro
+    scope: section-intro
+    section: experience
+    path: snippets/experience.md
+  - id: letter-open
+    scope: letter-open
+    path: snippets/letter_open.md
+  - id: letter-close
+    scope: letter-close
+    path: snippets/letter_close.md

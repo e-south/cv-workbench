@@ -45,3 +45,18 @@ def test_cover_letter_tag_filters_sections() -> None:
 
     assert "Systems with clear ownership" in content
     assert "Hands-on incident response" not in content
+
+
+def test_cover_letter_includes_snippet_open_close() -> None:
+    result = build_documents(
+        sot_path=Path("sot.sample"),
+        config_path=Path("config/workbench.yaml"),
+        variant_id="cover-letter",
+        formats=["md"],
+    )
+
+    output_path = result.dist_dir / "cover-letter.md"
+    content = output_path.read_text()
+
+    assert "I value teams that pair curiosity with execution." in content
+    assert "Thank you for your consideration." in content

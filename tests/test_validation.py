@@ -45,6 +45,47 @@ def test_validate_rejects_invalid_optional_files(tmp_path: Path) -> None:
     assert any("publications" in error for error in errors)
 
 
+def test_validate_rejects_invalid_snippet(tmp_path: Path) -> None:
+    _write_minimal_sot(tmp_path, extra_person_field=False)
+
+    (tmp_path / "snippets.yaml").write_text(
+        "\n".join(
+            [
+                "snippets:",
+                "  - id: summary",
+                "    scope: summary",
+            ]
+        )
+        + "\n"
+    )
+
+    errors = validate_sot(tmp_path)
+
+    assert errors
+    assert any("snippets" in error for error in errors)
+
+
+def test_validate_rejects_missing_snippet_path(tmp_path: Path) -> None:
+    _write_minimal_sot(tmp_path, extra_person_field=False)
+
+    (tmp_path / "snippets.yaml").write_text(
+        "\n".join(
+            [
+                "snippets:",
+                "  - id: summary",
+                "    scope: summary",
+                "    path: snippets/missing.md",
+            ]
+        )
+        + "\n"
+    )
+
+    errors = validate_sot(tmp_path)
+
+    assert errors
+    assert any("snippets" in error for error in errors)
+
+
 def _write_minimal_sot(tmp_path: Path, *, extra_person_field: bool) -> None:
     person_lines = [
         "id: sample",
