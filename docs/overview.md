@@ -15,7 +15,7 @@ Each command is single-purpose and composable.
 
 ## Dependency management
 
-- Locked install (recommended): `uv sync --group dev --frozen`
-- Update dependencies: `uv lock` then `uv sync --group dev`
+- Locked install (recommended): `uv sync --frozen`
+- Update dependencies: `uv lock` then `uv sync`
 
 uv uses `--frozen` for locked installs (it will not modify `uv.lock`).

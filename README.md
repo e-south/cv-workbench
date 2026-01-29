@@ -16,7 +16,7 @@ Requirements:
 - uv (https://docs.astral.sh/uv/)
 
 ```bash
-uv sync --group dev --frozen
+uv sync --frozen
 uv run cvw --help
 uv run cvw validate --sot-path ./sot.sample
 ```
@@ -33,8 +33,8 @@ git. Use `cvw sync` to push selected outputs into your site repo.
 
 ## Dependency management
 
-- Locked install (recommended): `uv sync --group dev --frozen`
-- Update dependencies: `uv lock` then `uv sync --group dev`
+- Locked install (recommended): `uv sync --frozen`
+- Update dependencies: `uv lock` then `uv sync`
 
 Note: uv uses `--frozen` for locked installs (it will not modify `uv.lock`).
 
