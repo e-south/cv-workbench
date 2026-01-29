@@ -7,6 +7,7 @@ This workbench separates three planes:
 - Compiled to JSON Resume internally
 - Cover letters share the same variant/tag system
 - Letters live in `letters.yaml` and are selected via `variant.letter_id`
+- Optional sections: publications, honors, service, teaching, conferences, references
 
 2) Deterministic build pipeline
 - Validate SoT with strict schema checks

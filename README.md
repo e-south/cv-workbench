@@ -35,6 +35,14 @@ uv run cvw render --canonical runs/<timestamp>/canonical.md --format html,docx
 Provide a private SoT directory (not tracked in git). Example data lives in
 `sot.sample/` and is safe to share.
 
+Optional sections supported when present in the SoT directory:
+`publications.yaml`, `honors.yaml`, `service.yaml`, `teaching.yaml`,
+`conferences.yaml`, and `references.yaml`.
+
+Tags are normalized (case/punctuation-insensitive). Namespaced tags such as
+`domain:synthetic-biology` also register the namespace tag (`domain`) for
+broader include/exclude rules.
+
 ## Outputs
 
 Build artifacts are written under `dist/` and `runs/` and are always ignored by

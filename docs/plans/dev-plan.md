@@ -19,6 +19,7 @@
 - Cover-letter variants and tag filtering supported.
 - HTML/DOCX render paths supported via Pandoc defaults.
 - Draft signals generation and apply command implemented.
+- Added optional SoT sections for publications, honors, service, teaching, conferences, and references.
 
 ## Gap audit (original spec → status)
 - CLI surface: validate/build/render/tailor/diff/sync — Done
@@ -31,6 +32,7 @@
 - Job ingestion signals — Done
 - Manifest audit fields for AI steps — Pending
 - Cover letters / CV variants — In progress (demo + semantics)
+- Extended schema for academic CV sections — Done
 - Security posture docs — Pending
 
 ## Next todos

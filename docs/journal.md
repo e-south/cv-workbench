@@ -26,3 +26,4 @@
 - Added cover-letter SoT support with variant configuration and tag filtering
 - Added draft signals generation and apply command
 - Added HTML/DOCX render coverage
+- Extended SoT schema and outputs for publications, honors, service, teaching, conferences, and references
