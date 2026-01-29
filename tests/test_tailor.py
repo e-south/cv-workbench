@@ -44,6 +44,12 @@ def test_tailor_writes_draft_files(tmp_path: Path) -> None:
     assert (output_dir / "variant.yaml").exists()
     assert (output_dir / "patch.diff").exists()
     assert (output_dir / "prompt.json").exists()
+    assert (output_dir / "signals.json").exists()
 
     variant_data = yaml.safe_load((output_dir / "variant.yaml").read_text())
     assert variant_data["variant"]["id"] == "sample-role"
+
+    signals = yaml.safe_load((output_dir / "signals.json").read_text())
+    assert "keywords" in signals
+    assert "sample" in signals["keywords"]
+    assert "job" in signals["keywords"]

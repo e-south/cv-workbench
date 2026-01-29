@@ -20,6 +20,8 @@ coverage.xml
 sot/
 dist/
 runs/
+drafts/
+jobs/
 
 # Env files
 .env

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -72,11 +73,16 @@ def tailor_job(
     patch_path = output_dir / "patch.diff"
     patch_path.write_text("")
 
+    signals_path = output_dir / "signals.json"
+    signals_payload = _build_signals(job_path)
+    signals_path.write_text(json.dumps(signals_payload, indent=2, sort_keys=True) + "\n")
+
     prompt_path = output_dir / "prompt.json"
     prompt_payload = _build_prompt_payload(
         job_path=job_path,
         base_variant_id=base_variant_id,
         draft_variant_id=draft_variant_id,
+        signals_path=signals_path,
     )
     prompt_path.write_text(json.dumps(prompt_payload, indent=2, sort_keys=True) + "\n")
 
@@ -93,6 +99,7 @@ def _build_prompt_payload(
     job_path: Path,
     base_variant_id: str,
     draft_variant_id: str,
+    signals_path: Path,
 ) -> dict[str, Any]:
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -100,10 +107,43 @@ def _build_prompt_payload(
             "path": str(job_path),
             "hash": _hash_file(job_path),
         },
+        "signals": {
+            "path": str(signals_path),
+            "hash": _hash_file(signals_path),
+        },
         "base_variant": base_variant_id,
         "draft_variant": draft_variant_id,
         "instructions": "Generate a tailored variant and patch proposal.",
+        "model_id": None,
+        "temperature": None,
+        "diff_summary": None,
     }
+
+
+def _build_signals(job_path: Path) -> dict[str, Any]:
+    text = job_path.read_text()
+    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
+    keywords = _dedupe([token for token in tokens if len(token) >= 3])
+    return {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": {
+            "path": str(job_path),
+            "hash": _hash_file(job_path),
+        },
+        "keywords": keywords[:25],
+        "word_count": len(tokens),
+    }
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
 
 
 def _hash_file(path: Path) -> str:

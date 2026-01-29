@@ -17,6 +17,7 @@ from typing import Annotated
 
 import typer
 
+from cvworkbench.apply import ApplyError, apply_draft
 from cvworkbench.config import (
     resolve_default_variant,
     resolve_dist_path,
@@ -240,6 +241,30 @@ def tailor(
             config_path=config,
         )
     except TailorError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+@app.command()
+def apply(
+    draft: Annotated[
+        Path,
+        typer.Option(
+            "--draft",
+            help="Draft directory containing patch.diff",
+        ),
+    ],
+    sot_path: Annotated[
+        Path,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ],
+) -> None:
+    try:
+        apply_draft(draft_dir=draft, sot_path=sot_path)
+    except ApplyError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
