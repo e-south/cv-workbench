@@ -1,0 +1,10 @@
+service:
+  - id: mentorship
+    organization: Example Research Consortium
+    role: Industry Liaison
+    start: 2022
+    end: 2024
+    summary: Coordinated industry panels and mentorship programs for trainees.
+    tags:
+      - type:service
+      - domain:synthetic-biology

@@ -1,0 +1,11 @@
+conferences:
+  - id: gordon-2024
+    title: Poster presentation — Microbial Stress Response
+    event: Gordon Research Conference
+    year: 2024
+    location: Ventura, CA
+    presentation_type: Poster
+    notes: Presented work on stress-responsive promoter design.
+    tags:
+      - type:conference
+      - domain:synthetic-biology

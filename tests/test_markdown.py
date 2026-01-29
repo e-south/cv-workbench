@@ -36,3 +36,13 @@ def test_markdown_formats_year_dates() -> None:
     content = build_markdown(sot, variant)
 
     assert "2014 — 2018" in content
+
+
+def test_markdown_includes_namespaced_tags() -> None:
+    sot = load_sot(Path("sot.sample"))
+    variant = load_variant(Path("config/variants/base.yaml"))
+
+    content = build_markdown(sot, variant)
+
+    assert ".tag-domain" in content
+    assert ".tag-domain-synthetic-biology" in content

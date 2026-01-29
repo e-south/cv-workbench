@@ -25,12 +25,27 @@ REQUIRED_FILES = {
     "letters.yaml": "letters",
 }
 
+OPTIONAL_FILES = {
+    "publications.yaml": "publications",
+    "honors.yaml": "honors",
+    "service.yaml": "service",
+    "teaching.yaml": "teaching",
+    "conferences.yaml": "conferences",
+    "references.yaml": "references",
+}
+
 
 def load_sot(sot_path: Path) -> dict[str, Any]:
     data: dict[str, Any] = {}
 
     for filename, key in REQUIRED_FILES.items():
         path = sot_path / filename
+        data[key] = _load_yaml(path)
+
+    for filename, key in OPTIONAL_FILES.items():
+        path = sot_path / filename
+        if not path.exists():
+            continue
         data[key] = _load_yaml(path)
 
     return data

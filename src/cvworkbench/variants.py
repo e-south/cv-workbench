@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from cvworkbench.text import normalize_tags
+
 
 @dataclass(frozen=True)
 class Variant:
@@ -30,7 +32,19 @@ class Variant:
     letter_id: str | None
 
 
-DEFAULT_ORDER = ["summary", "experience", "projects", "skills", "education"]
+DEFAULT_ORDER = [
+    "summary",
+    "experience",
+    "projects",
+    "skills",
+    "education",
+    "publications",
+    "conferences",
+    "honors",
+    "service",
+    "teaching",
+    "references",
+]
 
 
 def load_variant(path: Path) -> Variant:
@@ -47,8 +61,8 @@ def load_variant(path: Path) -> Variant:
     variant_id = _require_str(variant_data, "id")
     outputs = _require_list(variant_data, "outputs")
 
-    include_tags = _string_list(variant_data.get("include_tags"))
-    exclude_tags = _string_list(variant_data.get("exclude_tags"))
+    include_tags = normalize_tags(_string_list(variant_data.get("include_tags")))
+    exclude_tags = normalize_tags(_string_list(variant_data.get("exclude_tags")))
     order = _string_list(variant_data.get("order"), default=DEFAULT_ORDER)
     max_bullets = _optional_int(variant_data.get("max_bullets_per_role"))
     output_name = _optional_str(variant_data.get("output_name"), default="cv")

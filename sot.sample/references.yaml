@@ -1,0 +1,10 @@
+references:
+  - id: reference-1
+    name: Dr. Jane Advisor
+    title: Professor, Department of Biology
+    organization: Example University
+    email: jane.advisor@example.edu
+    relationship: PhD Advisor
+    notes: Available upon request.
+    tags:
+      - type:reference

@@ -1,0 +1,9 @@
+honors:
+  - id: outstanding-student
+    title: Outstanding Student Award
+    issuer: Example Institute
+    year: 2024
+    summary: Recognized for research excellence and leadership.
+    tags:
+      - domain:synthetic-biology
+      - type:award

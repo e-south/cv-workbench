@@ -25,6 +25,26 @@ def test_validate_rejects_unknown_fields(tmp_path: Path) -> None:
     assert any("person.extra" in error for error in errors)
 
 
+def test_validate_rejects_invalid_optional_files(tmp_path: Path) -> None:
+    _write_minimal_sot(tmp_path, extra_person_field=False)
+
+    (tmp_path / "publications.yaml").write_text(
+        "\n".join(
+            [
+                "publications:",
+                "  - id: pub-1",
+                "    title: Example publication",
+            ]
+        )
+        + "\n"
+    )
+
+    errors = validate_sot(tmp_path)
+
+    assert errors
+    assert any("publications" in error for error in errors)
+
+
 def _write_minimal_sot(tmp_path: Path, *, extra_person_field: bool) -> None:
     person_lines = [
         "id: sample",
@@ -86,6 +106,8 @@ def _write_minimal_sot(tmp_path: Path, *, extra_person_field: bool) -> None:
                 "  - id: edu-1",
                 "    institution: Example University",
                 "    area: Computer Science",
+                "    tags:",
+                "      - domain:education",
             ]
         )
         + "\n"

@@ -31,3 +31,5 @@ def test_resume_written_to_run_dir() -> None:
     payload = json.loads(resume_path.read_text())
     assert payload["basics"]["name"] == "Alex Example"
     assert payload["work"][0]["name"] == "Acme Systems"
+    assert payload["publications"][0]["name"]
+    assert payload["awards"][0]["title"]

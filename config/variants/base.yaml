@@ -12,6 +12,12 @@ variant:
     - projects
     - skills
     - education
+    - publications
+    - conferences
+    - honors
+    - service
+    - teaching
+    - references
   outputs:
     - md
     - pdf

@@ -1,0 +1,11 @@
+teaching:
+  - id: molecular-bio
+    course: Principles of Molecular Cell Biology and Biotechnology
+    role: Teaching Fellow
+    term: Spring 2024
+    enrollment: 40
+    evaluation: 4.8/5.0
+    summary: Led recitations and mentored student projects.
+    tags:
+      - type:teaching
+      - domain:biology

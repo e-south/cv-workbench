@@ -5,3 +5,6 @@ education:
     study_type: BS
     start: 2014
     end: 2018
+    tags:
+      - domain:education
+      - type:degree

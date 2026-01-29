@@ -1,0 +1,17 @@
+publications:
+  - id: yeast-communities
+    title: Spontaneously establishing syntrophic yeast communities improve bioproduction
+    authors:
+      - name: Alex Example
+        roles:
+          - self
+          - co-first
+      - name: Sam Collaborator
+      - name: Riley Scholar
+    venue: Nature Chemical Biology
+    year: 2023
+    url: https://example.com/publication
+    notes: High-throughput workflows reveal synergistic microbial communities.
+    tags:
+      - domain:synthetic-biology
+      - type:publication

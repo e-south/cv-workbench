@@ -42,6 +42,7 @@ class Person(StrictModel):
     name: NonEmptyStr
     label: NonEmptyStr | None = None
     email: NonEmptyStr | None = None
+    phone: NonEmptyStr | None = None
     summary: NonEmptyStr | None = None
     location: Location | None = None
     links: list[Link] | None = None
@@ -93,8 +94,13 @@ class EducationEntry(StrictModel):
     institution: NonEmptyStr
     area: NonEmptyStr
     study_type: NonEmptyStr | None = None
+    location: NonEmptyStr | None = None
     start: DateValue | None = None
     end: DateValue | None = None
+    advisors: NonEmptyStrList | None = None
+    thesis_title: NonEmptyStr | None = None
+    highlights: NonEmptyStrList | None = None
+    tags: NonEmptyStrList
 
 
 class Education(StrictModel):
@@ -120,6 +126,105 @@ class Letters(StrictModel):
     letters: Annotated[list[Letter], Field(min_length=1)]
 
 
+class Author(StrictModel):
+    name: NonEmptyStr
+    roles: NonEmptyStrList | None = None
+    affiliation: NonEmptyStr | None = None
+    orcid: NonEmptyStr | None = None
+
+
+class Publication(StrictModel):
+    id: NonEmptyStr
+    title: NonEmptyStr
+    authors: Annotated[list[Author], Field(min_length=1)]
+    venue: NonEmptyStr | None = None
+    year: DateValue | None = None
+    volume: NonEmptyStr | None = None
+    issue: NonEmptyStr | None = None
+    pages: NonEmptyStr | None = None
+    doi: NonEmptyStr | None = None
+    url: NonEmptyStr | None = None
+    notes: NonEmptyStr | None = None
+    tags: NonEmptyStrList
+
+
+class Publications(StrictModel):
+    publications: Annotated[list[Publication], Field(min_length=1)]
+
+
+class Honor(StrictModel):
+    id: NonEmptyStr
+    title: NonEmptyStr
+    issuer: NonEmptyStr | None = None
+    year: DateValue | None = None
+    summary: NonEmptyStr | None = None
+    tags: NonEmptyStrList
+
+
+class Honors(StrictModel):
+    honors: Annotated[list[Honor], Field(min_length=1)]
+
+
+class ServiceEntry(StrictModel):
+    id: NonEmptyStr
+    organization: NonEmptyStr
+    role: NonEmptyStr
+    start: DateValue | None = None
+    end: DateValue | None = None
+    summary: NonEmptyStr | None = None
+    highlights: NonEmptyStrList | None = None
+    tags: NonEmptyStrList
+
+
+class Service(StrictModel):
+    service: Annotated[list[ServiceEntry], Field(min_length=1)]
+
+
+class TeachingEntry(StrictModel):
+    id: NonEmptyStr
+    course: NonEmptyStr
+    role: NonEmptyStr
+    term: NonEmptyStr | None = None
+    enrollment: Annotated[int, Field(gt=0)] | None = None
+    evaluation: NonEmptyStr | None = None
+    summary: NonEmptyStr | None = None
+    tags: NonEmptyStrList
+
+
+class Teaching(StrictModel):
+    teaching: Annotated[list[TeachingEntry], Field(min_length=1)]
+
+
+class ConferenceEntry(StrictModel):
+    id: NonEmptyStr
+    title: NonEmptyStr
+    event: NonEmptyStr
+    year: DateValue | None = None
+    location: NonEmptyStr | None = None
+    presentation_type: NonEmptyStr | None = None
+    notes: NonEmptyStr | None = None
+    tags: NonEmptyStrList
+
+
+class Conferences(StrictModel):
+    conferences: Annotated[list[ConferenceEntry], Field(min_length=1)]
+
+
+class ReferenceEntry(StrictModel):
+    id: NonEmptyStr
+    name: NonEmptyStr
+    title: NonEmptyStr | None = None
+    organization: NonEmptyStr | None = None
+    email: NonEmptyStr | None = None
+    relationship: NonEmptyStr | None = None
+    notes: NonEmptyStr | None = None
+    tags: NonEmptyStrList
+
+
+class References(StrictModel):
+    references: Annotated[list[ReferenceEntry], Field(min_length=1)]
+
+
 class SotData(StrictModel):
     person: Person
     experience: Experience
@@ -127,3 +232,9 @@ class SotData(StrictModel):
     skills: Skills
     education: Education
     letters: Letters
+    publications: Publications | None = None
+    honors: Honors | None = None
+    service: Service | None = None
+    teaching: Teaching | None = None
+    conferences: Conferences | None = None
+    references: References | None = None

@@ -17,7 +17,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from cvworkbench.sot import REQUIRED_FILES
+from cvworkbench.sot import OPTIONAL_FILES, REQUIRED_FILES
 from cvworkbench.sot_schema import SotData
 
 
@@ -32,6 +32,14 @@ def validate_sot(sot_path: Path) -> list[str]:
         path = sot_path / filename
         if not path.exists():
             errors.append(f"Missing required file: {filename}")
+            continue
+        data = _load_yaml_mapping(path, errors)
+        if data is not None:
+            payload[key] = data
+
+    for filename, key in OPTIONAL_FILES.items():
+        path = sot_path / filename
+        if not path.exists():
             continue
         data = _load_yaml_mapping(path, errors)
         if data is not None:
