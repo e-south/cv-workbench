@@ -49,7 +49,11 @@ def render_document(
     if variant.max_bullets_per_role is not None:
         metadata["max_bullets_per_role"] = variant.max_bullets_per_role
 
-    filter_paths = [filters_dir / "select.lua", filters_dir / "limits.lua"]
+    filter_paths = [
+        filters_dir / "select.lua",
+        filters_dir / "author_roles.lua",
+        filters_dir / "limits.lua",
+    ]
     pandoc_format = _map_format(output_format)
     args = [
         pandoc_path,

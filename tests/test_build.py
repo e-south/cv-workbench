@@ -34,3 +34,19 @@ def test_build_generates_markdown() -> None:
     content = output_path.read_text()
     assert "Alex Example" in content
     assert ".tag-" not in content
+
+
+def test_build_marks_publication_roles() -> None:
+    output_path = Path("dist/base/cv.md")
+    if output_path.exists():
+        output_path.unlink()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["build", "--variant", "base", "--format", "md", "--sot-path", "sot.sample"],
+    )
+
+    assert result.exit_code == 0
+    content = output_path.read_text()
+    assert "Alex Example\\*" in content
