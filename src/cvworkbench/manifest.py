@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.sot import REQUIRED_FILES
+from cvworkbench.sot import OPTIONAL_FILES, REQUIRED_FILES
 from cvworkbench.variants import Variant
 
 
@@ -73,10 +73,15 @@ def write_manifest(path: Path, data: dict[str, Any]) -> None:
 
 
 def _hash_sot(sot_path: Path) -> dict[str, str]:
-    return {
+    hashes = {
         filename: _hash_file(sot_path / filename)
         for filename in REQUIRED_FILES.keys()
     }
+    for filename in OPTIONAL_FILES.keys():
+        path = sot_path / filename
+        if path.exists():
+            hashes[filename] = _hash_file(path)
+    return hashes
 
 
 def _hash_file(path: Path) -> str:

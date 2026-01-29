@@ -33,3 +33,17 @@ def test_manifest_written() -> None:
     assert "sot_hashes" in data
     assert data["resume"]["path"] == "resume.json"
     assert "hash" in data["resume"]
+
+
+def test_manifest_hashes_optional_files() -> None:
+    result = build_documents(
+        sot_path=Path("sot.sample"),
+        config_path=Path("config/workbench.yaml"),
+        variant_id="base",
+        formats=["md"],
+    )
+
+    manifest_path = result.dist_dir / "manifest.json"
+    data = json.loads(manifest_path.read_text())
+    assert "publications.yaml" in data["sot_hashes"]
+    assert "honors.yaml" in data["sot_hashes"]
