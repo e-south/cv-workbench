@@ -16,7 +16,7 @@ Requirements:
 - uv (https://docs.astral.sh/uv/)
 
 ```bash
-uv sync --group dev
+uv sync --group dev --frozen
 uv run cvw --help
 uv run cvw validate --sot-path ./sot.sample
 ```
@@ -30,6 +30,13 @@ Provide a private SoT directory (not tracked in git). Example data lives in
 
 Build artifacts are written under `dist/` and `runs/` and are always ignored by
 git. Use `cvw sync` to push selected outputs into your site repo.
+
+## Dependency management
+
+- Locked install (recommended): `uv sync --group dev --frozen`
+- Update dependencies: `uv lock` then `uv sync --group dev`
+
+Note: uv uses `--frozen` for locked installs (it will not modify `uv.lock`).
 
 ## Repo structure
 

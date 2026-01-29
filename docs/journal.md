@@ -11,3 +11,4 @@
 - Outputs include short resume, long CV, cover letters
 - LLM integration via Codex CLI
 - Pre-commit uses ruff + gitleaks
+- Documented uv lock and locked installs via `uv sync --group dev --frozen`
