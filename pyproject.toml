@@ -1,0 +1,40 @@
+[project]
+name = "cv-workbench"
+version = "0.1.0"
+description = "Deterministic CV/resume build engine"
+readme = "README.md"
+requires-python = "==3.12.*"
+dependencies = [
+  "typer>=0.12.0",
+  "pydantic>=2.7.0",
+  "PyYAML>=6.0.1",
+]
+
+[project.scripts]
+cvw = "cvworkbench.cli:app"
+
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cvworkbench"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0.0",
+  "pre-commit>=3.7.0",
+  "ruff>=0.4.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
