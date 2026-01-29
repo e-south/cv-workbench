@@ -8,6 +8,7 @@ This workbench separates three planes:
 - Cover letters share the same variant/tag system
 - Letters live in `letters.yaml` and are selected via `variant.letter_id`
 - Optional sections: publications, honors, service, teaching, conferences, references
+- Optional snippets (`snippets.yaml` + `snippets/`) override summaries and add section intros
 
 2) Deterministic build pipeline
 - Validate SoT with strict schema checks

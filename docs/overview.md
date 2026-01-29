@@ -40,3 +40,27 @@ If present, the workbench can also ingest:
 - `teaching.yaml`
 - `conferences.yaml`
 - `references.yaml`
+
+## Snippets
+
+Snippets are small markdown blocks used to override summaries or add section
+introductions without editing YAML fields. Define them in `snippets.yaml` and
+store the content in `snippets/`.
+
+Supported scopes:
+- `summary` (overrides `person.summary`)
+- `section-intro` (adds a paragraph after a section heading)
+- `letter-open` (inserted after the salutation)
+- `letter-close` (inserted before the closing)
+
+Example `snippets.yaml`:
+```yaml
+snippets:
+  - id: summary
+    scope: summary
+    path: snippets/summary.md
+  - id: experience-intro
+    scope: section-intro
+    section: experience
+    path: snippets/experience.md
+```

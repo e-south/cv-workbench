@@ -39,6 +39,23 @@ Optional sections supported when present in the SoT directory:
 `publications.yaml`, `honors.yaml`, `service.yaml`, `teaching.yaml`,
 `conferences.yaml`, and `references.yaml`.
 
+Snippets are optional, scoped markdown blocks that override or introduce
+content. Provide `snippets.yaml` with entries that point to files under
+`snippets/` (for example `snippets/summary.md`, `snippets/experience.md`).
+Supported scopes: `summary`, `section-intro`, `letter-open`, `letter-close`.
+
+Example `snippets.yaml`:
+```yaml
+snippets:
+  - id: summary
+    scope: summary
+    path: snippets/summary.md
+  - id: experience-intro
+    scope: section-intro
+    section: experience
+    path: snippets/experience.md
+```
+
 Tags are normalized (case/punctuation-insensitive). Namespaced tags such as
 `domain:synthetic-biology` also register the namespace tag (`domain`) for
 broader include/exclude rules.

@@ -20,6 +20,7 @@
 - HTML/DOCX render paths supported via Pandoc defaults.
 - Draft signals generation and apply command implemented.
 - Added optional SoT sections for publications, honors, service, teaching, conferences, and references.
+- Added snippet support via `snippets.yaml` and `snippets/` (summary overrides + section intros + letter open/close).
 
 ## Gap audit (original spec → status)
 - CLI surface: validate/build/render/tailor/diff/sync — Done
@@ -33,6 +34,7 @@
 - Manifest audit fields for AI steps — Pending
 - Cover letters / CV variants — In progress (demo + semantics)
 - Extended schema for academic CV sections — Done
+- Snippet entrypoints for summaries + section intros — Done
 - Security posture docs — Pending
 
 ## Next todos
