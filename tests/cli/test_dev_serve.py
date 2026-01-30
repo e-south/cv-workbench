@@ -71,9 +71,8 @@ def test_dev_serve_reports_open_failure(monkeypatch) -> None:
         env={"CVW_DEV_ONCE": "1"},
     )
 
-    assert result.exit_code == 0
-    assert "opened_browser: false" in result.stdout
-    assert "WARN:" in result.stderr
+    assert result.exit_code != 0
+    assert "ERROR: open failed" in result.stderr
     assert "HINT: open" in result.stderr
 
 
@@ -109,3 +108,17 @@ def test_open_in_browser_reports_missing_custom_command(monkeypatch) -> None:
     assert opened is False
     assert error is not None
     assert "missing-browser" in error
+
+
+def test_open_in_browser_requires_default_handler_on_macos(monkeypatch) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    monkeypatch.setattr(app_module.sys, "platform", "darwin")
+    monkeypatch.delenv("CVW_BROWSER", raising=False)
+    monkeypatch.delenv("CVW_SKIP_OPEN", raising=False)
+    monkeypatch.setattr(app_module, "_macos_default_handler_for_scheme", lambda _: None)
+
+    opened, error = app_module._open_in_browser("http://example.test")
+
+    assert opened is False
+    assert error is not None
+    assert "default web browser" in error

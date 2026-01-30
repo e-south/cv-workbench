@@ -95,19 +95,10 @@ files, theme templates, or style presets. Use the overlay controls:
 - `p`: cycle style preset
 - `r`: rebuild with current settings
 
-If the browser does not open automatically, open the preview URL (printed in
-the CLI summary). As a fallback, open the file directly:
-
-```bash
-open http://127.0.0.1:8765
-open dist/<variant>/cv.html
-```
-
-If you need a specific browser, set `CVW_BROWSER`:
-
-```bash
-CVW_BROWSER="open -a /Applications/Google\\ Chrome.app" uv run cvw dev serve --sot-path ./sot.sample --variant base
-```
+If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
+system default browser (macOS: System Settings → Desktop & Dock → Default web
+browser), then rerun the command. For headless usage, set `CVW_SKIP_OPEN=1` to
+skip auto-opening.
 
 To change the host or port:
 

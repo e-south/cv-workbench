@@ -267,7 +267,11 @@ def serve_preview(
     handler = _make_handler(controller, state.dist_dir)
     server = ThreadingHTTPServer((host, port), handler)
     preview_url = f"http://{host}:{port}/"
-    on_start(preview_url, state.html_path)
+    try:
+        on_start(preview_url, state.html_path)
+    except Exception:
+        server.server_close()
+        raise
     stop_event = threading.Event()
     watcher = PreviewWatcher(controller, stop_event)
     watcher.start()
@@ -278,6 +282,7 @@ def serve_preview(
     finally:
         stop_event.set()
         server.shutdown()
+        server.server_close()
 
 
 def _make_handler(controller: PreviewController, dist_dir: Path) -> type[SimpleHTTPRequestHandler]:

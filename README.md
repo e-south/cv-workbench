@@ -47,7 +47,9 @@ Build output locations are printed after `cvw build` completes, and artifacts
 are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
 
 `cvw dev serve` opens a live HTML preview that auto-rebuilds on SoT and theme
-changes. Use the overlay controls (`t`, `p`, `r`) to cycle themes/presets.
+changes. Use the overlay controls (`t`, `p`, `r`) to cycle themes/presets. If
+your system default browser is misconfigured, `cvw dev serve` will exit with an
+actionable error so you can fix it.
 
 Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
 nearest `config/workbench.yaml` by walking up parent directories, so outputs

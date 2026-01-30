@@ -40,19 +40,9 @@ overlay controls:
 The HTML output is written to `dist/<variant>/cv.html`. The command will open
 the preview URL in your browser unless `CVW_SKIP_OPEN=1` is set.
 
-If the browser opener fails, open the preview URL (printed by the CLI). As a
-fallback, open the file manually:
-
-```bash
-open http://127.0.0.1:8765
-open dist/<variant>/cv.html
-```
-
-To force a specific browser:
-
-```bash
-CVW_BROWSER="open -a /Applications/Google\\ Chrome.app" uv run cvw dev serve --sot-path ./sot.sample --variant base
-```
+If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
+system default browser (macOS: System Settings → Desktop & Dock → Default web
+browser), then rerun.
 
 ## Theme layout
 
