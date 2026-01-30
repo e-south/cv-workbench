@@ -10,6 +10,9 @@ paths:
 variants:
   default: base
 render:
+  themes_dir: ../build/themes
+  theme: default
+  style_preset: modern
   pdf_engine: xelatex
 site:
   sync_mode: local

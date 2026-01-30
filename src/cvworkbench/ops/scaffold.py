@@ -73,6 +73,16 @@ def init_project(root: Path) -> InitResult:
         "site_sync_config",
     )
 
+    build_target = root / "build"
+    build_target.mkdir(parents=True, exist_ok=True)
+    themes_target = build_target / "themes"
+    _ensure_dir_from_template(
+        template_root / "build" / "themes",
+        themes_target,
+        statuses,
+        "themes",
+    )
+
     registry_target = root / "registry" / "contexts"
     if not registry_target.exists():
         registry_target.mkdir(parents=True, exist_ok=True)

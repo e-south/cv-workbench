@@ -79,3 +79,13 @@ uv run cvw sync --variant base --site /path/to/astro-site
 ```
 
 `cvw sync` defaults to local mode. PR sync is opt-in via `--mode pr`.
+
+## 7) Preview styling quickly
+
+```bash
+uv run cvw theme list
+uv run cvw dev serve --sot-path ./sot.sample --variant base
+```
+
+`cvw dev serve` renders HTML to `dist/<variant>/cv.html` and opens it in your
+browser (set `CVW_SKIP_OPEN=1` to skip opening).

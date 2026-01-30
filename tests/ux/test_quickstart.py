@@ -39,6 +39,54 @@ def _write_minimal_sot_sample(root: Path) -> None:
     )
 
 
+def _write_minimal_theme(root: Path) -> None:
+    theme_root = root / "build" / "themes" / "default"
+    (theme_root / "pandoc").mkdir(parents=True, exist_ok=True)
+    (theme_root / "styles" / "pdf").mkdir(parents=True, exist_ok=True)
+    (theme_root / "styles" / "html").mkdir(parents=True, exist_ok=True)
+    (theme_root / "theme.yaml").write_text(
+        "\n".join(
+            [
+                "id: default",
+                "description: Default theme",
+                "routes:",
+                "  pdf:",
+                "    to: latex",
+                "    pdf_engine: xelatex",
+                "    template: default",
+                "    defaults:",
+                "      - pandoc/common.defaults.yaml",
+                "      - pandoc/pdf.defaults.yaml",
+                "  html_preview:",
+                "    to: html5",
+                "    template: default",
+                "    defaults:",
+                "      - pandoc/common.defaults.yaml",
+                "      - pandoc/html.defaults.yaml",
+                "  docx:",
+                "    to: docx",
+                "    template: default",
+                "    defaults:",
+                "      - pandoc/common.defaults.yaml",
+                "      - pandoc/docx.defaults.yaml",
+            ]
+        )
+        + "\n"
+    )
+    (theme_root / "pandoc" / "common.defaults.yaml").write_text("standalone: true\n")
+    (theme_root / "pandoc" / "pdf.defaults.yaml").write_text(
+        "variables:\n  geometry: margin=0.8in\n"
+    )
+    (theme_root / "pandoc" / "html.defaults.yaml").write_text("standalone: true\n")
+    (theme_root / "pandoc" / "docx.defaults.yaml").write_text("standalone: true\n")
+    (theme_root / "styles" / "pdf" / "modern.tex").write_text(
+        "\\usepackage{setspace}\n\\setstretch{1.05}\n"
+    )
+    (theme_root / "styles" / "html" / "modern.css").write_text(
+        "body { font-family: sans-serif; }\\n"
+    )
+
+
 def _write_minimal_config(root: Path) -> None:
     config_dir = root / "config"
     variants_dir = config_dir / "variants"
@@ -50,6 +98,10 @@ def _write_minimal_config(root: Path) -> None:
                 "  sot: ../sot",
                 "  dist: ../dist",
                 "  runs: ../runs",
+                "render:",
+                "  themes_dir: ../build/themes",
+                "  theme: default",
+                "  style_preset: modern",
                 "variants:",
                 "  default: base",
             ]
@@ -97,6 +149,7 @@ def test_quickstart_builds_sample(tmp_path: Path, monkeypatch) -> None:
     template_root = tmp_path / "template"
     template_root.mkdir()
     _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
     _write_minimal_config(template_root)
 
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))

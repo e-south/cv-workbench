@@ -12,6 +12,8 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import json
+import os
+import webbrowser
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -22,11 +24,14 @@ from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.config import (
     resolve_config_path,
     resolve_default_variant,
+    resolve_default_theme,
     resolve_dist_path,
     resolve_pdf_engine,
     resolve_project_path,
     resolve_sot_path,
+    resolve_style_preset,
     resolve_sync_mode,
+    resolve_themes_dir,
     resolve_variant_path,
 )
 from cvworkbench.build.explain import ExplainError, explain_item, load_selection
@@ -43,13 +48,18 @@ from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_r
 from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
 from cvworkbench.ops.syncing import SyncError, SyncResult, sync_site
 from cvworkbench.ops.tailor import DraftPaths, TailorError, tailor_job
+from cvworkbench.themes import ThemeError, build_render_plan, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 job_app = typer.Typer(no_args_is_help=True)
 tags_app = typer.Typer(no_args_is_help=True)
+theme_app = typer.Typer(no_args_is_help=True)
+dev_app = typer.Typer(no_args_is_help=True)
 app.add_typer(job_app, name="job")
 app.add_typer(tags_app, name="tags")
+app.add_typer(theme_app, name="theme")
+app.add_typer(dev_app, name="dev")
 
 
 def _not_implemented(command: str) -> None:
@@ -78,6 +88,10 @@ def _print_build_summary(result: BuildResult) -> None:
         ("manifest_dist", result.dist_dir / "manifest.json"),
         ("manifest_run", result.run_dir / "manifest.json"),
     ]
+    if result.theme_id:
+        rows.append(("theme", result.theme_id))
+    if result.style_preset:
+        rows.append(("style_preset", result.style_preset))
     for fmt in result.formats:
         output_file = output_path(result.dist_dir, result.variant, fmt)
         rows.append((f"output_{fmt}", output_file))
@@ -191,6 +205,36 @@ def _print_import_summary(summary: dict[str, str | Path]) -> None:
     print_summary("import-docx", rows)
 
 
+def _print_theme_list_summary(theme_ids: list[str], default_theme: str) -> None:
+    print_summary(
+        "theme.list",
+        [
+            ("themes", ", ".join(theme_ids)),
+            ("default", default_theme),
+        ],
+    )
+
+
+def _print_theme_info_summary(theme_id: str, description: str | None, routes: list[str]) -> None:
+    rows: list[tuple[str, str | Path]] = [
+        ("id", theme_id),
+        ("routes", ", ".join(routes)),
+    ]
+    if description:
+        rows.append(("description", description))
+    print_summary("theme.info", rows)
+
+
+def _print_serve_summary(output_path: Path, opened: bool) -> None:
+    print_summary(
+        "serve",
+        [
+            ("output_html", output_path),
+            ("opened_browser", str(opened).lower()),
+        ],
+    )
+
+
 def _print_quickstart_summary(result: BuildResult, sample_sot: Path) -> None:
     rows: list[tuple[str, str | Path]] = [
         ("sample_sot", sample_sot),
@@ -200,6 +244,10 @@ def _print_quickstart_summary(result: BuildResult, sample_sot: Path) -> None:
         ("manifest_dist", result.dist_dir / "manifest.json"),
         ("manifest_run", result.run_dir / "manifest.json"),
     ]
+    if result.theme_id:
+        rows.append(("theme", result.theme_id))
+    if result.style_preset:
+        rows.append(("style_preset", result.style_preset))
     for fmt in result.formats:
         rows.append((f"output_{fmt}", output_path(result.dist_dir, result.variant, fmt)))
     print_summary("quickstart", rows)
@@ -364,6 +412,8 @@ def init(
         "base_variant_status": statuses.get("base_variant", "unknown"),
         "publish_config": result.config_path.parent / "publish.yaml",
         "publish_status": statuses.get("publish_config", "unknown"),
+        "themes_path": result.root / "build" / "themes",
+        "themes_status": statuses.get("themes", "unknown"),
         "registry_path": result.registry_path,
         "registry_status": statuses.get("registry", "unknown"),
     }
@@ -425,6 +475,83 @@ def quickstart(
         raise typer.Exit(code=1) from exc
 
     _print_quickstart_summary(result, sample_sot)
+
+
+@theme_app.command("list")
+def theme_list(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        themes_dir = resolve_themes_dir(config)
+        default_theme = resolve_default_theme(config)
+        themes = list_themes(themes_dir)
+    except (ValueError, ThemeError, FileNotFoundError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    theme_ids = [theme.id for theme in themes]
+    _print_theme_list_summary(theme_ids, default_theme)
+
+
+@theme_app.command("info")
+def theme_info(
+    theme: Annotated[
+        str,
+        typer.Argument(help="Theme id"),
+    ],
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        themes_dir = resolve_themes_dir(config)
+        resolved = resolve_theme(themes_dir, theme)
+    except (ValueError, ThemeError, FileNotFoundError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    routes = list(resolved.routes.keys())
+    _print_theme_info_summary(resolved.id, resolved.description, routes)
 
 
 @job_app.command("add")
@@ -827,6 +954,20 @@ def build(
             help="Output formats to render (repeatable or comma-separated)",
         ),
     ] = None,
+    theme: Annotated[
+        str | None,
+        typer.Option(
+            "--theme",
+            help="Theme id to use for rendering",
+        ),
+    ] = None,
+    style_preset: Annotated[
+        str | None,
+        typer.Option(
+            "--style-preset",
+            help="Style preset to apply",
+        ),
+    ] = None,
     plain: Annotated[
         bool,
         typer.Option(
@@ -862,6 +1003,8 @@ def build(
             config_path=config,
             variant_id=variant,
             formats=parsed_formats,
+            theme=theme,
+            style_preset=style_preset,
         )
     except (ValueError, RenderError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -899,6 +1042,20 @@ def render(
             help="Output formats to render (repeatable or comma-separated)",
         ),
     ] = None,
+    theme: Annotated[
+        str | None,
+        typer.Option(
+            "--theme",
+            help="Theme id to use for rendering",
+        ),
+    ] = None,
+    style_preset: Annotated[
+        str | None,
+        typer.Option(
+            "--style-preset",
+            help="Style preset to apply",
+        ),
+    ] = None,
     plain: Annotated[
         bool,
         typer.Option(
@@ -926,7 +1083,11 @@ def render(
         dist_dir = resolve_dist_path(config) / resolved.id
         dist_dir.mkdir(parents=True, exist_ok=True)
         pdf_engine = resolve_pdf_engine(config)
-    except (FileNotFoundError, ValueError) as exc:
+        theme_id = theme or resolved.render_theme or resolve_default_theme(config)
+        preset = style_preset or resolved.render_style_preset or resolve_style_preset(config)
+        theme_dir = resolve_themes_dir(config)
+        theme_obj = resolve_theme(theme_dir, theme_id)
+    except (FileNotFoundError, ValueError, ThemeError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
@@ -936,6 +1097,12 @@ def render(
     for fmt in parsed_formats:
         output_file = output_path(dist_dir, resolved, fmt)
         try:
+            plan = build_render_plan(
+                output_format=fmt,
+                theme=theme_obj,
+                style_preset=preset,
+                pdf_engine=pdf_engine,
+            )
             render_document(
                 canonical,
                 output_file,
@@ -943,12 +1110,98 @@ def render(
                 filters_path,
                 fmt,
                 pdf_engine,
+                plan,
             )
         except RenderError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         output_files[fmt] = output_file
     _print_render_summary(canonical, resolved.id, dist_dir, output_files)
+
+
+@dev_app.command("serve")
+def dev_serve(
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    variant: Annotated[
+        str | None,
+        typer.Option(
+            "--variant",
+            help="Variant id to build for preview",
+        ),
+    ] = None,
+    theme: Annotated[
+        str | None,
+        typer.Option(
+            "--theme",
+            help="Theme id to use for rendering",
+        ),
+    ] = None,
+    style_preset: Annotated[
+        str | None,
+        typer.Option(
+            "--style-preset",
+            help="Style preset to apply",
+        ),
+    ] = None,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        resolved = resolve_sot_path(sot_path, config)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    errors = validate_sot(resolved)
+    if errors:
+        for error in errors:
+            typer.echo(f"ERROR: {error}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        result = build_documents(
+            sot_path=resolved,
+            config_path=config,
+            variant_id=variant,
+            formats=["html"],
+            theme=theme,
+            style_preset=style_preset,
+        )
+    except (ValueError, RenderError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    html_path = output_path(result.dist_dir, result.variant, "html")
+    opened = False
+    if os.environ.get("CVW_SKIP_OPEN") != "1":
+        opened = webbrowser.open(html_path.as_uri())
+    _print_serve_summary(html_path, opened)
 
 
 @app.command()

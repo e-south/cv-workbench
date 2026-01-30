@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from cvworkbench.themes import RenderPlan
 from cvworkbench.variants import Variant
 
 MARKDOWN_INPUT = "markdown+fenced_divs"
@@ -31,14 +32,16 @@ def render_document(
     filters_dir: Path,
     output_format: str,
     pdf_engine: str | None,
+    render_plan: RenderPlan | None = None,
 ) -> None:
     pandoc_path = _which("pandoc")
     if pandoc_path is None:
         raise RenderError("pandoc is required but was not found in PATH")
 
-    if output_format == "pdf" and pdf_engine:
-        if _which(pdf_engine) is None:
-            raise RenderError(f"PDF engine '{pdf_engine}' was not found in PATH")
+    resolved_plan = render_plan or _default_plan(output_format, pdf_engine)
+    if output_format == "pdf" and resolved_plan.pdf_engine:
+        if _which(resolved_plan.pdf_engine) is None:
+            raise RenderError(f"PDF engine '{resolved_plan.pdf_engine}' was not found in PATH")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -54,19 +57,30 @@ def render_document(
         filters_dir / "author_roles.lua",
         filters_dir / "limits.lua",
     ]
-    pandoc_format = _map_format(output_format)
     args = [
         pandoc_path,
         "--from",
         MARKDOWN_INPUT,
         "--to",
-        pandoc_format,
+        resolved_plan.to,
         "--output",
         str(output_path),
     ]
 
-    if output_format == "pdf" and pdf_engine:
-        args.extend(["--pdf-engine", pdf_engine])
+    if output_format == "pdf" and resolved_plan.pdf_engine:
+        args.extend(["--pdf-engine", resolved_plan.pdf_engine])
+
+    if resolved_plan.template is not None:
+        args.extend(["--template", str(resolved_plan.template)])
+
+    for defaults_path in resolved_plan.defaults:
+        args.extend(["--defaults", str(defaults_path)])
+
+    if resolved_plan.style_path is not None and resolved_plan.style_kind:
+        if resolved_plan.style_kind == "css":
+            args.extend(["--css", str(resolved_plan.style_path)])
+        elif resolved_plan.style_kind == "header":
+            args.extend(["--include-in-header", str(resolved_plan.style_path)])
 
     for filter_path in filter_paths:
         if filter_path.exists():
@@ -109,4 +123,23 @@ def _which(command: str) -> str | None:
 def _map_format(output_format: str) -> str:
     if output_format == "md":
         return "markdown"
+    if output_format == "pdf":
+        return "latex"
+    if output_format == "html":
+        return "html5"
     return output_format
+
+
+def _default_plan(output_format: str, pdf_engine: str | None) -> RenderPlan:
+    return RenderPlan(
+        output_format=output_format,
+        to=_map_format(output_format),
+        template=None,
+        pdf_engine=pdf_engine if output_format == "pdf" else None,
+        defaults=[],
+        style_path=None,
+        style_kind=None,
+        theme_id=None,
+        theme_hash=None,
+        style_hash=None,
+    )

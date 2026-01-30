@@ -58,6 +58,7 @@ See the full walkthrough at `docs/howto/quickstart.md`.
 - `docs/concepts/architecture.md`: design principles and planes
 - `docs/howto/quickstart.md`: step-by-step local setup
 - `docs/howto/ingestion.md`: URL ingestion + registry layout
+- `docs/howto/styling.md`: theme packs and style presets
 - `docs/howto/performance.md`: profiling guidance
 - `docs/reference/site-contract.md`: Astro site sync contract
 - `docs/reference/security.md`: security posture
@@ -68,7 +69,7 @@ See the full walkthrough at `docs/howto/quickstart.md`.
 - `config/`: global config and variants
 - `registry/`: local context registry for ingested URLs (ignored by git)
 - `reviews/`: review packs (DOCX/PDF + checklist, ignored by git)
-- `build/`: templates, filters, styles, scripts
+- `build/`: filters, themes, templates, styles, scripts
 - `docs/`: concepts, how-to guides, reference, and plans
 - `sot.sample/`: fake data for tests and examples
 - `src/`: CLI and core logic

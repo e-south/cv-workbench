@@ -1,0 +1,43 @@
+:root {
+  --cv-font: "Helvetica", "Arial", sans-serif;
+  --cv-text: #111111;
+  --cv-muted: #4a4a4a;
+  --cv-accent: #0f4c81;
+}
+
+body {
+  font-family: var(--cv-font);
+  color: var(--cv-text);
+  margin: 1.4rem;
+  line-height: 1.45;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--cv-accent);
+  margin-bottom: 0.4rem;
+}
+
+h2 {
+  border-bottom: 1px solid #d6d6d6;
+  padding-bottom: 0.2rem;
+}
+
+p {
+  margin: 0.25rem 0;
+}
+
+ul {
+  margin: 0.25rem 0 0.5rem 1.1rem;
+}
+
+a {
+  color: var(--cv-accent);
+  text-decoration: none;
+}
+
+small,
+.cv-muted {
+  color: var(--cv-muted);
+}

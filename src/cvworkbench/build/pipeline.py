@@ -19,8 +19,11 @@ from pathlib import Path
 from cvworkbench.config import (
     resolve_default_variant,
     resolve_dist_path,
+    resolve_default_theme,
     resolve_pdf_engine,
     resolve_runs_path,
+    resolve_style_preset,
+    resolve_themes_dir,
     resolve_variant_path,
 )
 from cvworkbench.build.manifest import build_manifest, write_manifest
@@ -30,6 +33,7 @@ from cvworkbench.build.rendering import render_document
 from cvworkbench.build.resume import build_resume, write_resume
 from cvworkbench.build.selection import build_selection
 from cvworkbench.inputs.sot import load_sot
+from cvworkbench.themes import ThemeError, build_render_plan, hash_theme, resolve_theme
 from cvworkbench.variants import Variant, load_variant
 
 
@@ -40,6 +44,8 @@ class BuildResult:
     canonical_path: Path
     dist_dir: Path
     run_dir: Path
+    theme_id: str | None
+    style_preset: str | None
 
 
 def build_documents(
@@ -48,6 +54,8 @@ def build_documents(
     config_path: Path,
     variant_id: str | None,
     formats: list[str] | None,
+    theme: str | None = None,
+    style_preset: str | None = None,
 ) -> BuildResult:
     resolved_variant = variant_id or resolve_default_variant(config_path)
     variant_path = resolve_variant_path(resolved_variant, config_path)
@@ -73,10 +81,26 @@ def build_documents(
 
     filters_path = filters_dir()
     pdf_engine = resolve_pdf_engine(config_path)
+    theme_id = theme or variant.render_theme or resolve_default_theme(config_path)
+    preset = style_preset or variant.render_style_preset or resolve_style_preset(config_path)
+    theme_root = resolve_themes_dir(config_path)
+    try:
+        theme_obj = resolve_theme(theme_root, theme_id)
+    except ThemeError as exc:
+        raise ValueError(str(exc)) from exc
+
     output_paths: dict[str, Path] = {}
+    render_details: dict[str, dict[str, str | None | list[str]]] = {}
+    theme_hash = hash_theme(theme_obj)
 
     for fmt in selected_formats:
         output_file = output_path(dist_dir, variant, fmt)
+        plan = build_render_plan(
+            output_format=fmt,
+            theme=theme_obj,
+            style_preset=preset,
+            pdf_engine=pdf_engine,
+        )
         render_document(
             canonical_path,
             output_file,
@@ -84,8 +108,17 @@ def build_documents(
             filters_path,
             fmt,
             pdf_engine,
+            plan,
         )
         output_paths[fmt] = output_file
+        render_details[fmt] = {
+            "to": plan.to,
+            "template": str(plan.template) if plan.template else None,
+            "pdf_engine": plan.pdf_engine,
+            "defaults": [str(path) for path in plan.defaults],
+            "style_path": str(plan.style_path) if plan.style_path else None,
+            "style_hash": plan.style_hash,
+        }
 
     manifest = build_manifest(
         variant=variant,
@@ -96,6 +129,12 @@ def build_documents(
         resume_path=resume_path,
         pdf_engine=pdf_engine,
         repo_root=config_path.parent.parent,
+        render={
+            "theme": theme_obj.id,
+            "theme_hash": theme_hash,
+            "style_preset": preset,
+            "formats": render_details,
+        },
     )
     write_manifest(dist_dir / "manifest.json", manifest)
     write_manifest(run_dir / "manifest.json", manifest)
@@ -106,6 +145,8 @@ def build_documents(
         canonical_path=canonical_path,
         dist_dir=dist_dir,
         run_dir=run_dir,
+        theme_id=theme_obj.id,
+        style_preset=preset,
     )
 
 

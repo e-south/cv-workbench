@@ -17,11 +17,13 @@ from cvworkbench.config import (
     resolve_config_path,
     resolve_dist_path,
     resolve_drafts_path,
+    resolve_default_theme,
     resolve_project_path,
     resolve_project_root,
     resolve_reviews_path,
     resolve_runs_path,
     resolve_sot_path,
+    resolve_themes_dir,
 )
 
 
@@ -36,6 +38,9 @@ def test_config_paths_resolve_relative_to_config_dir(tmp_path: Path) -> None:
                 "  sot: ../sot",
                 "  dist: ../dist",
                 "  runs: ../runs",
+                "render:",
+                "  themes_dir: ../build/themes",
+                "  theme: default",
                 "variants:",
                 "  default: base",
             ]
@@ -46,6 +51,8 @@ def test_config_paths_resolve_relative_to_config_dir(tmp_path: Path) -> None:
     assert resolve_sot_path(None, config_path) == (tmp_path / "sot").resolve()
     assert resolve_dist_path(config_path) == (tmp_path / "dist").resolve()
     assert resolve_runs_path(config_path) == (tmp_path / "runs").resolve()
+    assert resolve_themes_dir(config_path) == (tmp_path / "build" / "themes").resolve()
+    assert resolve_default_theme(config_path) == "default"
 
 
 def test_resolve_config_path_searches_parent_dirs(tmp_path: Path, monkeypatch) -> None:

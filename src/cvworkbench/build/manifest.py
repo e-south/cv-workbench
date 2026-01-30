@@ -34,8 +34,9 @@ def build_manifest(
     resume_path: Path,
     pdf_engine: str | None,
     repo_root: Path,
+    render: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "variant": {
             "id": variant.id,
@@ -63,6 +64,9 @@ def build_manifest(
             "pdf_engine_version": _tool_version([pdf_engine, "--version"]) if pdf_engine else None,
         },
     }
+    if render is not None:
+        payload["render"] = render
+    return payload
 
 
 def write_manifest(path: Path, data: dict[str, Any]) -> None:

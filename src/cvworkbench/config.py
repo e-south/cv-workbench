@@ -157,6 +157,45 @@ def resolve_pdf_engine(config_path: Path) -> str | None:
     return value.strip()
 
 
+def resolve_themes_dir(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    render = config.get("render", {})
+    if not isinstance(render, dict):
+        raise ValueError("Config field render must be a mapping")
+
+    value = render.get("themes_dir")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Config field render.themes_dir is required")
+    return _resolve_from_config(config_path, value.strip())
+
+
+def resolve_default_theme(config_path: Path) -> str:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    render = config.get("render", {})
+    if not isinstance(render, dict):
+        raise ValueError("Config field render must be a mapping")
+
+    value = render.get("theme")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Config field render.theme is required")
+    return value.strip()
+
+
+def resolve_style_preset(config_path: Path) -> str | None:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    render = config.get("render", {})
+    if not isinstance(render, dict):
+        raise ValueError("Config field render must be a mapping")
+
+    value = render.get("style_preset")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
+
+
 def resolve_sync_mode(config_path: Path) -> str:
     config_path = resolve_config_path(config_path)
     config = load_config(config_path)

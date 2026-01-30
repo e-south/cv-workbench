@@ -30,6 +30,8 @@ class Variant:
     output_name: str
     document_type: str
     letter_id: str | None
+    render_theme: str | None
+    render_style_preset: str | None
 
 
 DEFAULT_ORDER = [
@@ -68,6 +70,9 @@ def load_variant(path: Path) -> Variant:
     output_name = _optional_str(variant_data.get("output_name"), default="cv")
     document_type = _optional_str(variant_data.get("document_type"), default="resume")
     letter_id = _optional_str_or_none(variant_data.get("letter_id"))
+    render_data = _optional_mapping(variant_data.get("render"))
+    render_theme = _optional_str_or_none(render_data.get("theme")) if render_data else None
+    render_style = _optional_str_or_none(render_data.get("style_preset")) if render_data else None
 
     return Variant(
         id=variant_id,
@@ -79,6 +84,8 @@ def load_variant(path: Path) -> Variant:
         output_name=output_name,
         document_type=document_type,
         letter_id=letter_id,
+        render_theme=render_theme,
+        render_style_preset=render_style,
     )
 
 
@@ -130,4 +137,12 @@ def _optional_str_or_none(value: object) -> str | None:
         return None
     if not isinstance(value, str) or not value.strip():
         return None
+    return value
+
+
+def _optional_mapping(value: object) -> dict[str, object] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("Variant field render must be a mapping")
     return value

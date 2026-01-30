@@ -1,0 +1,22 @@
+id: default
+description: Default cv-workbench theme
+routes:
+  pdf:
+    to: latex
+    pdf_engine: xelatex
+    template: default
+    defaults:
+      - pandoc/common.defaults.yaml
+      - pandoc/pdf.defaults.yaml
+  html_preview:
+    to: html5
+    template: default
+    defaults:
+      - pandoc/common.defaults.yaml
+      - pandoc/html.defaults.yaml
+  docx:
+    to: docx
+    template: default
+    defaults:
+      - pandoc/common.defaults.yaml
+      - pandoc/docx.defaults.yaml
