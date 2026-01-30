@@ -89,11 +89,12 @@ uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset compa
 ```
 
 `cvw dev serve` opens a live HTML preview and auto-rebuilds when you edit SoT
-files, theme templates, or style presets. Use the overlay controls:
+files, theme templates, or style presets. Use the control bar (or shortcuts):
 
 - `t`: cycle theme
 - `p`: cycle style preset
 - `r`: rebuild with current settings
+- `x`: stop the preview server
 
 If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
 system default browser (macOS: System Settings → Desktop & Dock → Default web

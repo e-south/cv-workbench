@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cvworkbench.dev.preview import PreviewController
+from cvworkbench.dev.preview import PreviewController, _preview_page_html
 
 
 def test_preview_controller_watch_paths() -> None:
@@ -29,3 +29,11 @@ def test_preview_controller_watch_paths() -> None:
     paths = controller.resolve_watch_paths()
 
     assert paths
+
+
+def test_preview_page_html_contains_controls() -> None:
+    html = _preview_page_html()
+
+    assert 'id="theme-select"' in html
+    assert 'id="preset-select"' in html
+    assert 'id="stop-preview"' in html

@@ -30,12 +30,13 @@ uv run cvw build --sot-path ./sot.sample --variant base --theme default --style-
 uv run cvw dev serve --sot-path ./sot.sample --variant base
 ```
 
-The live preview auto-rebuilds on SoT/theme changes and exposes lightweight
-overlay controls:
+The live preview auto-rebuilds on SoT/theme changes and exposes a compact
+control bar:
 
 - `t`: cycle theme
 - `p`: cycle style preset
 - `r`: rebuild with current settings
+- `x`: stop the preview server
 
 The HTML output is written to `dist/<variant>/cv.html`. The command will open
 the preview URL in your browser unless `CVW_SKIP_OPEN=1` is set.

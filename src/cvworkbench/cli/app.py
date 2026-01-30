@@ -284,7 +284,7 @@ def _print_serve_summary(
             ("preview_url", preview_url),
             ("opened_browser", str(opened).lower()),
             ("watching", str(watching).lower()),
-            ("controls", "t=theme p=preset r=rebuild"),
+            ("controls", "t=theme p=preset r=rebuild x=stop"),
         ],
     )
 

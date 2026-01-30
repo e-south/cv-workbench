@@ -264,15 +264,14 @@ def serve_preview(
 ) -> None:
     controller.build_once()
     state = controller.state()
-    handler = _make_handler(controller, state.dist_dir)
-    server = ThreadingHTTPServer((host, port), handler)
+    stop_event = threading.Event()
+    server = ThreadingHTTPServer((host, port), _make_handler(controller, state.dist_dir, stop_event))
     preview_url = f"http://{host}:{port}/"
     try:
         on_start(preview_url, state.html_path)
     except Exception:
         server.server_close()
         raise
-    stop_event = threading.Event()
     watcher = PreviewWatcher(controller, stop_event)
     watcher.start()
     try:
@@ -285,7 +284,11 @@ def serve_preview(
         server.server_close()
 
 
-def _make_handler(controller: PreviewController, dist_dir: Path) -> type[SimpleHTTPRequestHandler]:
+def _make_handler(
+    controller: PreviewController,
+    dist_dir: Path,
+    stop_event: threading.Event,
+) -> type[SimpleHTTPRequestHandler]:
     class PreviewHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, directory=str(dist_dir), **kwargs)
@@ -301,6 +304,10 @@ def _make_handler(controller: PreviewController, dist_dir: Path) -> type[SimpleH
 
         def do_POST(self) -> None:
             if not self.path.startswith("/api/render"):
+                if self.path.startswith("/api/stop"):
+                    self._send_json({"status": "stopping"})
+                    self._stop_server()
+                    return
                 self.send_error(404)
                 return
             length = int(self.headers.get("Content-Length", "0") or "0")
@@ -310,8 +317,8 @@ def _make_handler(controller: PreviewController, dist_dir: Path) -> type[SimpleH
             except json.JSONDecodeError:
                 self.send_error(400, "Invalid JSON")
                 return
-            theme = payload.get("theme")
-            preset = payload.get("style_preset")
+            theme = payload.get("theme") or None
+            preset = payload.get("style_preset") or None
             try:
                 controller.rebuild(theme_id=theme, style_preset=preset)
             except PreviewError as exc:
@@ -339,6 +346,10 @@ def _make_handler(controller: PreviewController, dist_dir: Path) -> type[SimpleH
             self.end_headers()
             self.wfile.write(data)
 
+        def _stop_server(self) -> None:
+            stop_event.set()
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+
     return PreviewHandler
 
 
@@ -362,7 +373,9 @@ def _preview_page_html() -> str:
         padding: 12px 14px;
         z-index: 1000;
         box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        min-width: 260px;
       }
+      #overlay strong { display: inline-block; margin-right: 8px; }
       #overlay small { color: #9fb4c5; display: block; }
       #overlay kbd {
         background: #1e2a35;
@@ -370,6 +383,36 @@ def _preview_page_html() -> str:
         padding: 2px 6px;
         margin-left: 6px;
         font: 12px/1.4 "SFMono-Regular", Menlo, monospace;
+      }
+      #controls {
+        display: grid;
+        grid-template-columns: auto;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      select, button {
+        background: #1e2a35;
+        color: #f2f5f7;
+        border: 1px solid #2c3b49;
+        border-radius: 8px;
+        padding: 6px 8px;
+        font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      button { cursor: pointer; }
+      button:disabled, select:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      #stop-preview {
+        background: #332224;
+        border-color: #4a2b30;
+        color: #ffb5b5;
       }
       #status { color: #7bdff2; }
       #error { color: #ff9b9b; display: none; margin-top: 6px; }
@@ -382,20 +425,37 @@ def _preview_page_html() -> str:
       }
     </style>
   </head>
-  <body>
+  <body tabindex="0">
     <div id="overlay">
-      <div><strong>Preview</strong></div>
-      <small>Theme: <span id="theme"></span> · Preset: <span id="preset"></span></small>
+      <div class="row">
+        <div><strong>Preview</strong></div>
+        <button id="stop-preview" type="button">Stop</button>
+      </div>
+      <div id="controls">
+        <label class="row">
+          <span>Theme</span>
+          <select id="theme-select"></select>
+        </label>
+        <label class="row">
+          <span>Preset</span>
+          <select id="preset-select"></select>
+        </label>
+        <button id="rebuild" type="button">Rebuild</button>
+      </div>
       <small id="status">Listening for changes…</small>
-      <small>Toggle: <kbd>t</kbd> theme <kbd>p</kbd> preset <kbd>r</kbd> rebuild</small>
+      <small>Keys: <kbd>t</kbd> theme <kbd>p</kbd> preset <kbd>r</kbd> rebuild <kbd>x</kbd> stop</small>
       <div id="error"></div>
     </div>
     <iframe id="preview" src="/cv.html"></iframe>
     <script>
       const state = { data: null };
+      let stopped = false;
       const iframe = document.getElementById('preview');
-      const themeEl = document.getElementById('theme');
-      const presetEl = document.getElementById('preset');
+      const themeSelect = document.getElementById('theme-select');
+      const presetSelect = document.getElementById('preset-select');
+      const rebuildButton = document.getElementById('rebuild');
+      const stopButton = document.getElementById('stop-preview');
+      const statusEl = document.getElementById('status');
       const errorEl = document.getElementById('error');
 
       async function fetchState() {
@@ -405,8 +465,7 @@ def _preview_page_html() -> str:
       }
 
       function renderOverlay(data) {
-        themeEl.textContent = data.theme || 'default';
-        presetEl.textContent = data.style_preset || 'none';
+        statusEl.textContent = stopped ? 'Preview stopped.' : 'Listening for changes…';
         if (data.last_error) {
           errorEl.textContent = data.last_error;
           errorEl.style.display = 'block';
@@ -421,11 +480,45 @@ def _preview_page_html() -> str:
         return list[(idx + 1) % list.length];
       }
 
+      function syncSelect(selectEl, options, current) {
+        selectEl.innerHTML = '';
+        if (!options || options.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'none';
+          selectEl.appendChild(opt);
+          selectEl.value = '';
+          selectEl.disabled = true;
+          return;
+        }
+        selectEl.disabled = false;
+        options.forEach((item) => {
+          const opt = document.createElement('option');
+          opt.value = item;
+          opt.textContent = item;
+          selectEl.appendChild(opt);
+        });
+        selectEl.value = current && options.includes(current) ? current : options[0];
+      }
+
+      function renderControls(data) {
+        syncSelect(themeSelect, data.themes || [], data.theme);
+        const presets = (data.presets && data.presets[themeSelect.value]) || [];
+        syncSelect(presetSelect, presets, data.style_preset);
+      }
+
+      function setControlsEnabled(enabled) {
+        themeSelect.disabled = !enabled || themeSelect.disabled;
+        presetSelect.disabled = !enabled || presetSelect.disabled;
+        rebuildButton.disabled = !enabled;
+        stopButton.disabled = !enabled;
+      }
+
       async function requestRender(theme, preset) {
         const res = await fetch('/api/render', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ theme, style_preset: preset }),
+          body: JSON.stringify({ theme, style_preset: preset || null }),
         });
         const payload = await res.json();
         if (!res.ok) {
@@ -434,22 +527,40 @@ def _preview_page_html() -> str:
           return;
         }
         state.data = payload;
+        renderControls(payload);
         renderOverlay(payload);
         iframe.contentWindow.location.reload();
       }
 
+      async function requestStop() {
+        const res = await fetch('/api/stop', { method: 'POST' });
+        if (!res.ok) {
+          errorEl.textContent = 'Failed to stop preview';
+          errorEl.style.display = 'block';
+          return;
+        }
+        stopped = true;
+        setControlsEnabled(false);
+        renderOverlay(state.data || {});
+      }
+
       async function refresh() {
+        if (stopped) return;
         const data = await fetchState();
         if (!data) return;
         if (!state.data || state.data.build_id !== data.build_id) {
           iframe.contentWindow.location.reload();
         }
         state.data = data;
+        renderControls(data);
         renderOverlay(data);
       }
 
-      document.addEventListener('keydown', async (event) => {
+      async function handleKey(event) {
+        if (stopped) return;
         if (!state.data) return;
+        const active = document.activeElement;
+        if (active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName)) return;
         if (event.key === 't') {
           const nextTheme = nextOption(state.data.themes, state.data.theme);
           const presets = state.data.presets[nextTheme] || [];
@@ -463,7 +574,40 @@ def _preview_page_html() -> str:
           await requestRender(state.data.theme, nextPreset);
         } else if (event.key === 'r') {
           await requestRender(state.data.theme, state.data.style_preset);
+        } else if (event.key === 'x') {
+          await requestStop();
         }
+      }
+
+      document.addEventListener('keydown', handleKey);
+      iframe.addEventListener('load', () => {
+        try {
+          iframe.contentWindow.addEventListener('keydown', handleKey);
+        } catch (_) {
+          // ignore cross-origin or access errors
+        }
+      });
+
+      themeSelect.addEventListener('change', async () => {
+        if (!state.data) return;
+        const presets = state.data.presets[themeSelect.value] || [];
+        const nextPreset = presets[0] || null;
+        await requestRender(themeSelect.value, nextPreset);
+      });
+
+      presetSelect.addEventListener('change', async () => {
+        if (!state.data) return;
+        const value = presetSelect.value || null;
+        await requestRender(themeSelect.value, value);
+      });
+
+      rebuildButton.addEventListener('click', async () => {
+        if (!state.data) return;
+        await requestRender(themeSelect.value, presetSelect.value || null);
+      });
+
+      stopButton.addEventListener('click', async () => {
+        await requestStop();
       });
 
       refresh();
