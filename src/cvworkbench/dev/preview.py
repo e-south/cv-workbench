@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cvworkbench.build.pipeline import build_documents
-from cvworkbench.build.paths import output_path
+from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.config import (
     resolve_dist_path,
     resolve_runs_path,
