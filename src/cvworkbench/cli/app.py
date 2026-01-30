@@ -2086,10 +2086,14 @@ def dev_serve(
         except PreviewError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
-        open_result = _open_preview_url(state.html_path, resolved_open_mode, browser)
+        html_path = state.output_files.get("html", state.dist_dir / "cv.html")
+        open_result = _open_preview_url(html_path, resolved_open_mode, browser)
+        if not open_result.opened and open_result.error:
+            typer.echo(f"ERROR: {open_result.error}", err=True)
+            _print_open_hint(html_path)
         _print_serve_summary(
-            state.html_path,
-            str(state.html_path),
+            html_path,
+            str(html_path),
             open_result.opened,
             False,
             resolved_open_mode,
@@ -2098,6 +2102,9 @@ def dev_serve(
 
     def _on_start(url: str, html_path: Path) -> None:
         open_result = _open_preview_url(url, resolved_open_mode, browser)
+        if not open_result.opened and open_result.error:
+            typer.echo(f"ERROR: {open_result.error}", err=True)
+            _print_open_hint(url)
         session = new_preview_session(host=host, port=port, url=url, state=controller.state())
         write_preview_session(session, config_path)
         _print_serve_summary(
@@ -2114,6 +2121,13 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     except OSError as exc:
+        if exc.errno in {48, 98, 10048}:
+            typer.echo(f"ERROR: {exc}", err=True)
+            typer.echo(
+                "HINT: preview port is already in use. Run `cvw dev stop` or set CVW_DEV_PORT.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     finally:

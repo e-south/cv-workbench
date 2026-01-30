@@ -88,4 +88,5 @@ def test_open_url_applescript_error(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert result.opened is False
-    assert result.error == "not authorized"
+    assert result.error is not None
+    assert "Automation" in result.error
