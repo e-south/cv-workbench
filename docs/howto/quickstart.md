@@ -96,6 +96,13 @@ files, theme templates, or style presets. Use the control bar (or shortcuts):
 - `r`: rebuild with current settings
 - `x`: stop the preview server
 
+Closing the browser tab does not stop the preview server. Use the Stop button
+(or `x`) in the control bar, or run:
+
+```bash
+uv run cvw dev stop
+```
+
 If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
 system default browser (macOS: System Settings → Desktop & Dock → Default web
 browser), then rerun the command. On macOS you may also need to grant

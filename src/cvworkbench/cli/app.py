@@ -15,8 +15,13 @@ import json
 import os
 import plistlib
 import shlex
+import signal
+import socket
 import subprocess
 import sys
+import time
+from urllib import error as url_error
+from urllib import request as url_request
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -44,7 +49,15 @@ from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import BuildResult, build_documents
 from cvworkbench.build.rendering import RenderError, render_document
 from cvworkbench.build.styles import prepare_html_style
-from cvworkbench.dev.preview import PreviewController, PreviewError, serve_preview
+from cvworkbench.dev.preview import (
+    PreviewController,
+    PreviewError,
+    clear_preview_session,
+    load_preview_session,
+    new_preview_session,
+    serve_preview,
+    write_preview_session,
+)
 from cvworkbench.ingestion.registry import RegistryError, add_url_context
 from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
 from cvworkbench.inputs.validation import validate_sot
@@ -455,6 +468,38 @@ def _format_osascript_error(app_name: str, message: str) -> str:
             "To skip auto-opening, set CVW_SKIP_OPEN=1."
         )
     return message
+
+
+def _post_preview_stop(url: str, timeout: float = 2.0) -> tuple[bool, str | None]:
+    endpoint = url.rstrip("/") + "/api/stop"
+    try:
+        req = url_request.Request(endpoint, method="POST")
+        with url_request.urlopen(req, timeout=timeout) as response:
+            if 200 <= response.status < 300:
+                return True, None
+            return False, f"Preview stop failed with HTTP {response.status}"
+    except (url_error.URLError, ValueError) as exc:
+        return False, str(exc)
+
+
+def _wait_for_port_close(host: str, port: int, timeout: float = 2.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                pass
+        except OSError:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def _terminate_preview_process(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError as exc:
+        typer.echo(f"ERROR: Failed to terminate preview process: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
     try:
         resolved = resolve_sot_path(sot_path, config)
@@ -1861,6 +1906,8 @@ def dev_serve(
             typer.echo(f"ERROR: {error}", err=True)
             _print_open_hint(url)
             raise PreviewError(error)
+        session = new_preview_session(host=host, port=port, url=url, state=controller.state())
+        write_preview_session(session, config_path)
         _print_serve_summary(html_path, url, opened, True)
 
     try:
@@ -1871,6 +1918,73 @@ def dev_serve(
     except OSError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    finally:
+        clear_preview_session(config_path)
+
+
+@dev_app.command("stop")
+def dev_stop(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Force stop by terminating the preview process",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
+    try:
+        session = load_preview_session(config_path)
+    except PreviewError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    ok, error = _post_preview_stop(session.url)
+    if not ok:
+        if force:
+            _terminate_preview_process(session.pid)
+        else:
+            typer.echo(f"ERROR: {error}", err=True)
+            raise typer.Exit(code=1)
+
+    if not _wait_for_port_close(session.host, session.port):
+        if force:
+            _terminate_preview_process(session.pid)
+        else:
+            typer.echo("ERROR: Preview server still running", err=True)
+            raise typer.Exit(code=1)
+
+    clear_preview_session(config_path)
+    print_summary(
+        "dev.stop",
+        [
+            ("status", "stopped"),
+            ("host", session.host),
+            ("port", session.port),
+        ],
+    )
 
 
 @app.command()

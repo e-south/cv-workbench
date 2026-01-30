@@ -12,7 +12,9 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
+import os
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -51,6 +53,18 @@ class PreviewState:
 class PreviewCatalog:
     themes: list[str]
     presets: dict[str, list[str]]
+
+
+@dataclass
+class PreviewSession:
+    pid: int
+    host: str
+    port: int
+    url: str
+    variant_id: str
+    theme_id: str
+    style_preset: str | None
+    started_at: str
 
 
 class PreviewController:
@@ -214,6 +228,82 @@ class PreviewController:
             build_id=0,
             last_error=None,
         )
+
+
+def preview_session_path(config_path: Path) -> Path:
+    return resolve_runs_path(config_path) / "preview" / "session.json"
+
+
+def write_preview_session(session: PreviewSession, config_path: Path) -> Path:
+    path = preview_session_path(config_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "pid": session.pid,
+        "host": session.host,
+        "port": session.port,
+        "url": session.url,
+        "variant": session.variant_id,
+        "theme": session.theme_id,
+        "style_preset": session.style_preset,
+        "started_at": session.started_at,
+    }
+    path.write_text(json.dumps(payload, indent=2))
+    return path
+
+
+def load_preview_session(config_path: Path) -> PreviewSession:
+    path = preview_session_path(config_path)
+    if not path.exists():
+        raise PreviewError(f"Preview session file not found: {path}")
+    raw = json.loads(path.read_text())
+    if not isinstance(raw, dict):
+        raise PreviewError("Preview session file is invalid")
+    try:
+        pid = int(raw["pid"])
+        host = str(raw["host"])
+        port = int(raw["port"])
+        url = str(raw["url"])
+        variant_id = str(raw.get("variant", ""))
+        theme_id = str(raw.get("theme", ""))
+        style_preset = raw.get("style_preset")
+        started_at = str(raw.get("started_at", ""))
+    except (KeyError, ValueError, TypeError) as exc:
+        raise PreviewError("Preview session file is invalid") from exc
+    return PreviewSession(
+        pid=pid,
+        host=host,
+        port=port,
+        url=url,
+        variant_id=variant_id,
+        theme_id=theme_id,
+        style_preset=style_preset if style_preset else None,
+        started_at=started_at,
+    )
+
+
+def clear_preview_session(config_path: Path) -> None:
+    path = preview_session_path(config_path)
+    if path.exists():
+        path.unlink()
+
+
+def new_preview_session(
+    *,
+    host: str,
+    port: int,
+    url: str,
+    state: PreviewState,
+) -> PreviewSession:
+    return PreviewSession(
+        pid=os.getpid(),
+        host=host,
+        port=port,
+        url=url,
+        variant_id=state.variant_id,
+        theme_id=state.theme_id,
+        style_preset=state.style_preset,
+        started_at=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 class PreviewWatcher(threading.Thread):

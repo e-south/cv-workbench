@@ -38,6 +38,13 @@ control bar:
 - `r`: rebuild with current settings
 - `x`: stop the preview server
 
+Closing the browser tab does not stop the preview server. Use the Stop button
+or run:
+
+```bash
+uv run cvw dev stop
+```
+
 The HTML output is written to `dist/<variant>/cv.html`. The command will open
 the preview URL in your browser unless `CVW_SKIP_OPEN=1` is set.
 
