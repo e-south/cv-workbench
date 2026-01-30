@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import shlex
 import subprocess
 import sys
-from ctypes import CDLL, c_bool, c_char_p, c_long, c_uint32, c_void_p, create_string_buffer
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -345,49 +345,30 @@ def _macos_default_handler_for_scheme(scheme: str) -> str | None:
     if not scheme.strip():
         raise ValueError("Scheme is required")
 
-    core_services = CDLL("/System/Library/Frameworks/CoreServices.framework/CoreServices")
-    core_foundation = CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
-
-    cf_string_create = core_foundation.CFStringCreateWithCString
-    cf_string_create.argtypes = [c_void_p, c_char_p, c_uint32]
-    cf_string_create.restype = c_void_p
-
-    cf_string_get_ptr = core_foundation.CFStringGetCStringPtr
-    cf_string_get_ptr.argtypes = [c_void_p, c_uint32]
-    cf_string_get_ptr.restype = c_char_p
-
-    cf_string_get = core_foundation.CFStringGetCString
-    cf_string_get.argtypes = [c_void_p, c_char_p, c_long, c_uint32]
-    cf_string_get.restype = c_bool
-
-    cf_release = core_foundation.CFRelease
-    cf_release.argtypes = [c_void_p]
-    cf_release.restype = None
-
-    ls_copy_default = core_services.LSCopyDefaultHandlerForURLScheme
-    ls_copy_default.argtypes = [c_void_p]
-    ls_copy_default.restype = c_void_p
-
-    encoding = c_uint32(0x08000100)
-    cf_scheme = cf_string_create(None, scheme.encode("utf-8"), encoding)
-    if not cf_scheme:
+    override = os.environ.get("CVW_LAUNCHSERVICES_PLIST")
+    plist_path = (
+        Path(override)
+        if override
+        else Path.home()
+        / "Library"
+        / "Preferences"
+        / "com.apple.LaunchServices"
+        / "com.apple.launchservices.secure.plist"
+    )
+    if not plist_path.exists():
         return None
     try:
-        handler_ref = ls_copy_default(cf_scheme)
-        if not handler_ref:
-            return None
-        try:
-            value = cf_string_get_ptr(handler_ref, encoding)
-            if value:
-                return value.decode("utf-8")
-            buffer = create_string_buffer(1024)
-            if cf_string_get(handler_ref, buffer, len(buffer), encoding):
-                return buffer.value.decode("utf-8")
-            return None
-        finally:
-            cf_release(handler_ref)
-    finally:
-        cf_release(cf_scheme)
+        with plist_path.open("rb") as handle:
+            data = plistlib.load(handle)
+    except (OSError, plistlib.InvalidFileException) as exc:
+        raise OSError(f"Failed to read LaunchServices database: {exc}") from exc
+
+    handlers = data.get("LSHandlers", [])
+    for handler in handlers:
+        if handler.get("LSHandlerURLScheme") != scheme:
+            continue
+        return handler.get("LSHandlerRoleAll") or handler.get("LSHandlerRoleViewer")
+    return None
 
 
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:

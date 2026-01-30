@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 from pathlib import Path
+import plistlib
 
 from typer.testing import CliRunner
 
@@ -122,3 +123,25 @@ def test_open_in_browser_requires_default_handler_on_macos(monkeypatch) -> None:
     assert opened is False
     assert error is not None
     assert "default web browser" in error
+
+
+def test_macos_default_handler_reads_launchservices(monkeypatch, tmp_path: Path) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    plist_path = tmp_path / "launchservices.plist"
+    with plist_path.open("wb") as handle:
+        plistlib.dump(
+            {
+                "LSHandlers": [
+                    {
+                        "LSHandlerURLScheme": "http",
+                        "LSHandlerRoleAll": "com.example.browser",
+                    }
+                ]
+            },
+            handle,
+        )
+    monkeypatch.setenv("CVW_LAUNCHSERVICES_PLIST", str(plist_path))
+
+    handler = app_module._macos_default_handler_for_scheme("http")
+
+    assert handler == "com.example.browser"
