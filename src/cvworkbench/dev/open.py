@@ -73,7 +73,7 @@ def open_url(url: str, *, mode: OpenMode, browser: str | None) -> OpenResult:
             if not browser and error and _launchservices_missing_handler(error):
                 fallback_errors: list[str] = []
                 for name, path in _macos_browser_candidates():
-                    args = ["/usr/bin/open", "-a", str(path), url]
+                    args = ["/usr/bin/open", "-a", name, url]
                     ok_fallback, error_fallback = _run_command(args)
                     if ok_fallback:
                         return OpenResult(
@@ -158,7 +158,7 @@ def open_pdf(path: Path) -> OpenResult:
             mode=OpenMode.LAUNCHSERVICES,
         )
 
-    ok, error = _spawn_command(["/usr/bin/qlmanage", "-p", str(path)])
+    ok, error = _spawn_quicklook(path)
     if ok:
         return OpenResult(
             opened=True,
@@ -167,26 +167,46 @@ def open_pdf(path: Path) -> OpenResult:
             note="Opened PDF via Quick Look.",
         )
 
+    quicklook_error = error
     ok, error = _run_command(["/usr/bin/open", str(path)])
     if ok:
-        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
+        note = "Opened PDF via default handler."
+        if quicklook_error:
+            note = f"{note} Quick Look failed."
+        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES, note=note)
     if error and _launchservices_missing_handler(error):
         fallback_errors: list[str] = []
         for name, app_path in _macos_pdf_viewer_candidates():
             ok_fallback, error_fallback = _run_command(
-                ["/usr/bin/open", "-a", str(app_path), str(path)]
+                ["/usr/bin/open", "-a", name, str(path)]
             )
             if ok_fallback:
                 return OpenResult(
                     opened=True,
                     error=None,
                     mode=OpenMode.LAUNCHSERVICES,
-                    note=f"Opened PDF with {name} ({app_path}).",
+                    note=f"Opened PDF with {name}.",
                 )
             if error_fallback:
                 fallback_errors.append(f"{name}: {error_fallback}")
+        for name, app_path in _macos_pdf_viewer_candidates():
+            exec_path = _app_executable_path(app_path)
+            if exec_path is None:
+                continue
+            ok_exec, error_exec = _spawn_command([str(exec_path), str(path)])
+            if ok_exec:
+                return OpenResult(
+                    opened=True,
+                    error=None,
+                    mode=OpenMode.LAUNCHSERVICES,
+                    note=f"Opened PDF with {name} executable.",
+                )
+            if error_exec:
+                fallback_errors.append(f"{name} exec: {error_exec}")
         if fallback_errors:
             error = f"{error}; fallback failed: {'; '.join(fallback_errors)}"
+    if quicklook_error:
+        error = f"Quick Look failed: {quicklook_error}. {error}" if error else quicklook_error
     return OpenResult(opened=False, error=error, mode=OpenMode.LAUNCHSERVICES)
 
 
@@ -287,7 +307,7 @@ def _launchservices_missing_handler(message: str) -> bool:
         "no application knows how to open url" in lowered
         or "klsnoexecutabler" in lowered
         or "klsnoexecutableerr" in lowered
-        or "klexecutableincorrectformat" in lowered
+        or "klsexecutableincorrectformat" in lowered
     )
 
 
@@ -382,6 +402,26 @@ def _macos_browser_app_name(app_path: Path) -> str | None:
     return None
 
 
+def _app_executable_path(app_path: Path) -> Path | None:
+    info_path = app_path / "Contents" / "Info.plist"
+    if not info_path.exists():
+        return None
+    try:
+        with info_path.open("rb") as handle:
+            import plistlib
+
+            payload = plistlib.load(handle)
+    except Exception:
+        return None
+    executable = payload.get("CFBundleExecutable")
+    if not isinstance(executable, str) or not executable.strip():
+        return None
+    exec_path = app_path / "Contents" / "MacOS" / executable
+    if exec_path.exists() and os.access(exec_path, os.X_OK):
+        return exec_path
+    return None
+
+
 def _run_command(args: list[str]) -> tuple[bool, str | None]:
     result = subprocess.run(args, capture_output=True, text=True, check=False)
     if result.returncode != 0:
@@ -401,6 +441,31 @@ def _spawn_command(args: list[str]) -> tuple[bool, str | None]:
     except OSError as exc:
         return False, str(exc)
     return True, None
+
+
+def _spawn_quicklook(path: Path) -> tuple[bool, str | None]:
+    try:
+        proc = subprocess.Popen(
+            ["/usr/bin/qlmanage", "-p", str(path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return False, str(exc)
+
+    try:
+        stdout, stderr = proc.communicate(timeout=1.5)
+    except subprocess.TimeoutExpired:
+        if proc.stdout:
+            proc.stdout.close()
+        if proc.stderr:
+            proc.stderr.close()
+        return True, None
+
+    message = (stderr or stdout or "").strip()
+    return False, message or "Quick Look exited unexpectedly"
 
 
 def _format_applescript_error(app_name: str, message: str) -> str:

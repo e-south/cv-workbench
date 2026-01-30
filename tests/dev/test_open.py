@@ -156,13 +156,38 @@ def test_open_url_launchservices_fallback_to_safari(monkeypatch: pytest.MonkeyPa
     assert result.note is not None
     assert "detected browser" in result.note
     assert runner.calls[0][0:2] == ["/usr/bin/open", "file:///tmp/cv.html"]
-    assert runner.calls[1][0:3] == ["/usr/bin/open", "-a", "/Applications/TestBrowser.app"]
+    assert runner.calls[1][0:3] == ["/usr/bin/open", "-a", "TestBrowser"]
     assert runner.calls[1][-1] == "file:///tmp/cv.html"
+
+
+def test_open_url_launchservices_fallback_on_executable_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _RunSequence(
+        [
+            (
+                False,
+                "kLSExecutableIncorrectFormat: No compatible executable was found",
+            ),
+            (True, None),
+        ]
+    )
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", runner)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._macos_browser_candidates",
+        lambda: [("TestBrowser", Path("/Applications/TestBrowser.app"))],
+    )
+
+    result = open_url("file:///tmp/cv.html", mode=OpenMode.LAUNCHSERVICES, browser=None)
+
+    assert result.opened is True
+    assert result.note is not None
+    assert runner.calls[0][0:2] == ["/usr/bin/open", "file:///tmp/cv.html"]
+    assert runner.calls[1][0:3] == ["/usr/bin/open", "-a", "TestBrowser"]
 
 
 def test_open_pdf_uses_quicklook(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _SpawnRecorder()
-    monkeypatch.setattr("cvworkbench.dev.open._spawn_command", runner)
+    monkeypatch.setattr("cvworkbench.dev.open._spawn_quicklook", runner)
     monkeypatch.setattr(
         "cvworkbench.dev.open._run_command", lambda *_args, **_kwargs: (False, "no")
     )
@@ -173,4 +198,52 @@ def test_open_pdf_uses_quicklook(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.opened is True
     assert result.note is not None
     assert "Quick Look" in result.note
-    assert runner.calls == [["/usr/bin/qlmanage", "-p", "/tmp/cv.pdf"]]
+    assert runner.calls == [Path("/tmp/cv.pdf")]
+
+
+def test_open_pdf_fallback_when_quicklook_crashes(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _SpawnRecorder()
+    runner.returncode = 1
+    runner.error = "Quick Look crashed"
+    run_open = _RunRecorder()
+    monkeypatch.setattr("cvworkbench.dev.open._spawn_quicklook", runner)
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", run_open)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+
+    result = open_pdf(Path("/tmp/cv.pdf"))
+
+    assert result.opened is True
+    assert run_open.calls[0] == ["/usr/bin/open", "/tmp/cv.pdf"]
+
+
+def test_open_pdf_fallback_to_direct_exec(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _SpawnRecorder()
+    runner.returncode = 1
+    runner.error = "Quick Look crashed"
+    open_sequence = _RunSequence(
+        [
+            (False, "No application knows how to open URL file:///tmp/cv.pdf"),
+            (False, "kLSNoExecutableErr"),
+        ]
+    )
+    exec_spawn = _SpawnRecorder()
+    monkeypatch.setattr("cvworkbench.dev.open._spawn_quicklook", runner)
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", open_sequence)
+    monkeypatch.setattr("cvworkbench.dev.open._spawn_command", exec_spawn)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._macos_pdf_viewer_candidates",
+        lambda: [("Preview", Path("/Applications/Preview.app"))],
+    )
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._app_executable_path",
+        lambda path: path / "Contents" / "MacOS" / "Preview",
+    )
+
+    result = open_pdf(Path("/tmp/cv.pdf"))
+
+    assert result.opened is True
+    assert exec_spawn.calls[0] == [
+        "/Applications/Preview.app/Contents/MacOS/Preview",
+        "/tmp/cv.pdf",
+    ]
