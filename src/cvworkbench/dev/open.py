@@ -15,8 +15,10 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -29,6 +31,7 @@ class OpenMode(str, Enum):
 class PreviewViewer(str, Enum):
     BROWSER = "browser"
     QUICKLOOK_PDF = "quicklook-pdf"
+    PREVIEW_APP = "preview-app"
     NONE = "none"
 
 
@@ -49,6 +52,8 @@ def resolve_preview_viewer(requested: PreviewViewer | None) -> PreviewViewer:
             return PreviewViewer(env_value)
         except ValueError as exc:
             raise ValueError(f"Invalid preview viewer: {env_value}") from exc
+    if sys.platform == "darwin":
+        return PreviewViewer.PREVIEW_APP
     return PreviewViewer.BROWSER
 
 
@@ -210,6 +215,55 @@ def open_pdf(path: Path) -> OpenResult:
     return OpenResult(opened=False, error=error, mode=OpenMode.LAUNCHSERVICES)
 
 
+def open_pdf_in_preview(path: Path) -> OpenResult:
+    if sys.platform != "darwin":
+        return OpenResult(
+            opened=False,
+            error="preview-app viewer is only supported on macOS",
+            mode=OpenMode.LAUNCHSERVICES,
+        )
+
+    errors: list[str] = []
+    ok, error = _run_command(["/usr/bin/open", "-a", "Preview", str(path)])
+    if ok:
+        time.sleep(0.2)
+        if _preview_process_running():
+            return OpenResult(
+                opened=True,
+                error=None,
+                mode=OpenMode.LAUNCHSERVICES,
+                note="Opened PDF with Preview.",
+            )
+        errors.append("Preview did not appear to start")
+    elif error:
+        errors.append(error)
+
+    preview_app = _preview_app_path()
+    if preview_app:
+        exec_path = _app_executable_path(preview_app)
+        if exec_path:
+            ok_exec, error_exec = _spawn_command([str(exec_path), str(path)])
+            if ok_exec:
+                return OpenResult(
+                    opened=True,
+                    error=None,
+                    mode=OpenMode.LAUNCHSERVICES,
+                    note="Opened PDF with Preview executable.",
+                )
+            if error_exec:
+                errors.append(error_exec)
+        else:
+            errors.append(f"Preview executable not found in {preview_app}")
+    else:
+        errors.append("Preview.app not found")
+
+    return OpenResult(
+        opened=False,
+        error="; ".join(errors) if errors else "Preview open failed",
+        mode=OpenMode.LAUNCHSERVICES,
+    )
+
+
 def _launchservices_args(url: str, browser: str | None) -> list[str]:
     if browser and browser != "default":
         return ["/usr/bin/open", "-a", browser, url]
@@ -220,6 +274,7 @@ def _launchservices_bundle_args(url: str, bundle_id: str) -> list[str]:
     return ["/usr/bin/open", "-b", bundle_id, url]
 
 
+@lru_cache(maxsize=1)
 def _macos_browser_candidates() -> list[tuple[str, Path]]:
     candidates: list[tuple[str, list[Path]]] = [
         ("Safari", [Path("/System/Applications/Safari.app"), Path("/Applications/Safari.app")]),
@@ -267,6 +322,7 @@ def _macos_browser_candidates() -> list[tuple[str, Path]]:
     return available
 
 
+@lru_cache(maxsize=1)
 def _macos_pdf_viewer_candidates() -> list[tuple[str, Path]]:
     candidates: list[tuple[str, list[Path]]] = [
         ("Preview", [Path("/System/Applications/Preview.app"), Path("/Applications/Preview.app")]),
@@ -328,6 +384,7 @@ def _resolve_default_browser_name(scheme: str) -> str | None:
     return _macos_browser_app_name(app_path)
 
 
+@lru_cache(maxsize=16)
 def _macos_default_handler_for_scheme(scheme: str) -> str | None:
     if not scheme.strip():
         raise ValueError("Scheme is required")
@@ -365,6 +422,7 @@ def _macos_default_handler_for_scheme(scheme: str) -> str | None:
     return None
 
 
+@lru_cache(maxsize=16)
 def _macos_browser_app_path(bundle_id: str) -> Path | None:
     if not bundle_id.strip():
         return None
@@ -385,6 +443,7 @@ def _macos_browser_app_path(bundle_id: str) -> Path | None:
     return paths[0]
 
 
+@lru_cache(maxsize=32)
 def _macos_browser_app_name(app_path: Path) -> str | None:
     info_path = app_path / "Contents" / "Info.plist"
     if not info_path.exists():
@@ -402,6 +461,7 @@ def _macos_browser_app_name(app_path: Path) -> str | None:
     return None
 
 
+@lru_cache(maxsize=32)
 def _app_executable_path(app_path: Path) -> Path | None:
     info_path = app_path / "Contents" / "Info.plist"
     if not info_path.exists():
@@ -466,6 +526,27 @@ def _spawn_quicklook(path: Path) -> tuple[bool, str | None]:
 
     message = (stderr or stdout or "").strip()
     return False, message or "Quick Look exited unexpectedly"
+
+
+def _preview_process_running() -> bool:
+    try:
+        result = subprocess.run(
+            ["/usr/bin/pgrep", "-x", "Preview"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def _preview_app_path() -> Path | None:
+    candidates = [Path("/System/Applications/Preview.app"), Path("/Applications/Preview.app")]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _format_applescript_error(app_name: str, message: str) -> str:

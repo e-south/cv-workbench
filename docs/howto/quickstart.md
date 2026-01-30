@@ -88,9 +88,12 @@ uv run cvw preview --sot-path ./sot.sample --variant base --style-preset modern
 uv run cvw preview --sot-path ./sot.sample --variant base --style-preset compact
 ```
 
-`cvw preview` opens a live HTML preview and auto-rebuilds when you edit SoT
-files, theme templates, or style presets. The sidebar controls (or shortcuts)
-let you cycle themes, presets, variants, and formats:
+`cvw preview` starts a live preview server and auto-rebuilds when you edit SoT
+files, theme templates, or style presets. On macOS, the default viewer opens
+the PDF in Preview for a reliable “just works” experience. To use the HTML
+preview UI (with sidebar controls and shortcuts), pass `--viewer browser`. The
+sidebar controls (or shortcuts) let you cycle themes, presets, variants, and
+formats:
 
 - `t`: cycle theme
 - `p`: cycle style preset
@@ -115,14 +118,14 @@ If your system does not have a default handler for `.html` files, pass
 `--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
 When no default handler is available, cvw will attempt to auto-detect an
 installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc).
-If you want a browserless preview, run:
+If you want a browserless preview (or to force Preview explicitly), run:
 
 ```bash
-uv run cvw preview --viewer quicklook-pdf --sot-path ./sot.sample --variant base
+uv run cvw preview --viewer preview-app --sot-path ./sot.sample --variant base
 ```
 
-This opens the generated PDF in your default PDF viewer (with automatic
-fallbacks to common PDF apps like Preview/Skim/Acrobat) and keeps the watcher running.
+This opens the generated PDF in Preview and keeps the watcher running. You can
+also use `--viewer quicklook-pdf` to use Quick Look instead.
 
 To change the host or port:
 

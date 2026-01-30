@@ -16,7 +16,14 @@ from typing import Any
 
 import pytest
 
-from cvworkbench.dev.open import OpenMode, open_pdf, open_url
+from cvworkbench.dev.open import (
+    OpenMode,
+    PreviewViewer,
+    open_pdf,
+    open_pdf_in_preview,
+    open_url,
+    resolve_preview_viewer,
+)
 
 
 class _RunRecorder:
@@ -247,3 +254,64 @@ def test_open_pdf_fallback_to_direct_exec(monkeypatch: pytest.MonkeyPatch) -> No
         "/Applications/Preview.app/Contents/MacOS/Preview",
         "/tmp/cv.pdf",
     ]
+
+
+def test_open_pdf_in_preview_uses_preview_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_open = _RunRecorder()
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", run_open)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.setattr("cvworkbench.dev.open._preview_process_running", lambda: True)
+
+    result = open_pdf_in_preview(Path("/tmp/cv.pdf"))
+
+    assert result.opened is True
+    assert run_open.calls[0] == ["/usr/bin/open", "-a", "Preview", "/tmp/cv.pdf"]
+
+
+def test_open_pdf_in_preview_fallbacks_to_exec(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_open = _RunRecorder()
+    run_open.returncode = 1
+    run_open.stderr = "kLSNoExecutableErr"
+    exec_spawn = _SpawnRecorder()
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", run_open)
+    monkeypatch.setattr("cvworkbench.dev.open._spawn_command", exec_spawn)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.setattr("cvworkbench.dev.open._preview_process_running", lambda: False)
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._preview_app_path",
+        lambda: Path("/Applications/Preview.app"),
+    )
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._app_executable_path",
+        lambda path: path / "Contents" / "MacOS" / "Preview",
+    )
+
+    result = open_pdf_in_preview(Path("/tmp/cv.pdf"))
+
+    assert result.opened is True
+    assert exec_spawn.calls[0] == [
+        "/Applications/Preview.app/Contents/MacOS/Preview",
+        "/tmp/cv.pdf",
+    ]
+
+
+def test_resolve_preview_viewer_defaults_to_preview_app_on_macos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.delenv("CVW_PREVIEW_VIEWER", raising=False)
+
+    result = resolve_preview_viewer(None)
+
+    assert result == PreviewViewer.PREVIEW_APP
+
+
+def test_resolve_preview_viewer_defaults_to_browser_elsewhere(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "linux")
+    monkeypatch.delenv("CVW_PREVIEW_VIEWER", raising=False)
+
+    result = resolve_preview_viewer(None)
+
+    assert result == PreviewViewer.BROWSER

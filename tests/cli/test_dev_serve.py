@@ -36,6 +36,8 @@ def test_dev_serve_builds_html(tmp_path: Path) -> None:
         [
             "dev",
             "serve",
+            "--viewer",
+            "browser",
             "--variant",
             "base",
             "--sot-path",
@@ -68,6 +70,8 @@ def test_dev_serve_reports_open_failure(monkeypatch) -> None:
         [
             "dev",
             "serve",
+            "--viewer",
+            "browser",
             "--variant",
             "base",
             "--sot-path",
@@ -128,6 +132,37 @@ def test_dev_serve_quicklook_opens_pdf(monkeypatch) -> None:
             "serve",
             "--viewer",
             "quicklook-pdf",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--plain",
+        ],
+        env={"CVW_DEV_ONCE": "1"},
+    )
+
+    assert result.exit_code == 0
+    assert str(captured["url"]).endswith("dist/base/cv.pdf")
+
+
+def test_dev_serve_preview_app_opens_pdf(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str | OpenMode | None] = {}
+
+    def _fake_open_pdf(path: Path) -> OpenResult:
+        captured["url"] = str(path)
+        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
+
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    monkeypatch.setattr(app_module, "open_pdf_in_preview", _fake_open_pdf)
+
+    result = runner.invoke(
+        app,
+        [
+            "dev",
+            "serve",
+            "--viewer",
+            "preview-app",
             "--variant",
             "base",
             "--sot-path",

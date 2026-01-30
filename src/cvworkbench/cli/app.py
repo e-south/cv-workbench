@@ -49,6 +49,7 @@ from cvworkbench.dev.open import (
     OpenMode,
     OpenResult,
     PreviewViewer,
+    open_pdf_in_preview,
     open_pdf,
     open_url,
     resolve_open_mode,
@@ -1250,7 +1251,7 @@ def project_new(
         PreviewViewer | None,
         typer.Option(
             "--viewer",
-            help="Preview viewer (browser, quicklook-pdf, none)",
+            help="Preview viewer (browser, preview-app, quicklook-pdf, none)",
             envvar="CVW_PREVIEW_VIEWER",
         ),
     ] = None,
@@ -2033,7 +2034,7 @@ def dev_serve(
         PreviewViewer | None,
         typer.Option(
             "--viewer",
-            help="Preview viewer (browser, quicklook-pdf, none)",
+            help="Preview viewer (browser, preview-app, quicklook-pdf, none)",
             envvar="CVW_PREVIEW_VIEWER",
         ),
     ] = None,
@@ -2057,11 +2058,14 @@ def dev_serve(
     configure_output_mode(plain, json_output)
     resolved_open_mode = resolve_open_mode(open_mode)
     resolved_viewer = resolve_preview_viewer(viewer)
-    if (
-        resolved_viewer == PreviewViewer.QUICKLOOK_PDF
-        and resolved_open_mode == OpenMode.APPLESCRIPT
-    ):
-        typer.echo("ERROR: quicklook-pdf viewer does not support open-mode applescript", err=True)
+    if resolved_open_mode == OpenMode.APPLESCRIPT and resolved_viewer in {
+        PreviewViewer.QUICKLOOK_PDF,
+        PreviewViewer.PREVIEW_APP,
+    }:
+        typer.echo(
+            "ERROR: preview-app/quicklook-pdf viewers do not support open-mode applescript",
+            err=True,
+        )
         raise typer.Exit(code=2)
     config_path = resolve_config_path(config)
     project_spec = None
@@ -2127,13 +2131,20 @@ def dev_serve(
             if resolved_viewer == PreviewViewer.QUICKLOOK_PDF:
                 pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
                 open_result = open_pdf(pdf_path)
+                if not open_result.opened and open_result.error:
+                    typer.echo(f"ERROR: {open_result.error}", err=True)
+                    _print_open_hint(pdf_path)
+            elif resolved_viewer == PreviewViewer.PREVIEW_APP:
+                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
+                open_result = open_pdf_in_preview(pdf_path)
+                if not open_result.opened and open_result.error:
+                    typer.echo(f"ERROR: {open_result.error}", err=True)
+                    _print_open_hint(pdf_path)
             else:
                 open_result = _open_preview_url(html_path, resolved_open_mode, browser)
-            if not open_result.opened and open_result.error:
-                typer.echo(f"ERROR: {open_result.error}", err=True)
-                _print_open_hint(
-                    pdf_path if resolved_viewer == PreviewViewer.QUICKLOOK_PDF else html_path
-                )
+                if not open_result.opened and open_result.error:
+                    typer.echo(f"ERROR: {open_result.error}", err=True)
+                    _print_open_hint(html_path)
         _print_serve_summary(
             html_path,
             str(html_path),
@@ -2151,6 +2162,13 @@ def dev_serve(
                 state = controller.state()
                 pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
                 open_result = open_pdf(pdf_path)
+                if not open_result.opened and open_result.error:
+                    typer.echo(f"ERROR: {open_result.error}", err=True)
+                    _print_open_hint(pdf_path)
+            elif resolved_viewer == PreviewViewer.PREVIEW_APP:
+                state = controller.state()
+                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
+                open_result = open_pdf_in_preview(pdf_path)
                 if not open_result.opened and open_result.error:
                     typer.echo(f"ERROR: {open_result.error}", err=True)
                     _print_open_hint(pdf_path)
@@ -2316,7 +2334,7 @@ def preview(
         PreviewViewer | None,
         typer.Option(
             "--viewer",
-            help="Preview viewer (browser, quicklook-pdf, none)",
+            help="Preview viewer (browser, preview-app, quicklook-pdf, none)",
             envvar="CVW_PREVIEW_VIEWER",
         ),
     ] = None,

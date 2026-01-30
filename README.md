@@ -46,10 +46,11 @@ uv run cvw preview --sot-path ./sot.sample --variant base
 Build output locations are printed after `cvw build` completes, and artifacts
 are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
 
-`cvw preview` opens a live HTML preview that auto-rebuilds on SoT, theme, and
-variant changes (HTML + PDF by default). Use the sidebar controls (or shortcuts:
-`t`, `p`, `v`, `f`, `r`, `x`) to cycle theme/preset/variant/format, rebuild, and
-stop the preview. You can also run `cvw dev stop` if you closed the tab.
+`cvw preview` starts a live preview server that auto-rebuilds on SoT, theme, and
+variant changes. On macOS, the default viewer opens the PDF in Preview for a
+reliable “just works” experience. To use the HTML preview UI (with sidebar
+controls and shortcuts `t`, `p`, `v`, `f`, `r`, `x`), pass `--viewer browser`.
+You can also run `cvw dev stop` if you closed the tab.
 
 If auto-open fails, the server stays up and prints a manual URL. On macOS, you
 can opt into AppleScript automation with `--open-mode applescript`.
@@ -57,9 +58,9 @@ If your system does not have a default handler for `.html` files, pass
 `--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
 When no default handler is available, cvw will also attempt to auto-detect an
 installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc) and open it for you.
-If you want a browserless preview, use `--viewer quicklook-pdf` to open the
-generated PDF in your default PDF viewer (with auto-detected fallbacks such as
-Preview/Skim/Acrobat) while the server continues watching for changes.
+If you want a browserless preview, use `--viewer preview-app` (default on macOS)
+or `--viewer quicklook-pdf` to open the generated PDF in a PDF viewer while the
+server continues watching for changes.
 
 Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
 nearest `config/workbench.yaml` by walking up parent directories, so outputs
