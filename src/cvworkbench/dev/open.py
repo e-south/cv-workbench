@@ -108,6 +108,24 @@ def open_url(url: str, *, mode: OpenMode, browser: str | None) -> OpenResult:
                         )
                     if error_fallback:
                         fallback_errors.append(f"applescript {default_browser}: {error_fallback}")
+                else:
+                    for candidate in _applescript_browser_candidates():
+                        args = _applescript_args(candidate, url)
+                        ok_fallback, error_fallback = _run_command(args)
+                        if ok_fallback:
+                            return OpenResult(
+                                opened=True,
+                                error=None,
+                                mode=mode,
+                                note=(
+                                    f"Opened with AppleScript in {candidate} after "
+                                    "LaunchServices failed."
+                                ),
+                            )
+                        if error_fallback:
+                            fallback_errors.append(
+                                f"applescript {candidate}: {error_fallback}"
+                            )
                 default_bundle = _macos_default_handler_for_scheme("http")
                 if default_bundle:
                     ok_fallback, error_fallback = _run_command(
@@ -389,6 +407,17 @@ def _applescript_args(app_name: str, url: str) -> list[str]:
     escaped_target = url.replace('"', '\\"')
     script = f'tell application "{escaped_name}" to open location "{escaped_target}"'
     return ["/usr/bin/osascript", "-e", script]
+
+
+def _applescript_browser_candidates() -> list[str]:
+    return [
+        "Google Chrome",
+        "Safari",
+        "Firefox",
+        "Microsoft Edge",
+        "Brave Browser",
+        "Arc",
+    ]
 
 
 def _resolve_default_browser_name(scheme: str) -> str | None:
