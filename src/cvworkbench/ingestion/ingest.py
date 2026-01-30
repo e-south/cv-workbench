@@ -23,6 +23,7 @@ class ExtractResult:
     text: str
     extractor: str
     extractor_version: str | None
+    raw_html: str | None = None
 
 
 def fetch_and_extract(url: str, user_agent: str | None) -> ExtractResult:
@@ -52,4 +53,5 @@ def fetch_and_extract(url: str, user_agent: str | None) -> ExtractResult:
         text=text.strip(),
         extractor="trafilatura",
         extractor_version=version,
+        raw_html=html,
     )

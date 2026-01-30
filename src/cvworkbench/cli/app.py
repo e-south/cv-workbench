@@ -13,12 +13,8 @@ from __future__ import annotations
 
 import json
 import os
-import plistlib
-import shlex
 import signal
 import socket
-import subprocess
-import sys
 import time
 from urllib import error as url_error
 from urllib import request as url_request
@@ -46,7 +42,7 @@ from cvworkbench.config import (
 )
 from cvworkbench.build.explain import ExplainError, explain_item, load_selection
 from cvworkbench.build.paths import filters_dir, output_path
-from cvworkbench.build.pipeline import BuildResult, build_documents
+from cvworkbench.build.pipeline import BuildResult, build_documents, create_run_dir
 from cvworkbench.build.rendering import RenderError, render_document
 from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.dev.preview import (
@@ -58,16 +54,30 @@ from cvworkbench.dev.preview import (
     serve_preview,
     write_preview_session,
 )
+from cvworkbench.dev.open import OpenMode, OpenResult, open_url, resolve_open_mode
 from cvworkbench.ingestion.registry import RegistryError, add_url_context
 from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
 from cvworkbench.inputs.validation import validate_sot
-from cvworkbench.inputs.sot_versions import SotVersionError, resolve_versioned_root
+from cvworkbench.inputs.sot_versions import (
+    SotVersionError,
+    resolve_active_sot_path,
+    resolve_versioned_root,
+)
 from cvworkbench.ops.apply import ApplyError, apply_draft
 from cvworkbench.ops.clean import CleanError, clean_path
 from cvworkbench.ops.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
 from cvworkbench.ops.doctor import run_doctor
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
+from cvworkbench.ops.projects import (
+    ProjectError,
+    apply_project_patch,
+    create_project_from_file,
+    create_project_from_url,
+    load_project,
+    prepare_project_sot,
+    resolve_project_dir,
+)
 from cvworkbench.ops.sot_versions import (
     SotPackError,
     activate_version,
@@ -89,6 +99,7 @@ dev_app = typer.Typer(no_args_is_help=True)
 variant_app = typer.Typer(no_args_is_help=True)
 clean_app = typer.Typer(no_args_is_help=True)
 sot_app = typer.Typer(no_args_is_help=True)
+project_app = typer.Typer(no_args_is_help=True)
 app.add_typer(job_app, name="job")
 app.add_typer(tags_app, name="tags")
 app.add_typer(theme_app, name="theme")
@@ -96,6 +107,7 @@ app.add_typer(dev_app, name="dev")
 app.add_typer(variant_app, name="variant")
 app.add_typer(clean_app, name="clean")
 app.add_typer(sot_app, name="sot")
+app.add_typer(project_app, name="project")
 
 
 def _not_implemented(command: str) -> None:
@@ -289,6 +301,7 @@ def _print_serve_summary(
     preview_url: str,
     opened: bool,
     watching: bool,
+    open_mode: OpenMode,
 ) -> None:
     print_summary(
         "serve",
@@ -297,136 +310,24 @@ def _print_serve_summary(
             ("preview_url", preview_url),
             ("opened_browser", str(opened).lower()),
             ("watching", str(watching).lower()),
-            ("controls", "t=theme p=preset r=rebuild x=stop"),
+            ("open_mode", open_mode.value),
+            ("controls", "t=theme p=preset v=variant f=format r=rebuild x=stop"),
         ],
     )
 
 
-def _open_in_browser(path: str | Path) -> tuple[bool, str | None]:
-    if os.environ.get("CVW_SKIP_OPEN") == "1":
-        return False, None
-    target = str(path)
-    custom = os.environ.get("CVW_BROWSER")
-    if custom:
-        args = shlex.split(custom)
-        if not args:
-            return False, "CVW_BROWSER is empty"
-        try:
-            return _run_open_command([*args, target])
-        except FileNotFoundError as exc:
-            return False, f"Browser opener not found: {exc.filename}"
-        except OSError as exc:
-            return False, str(exc)
-
-    try:
-        if sys.platform == "darwin":
-            try:
-                handler = _macos_default_handler_for_scheme("http")
-            except (OSError, ValueError) as exc:
-                return False, f"Failed to resolve default web browser: {exc}"
-            if not handler:
-                return False, "No default web browser configured for http"
-            app_path = _macos_browser_app_path(handler)
-            if not app_path:
-                return False, f"Default web browser app not found for {handler}"
-            app_name = _macos_browser_app_name(app_path)
-            if not app_name:
-                return False, f"Default web browser name not found for {handler}"
-            normalized = _normalize_browser_target(target)
-            return _run_osascript_open(app_name, normalized)
-        if os.name == "nt":
-            os.startfile(target)
-            return True, None
-        return _run_open_command(["xdg-open", target])
-    except FileNotFoundError as exc:
-        return False, f"Browser opener not found: {exc.filename}"
-    except OSError as exc:
-        return False, str(exc)
-
-
-def _run_open_command(args: list[str]) -> tuple[bool, str | None]:
-    result = subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout or "").strip()
-        return False, message or "Browser open failed"
-    return True, None
+_open_url = open_url
 
 
 def _print_open_hint(target: str | Path) -> None:
     typer.echo(f"HINT: open {target}", err=True)
 
 
-def _macos_default_handler_for_scheme(scheme: str) -> str | None:
-    if not scheme.strip():
-        raise ValueError("Scheme is required")
-
-    override = os.environ.get("CVW_LAUNCHSERVICES_PLIST")
-    plist_path = (
-        Path(override)
-        if override
-        else Path.home()
-        / "Library"
-        / "Preferences"
-        / "com.apple.LaunchServices"
-        / "com.apple.launchservices.secure.plist"
-    )
-    if not plist_path.exists():
-        return None
-    try:
-        with plist_path.open("rb") as handle:
-            data = plistlib.load(handle)
-    except (OSError, plistlib.InvalidFileException) as exc:
-        raise OSError(f"Failed to read LaunchServices database: {exc}") from exc
-
-    handlers = data.get("LSHandlers", [])
-    for handler in handlers:
-        if handler.get("LSHandlerURLScheme") != scheme:
-            continue
-        return handler.get("LSHandlerRoleAll") or handler.get("LSHandlerRoleViewer")
-    return None
-
-
-def _macos_browser_app_path(bundle_id: str) -> Path | None:
-    target = bundle_id.strip().lower()
-    if not target:
-        return None
-    search_roots = [Path("/Applications"), Path.home() / "Applications"]
-    for root in search_roots:
-        if not root.exists():
-            continue
-        for app_path in root.glob("*.app"):
-            plist_path = app_path / "Contents" / "Info.plist"
-            if not plist_path.exists():
-                continue
-            try:
-                with plist_path.open("rb") as handle:
-                    info = plistlib.load(handle)
-            except (OSError, plistlib.InvalidFileException):
-                continue
-            if str(info.get("CFBundleIdentifier", "")).lower() != target:
-                continue
-            return app_path
-    return None
-
-
-def _macos_browser_app_name(app_path: Path) -> str | None:
-    plist_path = app_path / "Contents" / "Info.plist"
-    if not plist_path.exists():
-        return None
-    try:
-        with plist_path.open("rb") as handle:
-            info = plistlib.load(handle)
-    except (OSError, plistlib.InvalidFileException):
-        return None
-    return info.get("CFBundleDisplayName") or info.get("CFBundleName")
-
-
-def _normalize_browser_target(target: str) -> str:
+def _normalize_open_target(target: str | Path) -> str:
+    if isinstance(target, Path):
+        if target.exists():
+            return target.resolve().as_uri()
+        return str(target)
     if target.startswith(("http://", "https://", "file://")):
         return target
     path = Path(target)
@@ -435,39 +336,13 @@ def _normalize_browser_target(target: str) -> str:
     return target
 
 
-def _run_osascript_open(app_name: str, target: str) -> tuple[bool, str | None]:
-    escaped_name = app_name.replace('"', '\\"')
-    escaped_target = target.replace('"', '\\"')
-    script = f'tell application "{escaped_name}" to open location "{escaped_target}"'
-    result = subprocess.run(
-        ["/usr/bin/osascript", "-e", script],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout or "").strip()
-        return False, _format_osascript_error(app_name, message)
-    return True, None
-
-
-def _format_osascript_error(app_name: str, message: str) -> str:
-    if not message:
-        return "Browser open failed"
-    lowered = message.lower()
-    if "can't get application" in lowered or "cant get application" in lowered or "(-1728)" in lowered:
-        return (
-            f'Browser automation blocked. Allow your terminal app to control "{app_name}" '
-            "in System Settings > Privacy & Security > Automation, then rerun. "
-            "To skip auto-opening, set CVW_SKIP_OPEN=1."
-        )
-    if "connection invalid" in lowered or "hiservices" in lowered:
-        return (
-            f'Browser automation failed for "{app_name}". Check Automation permissions in '
-            "System Settings > Privacy & Security > Automation, then rerun. "
-            "To skip auto-opening, set CVW_SKIP_OPEN=1."
-        )
-    return message
+def _open_preview_url(url: str | Path, open_mode: OpenMode, browser: str | None) -> OpenResult:
+    target = _normalize_open_target(url)
+    result = _open_url(target, mode=open_mode, browser=browser)
+    if result.error:
+        typer.echo(f"WARNING: {result.error}", err=True)
+        _print_open_hint(target)
+    return result
 
 
 def _post_preview_stop(url: str, timeout: float = 2.0) -> tuple[bool, str | None]:
@@ -538,6 +413,33 @@ def _print_tailor_summary(paths: DraftPaths, output_dir: Path, base_variant: str
             ("patch", paths.patch_path),
             ("job", paths.job_path),
             ("prompt", paths.prompt_path),
+        ],
+    )
+
+
+def _print_project_new_summary(
+    *,
+    project_dir: Path,
+    variant_id: str,
+    job_source: str,
+) -> None:
+    print_summary(
+        "project.new",
+        [
+            ("project_dir", project_dir),
+            ("variant", variant_id),
+            ("job_source", job_source),
+            ("next_step", f"cvw preview --project {project_dir.name}"),
+        ],
+    )
+
+
+def _print_project_apply_summary(project_dir: Path, sot_path: Path) -> None:
+    print_summary(
+        "project.apply",
+        [
+            ("project_dir", project_dir),
+            ("sot_path", sot_path),
         ],
     )
 
@@ -1274,6 +1176,216 @@ def job_add(
     _print_job_add_summary(summary)
 
 
+@project_app.command("new")
+def project_new(
+    job_url: Annotated[
+        str | None,
+        typer.Option(
+            "--job-url",
+            help="Job URL to ingest",
+        ),
+    ] = None,
+    job_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--job-file",
+            help="Job description file",
+        ),
+    ] = None,
+    slug: Annotated[
+        str | None,
+        typer.Option(
+            "--slug",
+            help="Project id override",
+        ),
+    ] = None,
+    variant: Annotated[
+        str | None,
+        typer.Option(
+            "--variant",
+            help="Base variant id",
+        ),
+    ] = None,
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ] = None,
+    store_raw: Annotated[
+        bool,
+        typer.Option(
+            "--store-raw",
+            help="Store raw HTML when ingesting a URL",
+        ),
+    ] = False,
+    open_after: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help="Open preview after creating the project",
+        ),
+    ] = False,
+    open_mode: Annotated[
+        OpenMode | None,
+        typer.Option(
+            "--open-mode",
+            help="Browser open mode (launchservices, applescript, none)",
+            envvar="CVW_OPEN_MODE",
+        ),
+    ] = None,
+    browser: Annotated[
+        str | None,
+        typer.Option(
+            "--browser",
+            help="Browser app name (macOS) or opener command",
+            envvar="CVW_BROWSER",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    if bool(job_url) == bool(job_file):
+        typer.echo("ERROR: Provide exactly one of --job-url or --job-file", err=True)
+        raise typer.Exit(code=2)
+
+    config_path = resolve_config_path(config)
+    base_variant = variant or resolve_default_variant(config_path)
+
+    try:
+        resolved_sot = resolve_sot_path(sot_path, config_path)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        if job_url:
+            result = create_project_from_url(
+                url=job_url,
+                slug=slug,
+                base_variant_id=base_variant,
+                config_path=config_path,
+                sot_path=resolved_sot,
+                store_raw=store_raw,
+            )
+            job_source = job_url
+        else:
+            result = create_project_from_file(
+                job_path=job_file or Path(),
+                slug=slug,
+                base_variant_id=base_variant,
+                config_path=config_path,
+                sot_path=resolved_sot,
+                store_raw=store_raw,
+            )
+            job_source = str(job_file)
+    except (ProjectError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_project_new_summary(
+        project_dir=result.project_dir,
+        variant_id=base_variant,
+        job_source=job_source,
+    )
+
+    if open_after:
+        dev_serve(
+            sot_path=resolved_sot,
+            config=config_path,
+            variant=base_variant,
+            theme=None,
+            style_preset=None,
+            plain=plain,
+            json_output=json_output,
+            open_mode=open_mode,
+            browser=browser,
+            project=result.project_dir.name,
+        )
+
+
+@project_app.command("apply")
+def project_apply(
+    project: Annotated[
+        str,
+        typer.Argument(help="Project id or path"),
+    ],
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
+    project_dir = resolve_project_dir(project, config_path)
+    try:
+        spec = load_project(project_dir)
+    except ProjectError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    resolved_sot = spec.sot_path
+    if sot_path is not None:
+        try:
+            resolved_sot = resolve_sot_path(sot_path, config_path)
+        except (FileNotFoundError, ValueError) as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+    try:
+        apply_project_patch(project_dir=project_dir, sot_path=resolved_sot)
+    except ProjectError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_project_apply_summary(project_dir, resolved_sot)
+
+
 @tags_app.command("list")
 def tags_list(
     sot_path: Annotated[
@@ -1618,6 +1730,13 @@ def build(
             help="Variant id to build",
         ),
     ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            help="Project id or path",
+        ),
+    ] = None,
     formats: Annotated[
         list[str] | None,
         typer.Option(
@@ -1655,11 +1774,50 @@ def build(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
-    try:
-        resolved = resolve_sot_path(sot_path, config)
-    except (FileNotFoundError, ValueError) as exc:
-        typer.echo(f"ERROR: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+    project_spec = None
+    variant_path_override = None
+    run_dir = None
+    if project:
+        config_path = resolve_config_path(config)
+        project_dir = resolve_project_dir(project, config_path)
+        try:
+            project_spec = load_project(project_dir)
+        except ProjectError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        if variant:
+            typer.echo("ERROR: --variant cannot be combined with --project", err=True)
+            raise typer.Exit(code=2)
+        variant_path_override = project_spec.variant_path
+        try:
+            resolved = resolve_active_sot_path(project_spec.sot_path)
+        except SotVersionError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        if sot_path is not None:
+            try:
+                resolved = resolve_sot_path(sot_path, config_path)
+            except (FileNotFoundError, ValueError) as exc:
+                typer.echo(f"ERROR: {exc}", err=True)
+                raise typer.Exit(code=1) from exc
+        runs_root = resolve_runs_path(config_path) / "projects" / project_spec.project_id
+        runs_root.mkdir(parents=True, exist_ok=True)
+        run_dir = create_run_dir(runs_root)
+        try:
+            resolved = prepare_project_sot(
+                project_dir=project_spec.project_dir,
+                sot_path=resolved,
+                run_dir=run_dir,
+            )
+        except ProjectError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+    else:
+        try:
+            resolved = resolve_sot_path(sot_path, config)
+        except (FileNotFoundError, ValueError) as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
 
     errors = validate_sot(resolved)
     if errors:
@@ -1676,6 +1834,8 @@ def build(
             formats=parsed_formats,
             theme=theme,
             style_preset=style_preset,
+            variant_path_override=variant_path_override,
+            run_dir=run_dir,
         )
     except (ValueError, RenderError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -1815,6 +1975,13 @@ def dev_serve(
             help="Variant id to build for preview",
         ),
     ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            help="Project id or path",
+        ),
+    ] = None,
     theme: Annotated[
         str | None,
         typer.Option(
@@ -1843,26 +2010,52 @@ def dev_serve(
             help="Use JSON output for summaries",
         ),
     ] = False,
+    open_mode: Annotated[
+        OpenMode | None,
+        typer.Option(
+            "--open-mode",
+            help="Browser open mode (launchservices, applescript, none)",
+            envvar="CVW_OPEN_MODE",
+        ),
+    ] = None,
+    browser: Annotated[
+        str | None,
+        typer.Option(
+            "--browser",
+            help="Browser app name (macOS) or opener command",
+            envvar="CVW_BROWSER",
+        ),
+    ] = None,
 ) -> None:
     configure_output_mode(plain, json_output)
+    resolved_open_mode = resolve_open_mode(open_mode)
     config_path = resolve_config_path(config)
+    project_spec = None
     try:
-        resolved = resolve_sot_path(sot_path, config_path)
-    except (FileNotFoundError, ValueError, SotVersionError) as exc:
-        typer.echo(f"ERROR: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    try:
-        resolved_variant = variant or resolve_default_variant(config_path)
-        variant_path = resolve_variant_path(resolved_variant, config_path)
-        resolved_variant_obj = load_variant(variant_path)
+        if project:
+            project_dir = resolve_project_dir(project, config_path)
+            project_spec = load_project(project_dir)
+            if variant:
+                typer.echo("ERROR: --variant cannot be combined with --project", err=True)
+                raise typer.Exit(code=2)
+            if sot_path is not None:
+                typer.echo("ERROR: --sot-path cannot be combined with --project", err=True)
+                raise typer.Exit(code=2)
+            resolved_variant_obj = load_variant(project_spec.variant_path)
+            resolved_variant = resolved_variant_obj.id
+            resolved = resolve_active_sot_path(project_spec.sot_path)
+        else:
+            resolved = resolve_sot_path(sot_path, config_path)
+            resolved_variant = variant or resolve_default_variant(config_path)
+            variant_path = resolve_variant_path(resolved_variant, config_path)
+            resolved_variant_obj = load_variant(variant_path)
         resolved_theme = theme or resolved_variant_obj.render_theme or resolve_default_theme(config_path)
         resolved_preset = (
             style_preset
             or resolved_variant_obj.render_style_preset
             or resolve_style_preset(config_path)
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, SotVersionError, ProjectError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
@@ -1877,6 +2070,7 @@ def dev_serve(
         variant_id=resolved_variant,
         theme_id=resolved_theme,
         style_preset=resolved_preset,
+        project_dir=project_spec.project_dir if project_spec else None,
     )
     host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
     try:
@@ -1892,23 +2086,27 @@ def dev_serve(
         except PreviewError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
-        opened, error = _open_in_browser(state.html_path)
-        if error:
-            typer.echo(f"ERROR: {error}", err=True)
-            _print_open_hint(state.html_path)
-            raise typer.Exit(code=2)
-        _print_serve_summary(state.html_path, str(state.html_path), opened, False)
+        open_result = _open_preview_url(state.html_path, resolved_open_mode, browser)
+        _print_serve_summary(
+            state.html_path,
+            str(state.html_path),
+            open_result.opened,
+            False,
+            resolved_open_mode,
+        )
         return
 
     def _on_start(url: str, html_path: Path) -> None:
-        opened, error = _open_in_browser(url)
-        if error:
-            typer.echo(f"ERROR: {error}", err=True)
-            _print_open_hint(url)
-            raise PreviewError(error)
+        open_result = _open_preview_url(url, resolved_open_mode, browser)
         session = new_preview_session(host=host, port=port, url=url, state=controller.state())
         write_preview_session(session, config_path)
-        _print_serve_summary(html_path, url, opened, True)
+        _print_serve_summary(
+            html_path,
+            url,
+            open_result.opened,
+            True,
+            resolved_open_mode,
+        )
 
     try:
         serve_preview(controller=controller, host=host, port=port, on_start=_on_start)
@@ -1984,6 +2182,95 @@ def dev_stop(
             ("host", session.host),
             ("port", session.port),
         ],
+    )
+
+
+@app.command()
+def preview(
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    variant: Annotated[
+        str | None,
+        typer.Option(
+            "--variant",
+            help="Variant id to build for preview",
+        ),
+    ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            help="Project id or path",
+        ),
+    ] = None,
+    theme: Annotated[
+        str | None,
+        typer.Option(
+            "--theme",
+            help="Theme id to use for rendering",
+        ),
+    ] = None,
+    style_preset: Annotated[
+        str | None,
+        typer.Option(
+            "--style-preset",
+            help="Style preset to apply",
+        ),
+    ] = None,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+    open_mode: Annotated[
+        OpenMode | None,
+        typer.Option(
+            "--open-mode",
+            help="Browser open mode (launchservices, applescript, none)",
+            envvar="CVW_OPEN_MODE",
+        ),
+    ] = None,
+    browser: Annotated[
+        str | None,
+        typer.Option(
+            "--browser",
+            help="Browser app name (macOS) or opener command",
+            envvar="CVW_BROWSER",
+        ),
+    ] = None,
+) -> None:
+    dev_serve(
+        sot_path=sot_path,
+        config=config,
+        variant=variant,
+        project=project,
+        theme=theme,
+        style_preset=style_preset,
+        plain=plain,
+        json_output=json_output,
+        open_mode=open_mode,
+        browser=browser,
     )
 
 

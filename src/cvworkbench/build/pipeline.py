@@ -57,11 +57,17 @@ def build_documents(
     formats: list[str] | None,
     theme: str | None = None,
     style_preset: str | None = None,
+    variant_path_override: Path | None = None,
     run_dir: Path | None = None,
 ) -> BuildResult:
-    resolved_variant = variant_id or resolve_default_variant(config_path)
-    variant_path = resolve_variant_path(resolved_variant, config_path)
-    variant = load_variant(variant_path)
+    if variant_path_override is not None:
+        variant_path = variant_path_override
+        variant = load_variant(variant_path)
+        resolved_variant = variant.id
+    else:
+        resolved_variant = variant_id or resolve_default_variant(config_path)
+        variant_path = resolve_variant_path(resolved_variant, config_path)
+        variant = load_variant(variant_path)
     selected_formats = formats or variant.outputs
 
     sot = load_sot(sot_path)
@@ -154,7 +160,7 @@ def build_documents(
     )
 
 
-def _create_run_dir(runs_root: Path) -> Path:
+def create_run_dir(runs_root: Path) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     run_dir = runs_root / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +169,6 @@ def _create_run_dir(runs_root: Path) -> Path:
 
 def _ensure_run_dir(runs_root: Path, run_dir: Path | None) -> Path:
     if run_dir is None:
-        return _create_run_dir(runs_root)
+        return create_run_dir(runs_root)
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir

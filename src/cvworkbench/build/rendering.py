@@ -127,6 +127,8 @@ def _map_format(output_format: str) -> str:
         return "latex"
     if output_format == "html":
         return "html5"
+    if output_format == "ats":
+        return "plain"
     return output_format
 
 

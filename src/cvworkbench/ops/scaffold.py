@@ -90,6 +90,13 @@ def init_project(root: Path) -> InitResult:
     else:
         statuses["registry"] = "exists"
 
+    projects_target = root / "projects"
+    if not projects_target.exists():
+        projects_target.mkdir(parents=True, exist_ok=True)
+        statuses["projects"] = "created"
+    else:
+        statuses["projects"] = "exists"
+
     return InitResult(
         root=root,
         sot_path=sot_target,

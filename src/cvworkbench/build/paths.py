@@ -21,6 +21,9 @@ def filters_dir() -> Path:
 
 
 def output_path(dist_dir: Path, variant: Variant, fmt: str) -> Path:
-    extension = "md" if fmt == "md" else fmt
-    filename = f"{variant.output_name}.{extension}"
+    if fmt == "ats":
+        filename = f"{variant.output_name}.ats.txt"
+    else:
+        extension = "md" if fmt == "md" else fmt
+        filename = f"{variant.output_name}.{extension}"
     return dist_dir / filename

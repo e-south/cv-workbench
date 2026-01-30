@@ -11,9 +11,9 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
+from cvworkbench.ops.patches import PatchError, apply_patch_file
 
 class ApplyError(RuntimeError):
     pass
@@ -29,37 +29,10 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> None:
     if not patch_path.exists():
         raise ApplyError(f"Patch file not found: {patch_path}")
 
-    patch_exe = _which("patch")
-    if patch_exe is None:
-        raise ApplyError("patch is required but was not found in PATH")
-
     if patch_path.read_text().strip() == "":
         return
 
-    _run_patch(patch_exe, sot_path, patch_path, dry_run=True)
-    _run_patch(patch_exe, sot_path, patch_path, dry_run=False)
-
-
-def _run_patch(patch_exe: str, cwd: Path, patch_path: Path, *, dry_run: bool) -> None:
-    args = [patch_exe, "-p0", "-i", str(patch_path)]
-    if dry_run:
-        args.insert(1, "--dry-run")
-    result = subprocess.run(
-        args,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout or "").strip()
-        raise ApplyError(message or "Patch failed")
-
-
-def _which(command: str) -> str | None:
-    result = subprocess.run(
-        ["/usr/bin/which", command], capture_output=True, text=True, check=False
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
+    try:
+        apply_patch_file(patch_path=patch_path, cwd=sot_path)
+    except PatchError as exc:
+        raise ApplyError(str(exc)) from exc

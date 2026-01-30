@@ -29,9 +29,13 @@ from cvworkbench.config import (
     resolve_sot_path,
     resolve_themes_dir,
     resolve_variant_path,
+    resolve_projects_path,
 )
 from cvworkbench.inputs.validation import validate_sot
+from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
+from cvworkbench.variants import load_variant
+from cvworkbench.ops.projects import ProjectError, load_project, prepare_project_sot
 
 
 class PreviewError(RuntimeError):
@@ -43,8 +47,10 @@ class PreviewState:
     variant_id: str
     theme_id: str
     style_preset: str | None
+    output_format: str
+    auto_pdf: bool
     dist_dir: Path
-    html_path: Path
+    output_files: dict[str, Path]
     build_id: int
     last_error: str | None = None
 
@@ -53,6 +59,8 @@ class PreviewState:
 class PreviewCatalog:
     themes: list[str]
     presets: dict[str, list[str]]
+    variants: list[str]
+    projects: list[str]
 
 
 @dataclass
@@ -76,6 +84,9 @@ class PreviewController:
         variant_id: str,
         theme_id: str,
         style_preset: str | None,
+        output_format: str = "html",
+        auto_pdf: bool = True,
+        project_dir: Path | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._sot_base = sot_base
@@ -83,6 +94,10 @@ class PreviewController:
         self._variant_id = variant_id
         self._theme_id = theme_id
         self._style_preset = style_preset
+        self._format = output_format
+        self._auto_pdf = auto_pdf
+        self._project_dir = project_dir
+        self._project_id: str | None = None
         self._catalog = self._load_catalog()
         self._state: PreviewState | None = None
 
@@ -94,19 +109,50 @@ class PreviewController:
     def catalog(self) -> PreviewCatalog:
         return self._catalog
 
-    def rebuild(self, theme_id: str | None = None, style_preset: str | None = None) -> PreviewState:
+    def rebuild(
+        self,
+        variant_id: str | None = None,
+        theme_id: str | None = None,
+        style_preset: str | None = None,
+        output_format: str | None = None,
+        auto_pdf: bool | None = None,
+    ) -> PreviewState:
         with self._lock:
+            if variant_id is not None:
+                self._variant_id = variant_id
             if theme_id is not None:
                 self._theme_id = theme_id
             if style_preset is not None:
                 self._style_preset = style_preset
+            if output_format is not None:
+                self._format = output_format
+            if auto_pdf is not None:
+                self._auto_pdf = auto_pdf
 
             self._catalog = self._load_catalog()
+            self._validate_variant(self._variant_id)
             self._validate_theme_and_preset(self._theme_id, self._style_preset)
+            self._validate_format(self._format)
 
+            variant_path_override = None
             try:
-                sot_path = resolve_sot_path(self._sot_base, self._config_path)
-            except (FileNotFoundError, ValueError) as exc:
+                if self._project_dir is not None:
+                    project_spec = load_project(self._project_dir)
+                    self._project_id = project_spec.project_id
+                    variant_path_override = project_spec.variant_path
+                    self._variant_id = load_variant(project_spec.variant_path).id
+                    sot_path = resolve_active_sot_path(project_spec.sot_path)
+                    run_dir = resolve_runs_path(self._config_path) / "preview" / project_spec.project_id
+                    run_dir.mkdir(parents=True, exist_ok=True)
+                    sot_path = prepare_project_sot(
+                        project_dir=project_spec.project_dir,
+                        sot_path=sot_path,
+                        run_dir=run_dir,
+                    )
+                else:
+                    sot_path = resolve_sot_path(self._sot_base, self._config_path)
+                    run_dir = resolve_runs_path(self._config_path) / "preview" / self._variant_id
+            except (FileNotFoundError, ValueError, ProjectError, SotVersionError) as exc:
                 message = str(exc)
                 self._state = self._state or self._new_state()
                 self._state.last_error = message
@@ -119,15 +165,15 @@ class PreviewController:
                 self._state.last_error = message
                 raise PreviewError(message)
 
-            run_dir = resolve_runs_path(self._config_path) / "preview" / self._variant_id
             try:
                 result = build_documents(
                     sot_path=sot_path,
                     config_path=self._config_path,
                     variant_id=self._variant_id,
-                    formats=["html"],
+                    formats=_resolve_preview_formats(self._format, self._auto_pdf),
                     theme=self._theme_id,
                     style_preset=self._style_preset,
+                    variant_path_override=variant_path_override,
                     run_dir=run_dir,
                 )
             except (ValueError, ThemeError) as exc:
@@ -136,14 +182,18 @@ class PreviewController:
                 self._state.last_error = message
                 raise PreviewError(message) from exc
 
-            html_path = output_path(result.dist_dir, result.variant, "html")
+            output_files = {
+                fmt: output_path(result.dist_dir, result.variant, fmt) for fmt in result.formats
+            }
             build_id = 1 if self._state is None else self._state.build_id + 1
             self._state = PreviewState(
                 variant_id=result.variant.id,
                 theme_id=result.theme_id or self._theme_id,
                 style_preset=result.style_preset or self._style_preset,
+                output_format=self._format,
+                auto_pdf=self._auto_pdf,
                 dist_dir=result.dist_dir,
-                html_path=html_path,
+                output_files=output_files,
                 build_id=build_id,
                 last_error=None,
             )
@@ -160,6 +210,17 @@ class PreviewController:
             paths.append(variant_path)
         except (ValueError, FileNotFoundError):
             pass
+
+        if self._project_dir is not None:
+            project_file = self._project_dir / "project.yaml"
+            if project_file.exists():
+                paths.append(project_file)
+            patch_path = self._project_dir / "proposals" / "patch.yaml"
+            if patch_path.exists():
+                paths.append(patch_path)
+            project_variant = self._project_dir / "proposals" / "variant.yaml"
+            if project_variant.exists():
+                paths.append(project_variant)
 
         try:
             theme_root = resolve_themes_dir(self._config_path)
@@ -184,9 +245,14 @@ class PreviewController:
             "style_preset": state.style_preset,
             "themes": self._catalog.themes,
             "presets": self._catalog.presets,
+            "variants": self._catalog.variants,
+            "projects": self._catalog.projects,
+            "project": self._project_id,
+            "format": state.output_format,
+            "auto_pdf": state.auto_pdf,
             "build_id": state.build_id,
             "last_error": state.last_error,
-            "output_html": str(state.html_path),
+            "outputs": {fmt: path.name for fmt, path in state.output_files.items()},
         }
 
     def _load_catalog(self) -> PreviewCatalog:
@@ -195,6 +261,21 @@ class PreviewController:
             themes = list_themes(themes_dir)
         except (ThemeError, ValueError, FileNotFoundError) as exc:
             raise PreviewError(str(exc)) from exc
+        variant_dir = self._config_path.parent / "variants"
+        if not variant_dir.exists():
+            raise PreviewError(f"Variants directory not found: {variant_dir}")
+        variants: list[str] = []
+        for path in sorted(variant_dir.glob("*.yaml")):
+            variant = load_variant(path)
+            variants.append(variant.id)
+        if not variants:
+            raise PreviewError("No variants found")
+        if self._project_dir is not None:
+            try:
+                project_spec = load_project(self._project_dir)
+            except ProjectError as exc:
+                raise PreviewError(str(exc)) from exc
+            variants = [project_spec.base_variant_id]
         preset_map: dict[str, list[str]] = {}
         for theme in themes:
             styles_dir = theme.root / "styles" / "html"
@@ -202,9 +283,25 @@ class PreviewController:
             if styles_dir.exists():
                 presets = sorted(path.stem for path in styles_dir.glob("*.css"))
             preset_map[theme.id] = presets
+        projects: list[str] = []
+        try:
+            projects_root = resolve_projects_path(self._config_path)
+            if projects_root.exists():
+                projects = sorted([path.name for path in projects_root.iterdir() if path.is_dir()])
+        except (ValueError, FileNotFoundError):
+            projects = []
+        if self._project_dir is not None:
+            try:
+                project_id = load_project(self._project_dir).project_id
+            except ProjectError as exc:
+                raise PreviewError(str(exc)) from exc
+            if project_id not in projects:
+                projects.append(project_id)
         return PreviewCatalog(
             themes=[theme.id for theme in themes],
             presets=preset_map,
+            variants=variants,
+            projects=projects,
         )
 
     def _validate_theme_and_preset(self, theme_id: str, preset: str | None) -> None:
@@ -216,15 +313,25 @@ class PreviewController:
         if preset not in presets:
             raise PreviewError(f"Style preset not found for theme '{theme_id}': {preset}")
 
+    def _validate_variant(self, variant_id: str) -> None:
+        if variant_id not in self._catalog.variants:
+            raise PreviewError(f"Variant not found: {variant_id}")
+
+    def _validate_format(self, output_format: str) -> None:
+        allowed = {"html", "pdf", "md", "ats"}
+        if output_format not in allowed:
+            raise PreviewError(f"Format not supported: {output_format}")
+
     def _new_state(self) -> PreviewState:
         dist_dir = resolve_dist_path(self._config_path) / self._variant_id
-        html_path = dist_dir / "cv.html"
         return PreviewState(
             variant_id=self._variant_id,
             theme_id=self._theme_id,
             style_preset=self._style_preset,
+            output_format=self._format,
+            auto_pdf=self._auto_pdf,
             dist_dir=dist_dir,
-            html_path=html_path,
+            output_files={},
             build_id=0,
             last_error=None,
         )
@@ -345,6 +452,22 @@ def _scan_paths(paths: list[Path]) -> dict[str, float]:
     return entries
 
 
+def _resolve_preview_formats(output_format: str, auto_pdf: bool) -> list[str]:
+    formats = ["html"]
+    if auto_pdf or output_format == "pdf":
+        formats.append("pdf")
+    if output_format in {"md", "ats"}:
+        formats.append(output_format)
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for fmt in formats:
+        if fmt in seen:
+            continue
+        seen.add(fmt)
+        ordered.append(fmt)
+    return ordered
+
+
 def serve_preview(
     *,
     controller: PreviewController,
@@ -358,7 +481,8 @@ def serve_preview(
     server = ThreadingHTTPServer((host, port), _make_handler(controller, state.dist_dir, stop_event))
     preview_url = f"http://{host}:{port}/"
     try:
-        on_start(preview_url, state.html_path)
+        html_path = state.output_files.get("html", state.dist_dir / "cv.html")
+        on_start(preview_url, html_path)
     except Exception:
         server.server_close()
         raise
@@ -409,8 +533,20 @@ def _make_handler(
                 return
             theme = payload.get("theme") or None
             preset = payload.get("style_preset") or None
+            variant = payload.get("variant") or None
+            output_format = payload.get("format") or None
+            auto_pdf = payload.get("auto_pdf")
+            if auto_pdf is not None and not isinstance(auto_pdf, bool):
+                self.send_error(400, "auto_pdf must be a boolean")
+                return
             try:
-                controller.rebuild(theme_id=theme, style_preset=preset)
+                controller.rebuild(
+                    variant_id=variant,
+                    theme_id=theme,
+                    style_preset=preset,
+                    output_format=output_format,
+                    auto_pdf=auto_pdf,
+                )
             except PreviewError as exc:
                 self._send_json({"error": str(exc)}, status=400)
                 return
@@ -451,64 +587,126 @@ def _preview_page_html() -> str:
     <meta charset="utf-8" />
     <title>cv-workbench preview</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; background: #e8edf3; }
-      #overlay {
-        position: fixed;
-        bottom: 16px;
-        right: 16px;
-        background: rgba(20, 26, 34, 0.92);
-        color: #f2f5f7;
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #e8edf3;
         font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        border-radius: 12px;
-        padding: 12px 14px;
-        z-index: 1000;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-        min-width: 260px;
+        color: #0f172a;
       }
-      #overlay strong { display: inline-block; margin-right: 8px; }
-      #overlay small { color: #9fb4c5; display: block; }
-      #overlay kbd {
-        background: #1e2a35;
-        border-radius: 6px;
-        padding: 2px 6px;
-        margin-left: 6px;
-        font: 12px/1.4 "SFMono-Regular", Menlo, monospace;
+      #layout {
+        display: flex;
+        min-height: 100vh;
       }
-      #controls {
+      #sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 280px;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 18px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      #brand {
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: 0.3px;
+      }
+      .section {
         display: grid;
-        grid-template-columns: auto;
-        gap: 8px;
-        margin-top: 10px;
+        gap: 10px;
       }
-      .row {
+      .section-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #94a3b8;
+      }
+      label {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
       }
       select, button {
-        background: #1e2a35;
-        color: #f2f5f7;
-        border: 1px solid #2c3b49;
-        border-radius: 8px;
+        background: #1e293b;
+        color: #e2e8f0;
+        border: 1px solid #334155;
+        border-radius: 10px;
         padding: 6px 8px;
         font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      button { cursor: pointer; }
+      button {
+        cursor: pointer;
+      }
       button:disabled, select:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
       #stop-preview {
-        background: #332224;
-        border-color: #4a2b30;
-        color: #ffb5b5;
+        background: #3f1f2a;
+        border-color: #5a2535;
+        color: #fda4af;
       }
-      #status { color: #7bdff2; }
-      #error { color: #ff9b9b; display: none; margin-top: 6px; }
-      #preview-container {
-        position: absolute;
-        inset: 0;
+      #format-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+      #format-tabs button {
+        padding: 6px 0;
+        font-size: 12px;
+      }
+      #format-tabs button.active {
+        background: #0ea5e9;
+        border-color: #38bdf8;
+        color: #0f172a;
+        font-weight: 600;
+      }
+      .toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .toggle input {
+        accent-color: #38bdf8;
+      }
+      #status {
+        color: #7dd3fc;
+        font-size: 12px;
+      }
+      #error {
+        color: #fda4af;
+        font-size: 12px;
+        display: none;
+      }
+      #run-list {
+        display: grid;
+        gap: 6px;
+        font-size: 12px;
+        color: #cbd5f5;
+      }
+      #shortcuts {
+        margin-top: auto;
+        font-size: 11px;
+        color: #94a3b8;
+      }
+      #shortcuts kbd {
+        background: #1e293b;
+        border-radius: 6px;
+        padding: 2px 6px;
+        margin-left: 6px;
+        font: 11px/1.4 "SFMono-Regular", Menlo, monospace;
+      }
+      #preview-area {
+        margin-left: 280px;
+        width: calc(100% - 280px);
         display: flex;
         justify-content: center;
         align-items: stretch;
@@ -516,7 +714,7 @@ def _preview_page_html() -> str:
         box-sizing: border-box;
       }
       #preview {
-        width: min(860px, 100%);
+        width: min(900px, 100%);
         height: 100%;
         border: none;
         background: #ffffff;
@@ -526,39 +724,93 @@ def _preview_page_html() -> str:
     </style>
   </head>
   <body tabindex="0">
-    <div id="overlay">
-      <div class="row">
-        <div><strong>Preview</strong></div>
-        <button id="stop-preview" type="button">Stop</button>
-      </div>
-      <div id="controls">
-        <label class="row">
-          <span>Theme</span>
-          <select id="theme-select"></select>
-        </label>
-        <label class="row">
-          <span>Preset</span>
-          <select id="preset-select"></select>
-        </label>
-        <button id="rebuild" type="button">Rebuild</button>
-      </div>
-      <small id="status">Listening for changes…</small>
-      <small>Keys: <kbd>t</kbd> theme <kbd>p</kbd> preset <kbd>r</kbd> rebuild <kbd>x</kbd> stop</small>
-      <div id="error"></div>
-    </div>
-    <div id="preview-container">
-      <iframe id="preview" src="/cv.html"></iframe>
+    <div id="layout">
+      <aside id="sidebar">
+        <div id="brand">cv-workbench</div>
+
+        <div class="section">
+          <div class="section-title">Workspace</div>
+          <label>
+            <span>Project</span>
+            <select id="project-select"></select>
+          </label>
+          <label>
+            <span>Variant</span>
+            <select id="variant-select"></select>
+          </label>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Styling</div>
+          <label>
+            <span>Theme</span>
+            <select id="theme-select"></select>
+          </label>
+          <label>
+            <span>Preset</span>
+            <select id="preset-select"></select>
+          </label>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Format</div>
+          <div id="format-tabs">
+            <button data-format="html" type="button">HTML</button>
+            <button data-format="pdf" type="button">PDF</button>
+            <button data-format="md" type="button">MD</button>
+            <button data-format="ats" type="button">ATS</button>
+          </div>
+          <label class="toggle">
+            <span>Auto PDF</span>
+            <input id="auto-pdf-toggle" type="checkbox" />
+          </label>
+        </div>
+
+        <div class="section">
+          <button id="rebuild" type="button">Rebuild</button>
+          <button id="stop-preview" type="button">Stop</button>
+          <div id="status">Listening for changes…</div>
+          <div id="error"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Runs</div>
+          <div id="run-list"></div>
+        </div>
+
+        <div id="shortcuts">
+          Keys:
+          <kbd>t</kbd> theme
+          <kbd>p</kbd> preset
+          <kbd>v</kbd> variant
+          <kbd>f</kbd> format
+          <kbd>r</kbd> rebuild
+          <kbd>x</kbd> stop
+        </div>
+      </aside>
+
+      <main id="preview-area">
+        <iframe id="preview" src="/cv.html"></iframe>
+      </main>
     </div>
     <script>
       const state = { data: null };
+      const history = [];
       let stopped = false;
+      let currentFormat = 'html';
       const iframe = document.getElementById('preview');
+      const projectSelect = document.getElementById('project-select');
+      const variantSelect = document.getElementById('variant-select');
       const themeSelect = document.getElementById('theme-select');
       const presetSelect = document.getElementById('preset-select');
+      const autoPdfToggle = document.getElementById('auto-pdf-toggle');
+      const formatTabs = document.getElementById('format-tabs');
       const rebuildButton = document.getElementById('rebuild');
       const stopButton = document.getElementById('stop-preview');
       const statusEl = document.getElementById('status');
       const errorEl = document.getElementById('error');
+      const runList = document.getElementById('run-list');
+      const formats = ['html', 'pdf', 'md', 'ats'];
 
       async function fetchState() {
         const res = await fetch('/api/state');
@@ -604,23 +856,71 @@ def _preview_page_html() -> str:
       }
 
       function renderControls(data) {
+        syncSelect(projectSelect, data.projects || [], data.project);
+        projectSelect.disabled = true;
+        syncSelect(variantSelect, data.variants || [], data.variant);
         syncSelect(themeSelect, data.themes || [], data.theme);
         const presets = (data.presets && data.presets[themeSelect.value]) || [];
         syncSelect(presetSelect, presets, data.style_preset);
+        autoPdfToggle.checked = !!data.auto_pdf;
+        currentFormat = data.format || currentFormat;
+        updateFormatButtons();
+        updatePreviewSrc();
       }
 
       function setControlsEnabled(enabled) {
+        projectSelect.disabled = !enabled || projectSelect.disabled;
+        variantSelect.disabled = !enabled || variantSelect.disabled;
         themeSelect.disabled = !enabled || themeSelect.disabled;
         presetSelect.disabled = !enabled || presetSelect.disabled;
+        autoPdfToggle.disabled = !enabled;
         rebuildButton.disabled = !enabled;
         stopButton.disabled = !enabled;
       }
 
-      async function requestRender(theme, preset) {
+      function updatePreviewSrc() {
+        if (!state.data || !state.data.outputs) return;
+        const output = state.data.outputs[currentFormat] || state.data.outputs['html'];
+        if (!output) return;
+        const bust = state.data.build_id ? ('?v=' + state.data.build_id) : '';
+        iframe.src = '/' + output + bust;
+      }
+
+      function updateFormatButtons() {
+        const buttons = formatTabs.querySelectorAll('button');
+        buttons.forEach((btn) => {
+          if (btn.dataset.format === currentFormat) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+
+      function recordRun(data) {
+        if (!data || !data.build_id) return;
+        if (history.some((entry) => entry.id === data.build_id)) return;
+        history.unshift({ id: data.build_id, time: new Date().toLocaleTimeString() });
+        if (history.length > 6) history.pop();
+        runList.innerHTML = '';
+        history.forEach((entry) => {
+          const line = document.createElement('div');
+          line.textContent = '#' + entry.id + ' @ ' + entry.time;
+          runList.appendChild(line);
+        });
+      }
+
+      async function requestRender(theme, preset, variant, format, autoPdf) {
         const res = await fetch('/api/render', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ theme, style_preset: preset || null }),
+          body: JSON.stringify({
+            theme,
+            style_preset: preset || null,
+            variant: variant || null,
+            format: format || null,
+            auto_pdf: autoPdf,
+          }),
         });
         const payload = await res.json();
         if (!res.ok) {
@@ -631,7 +931,7 @@ def _preview_page_html() -> str:
         state.data = payload;
         renderControls(payload);
         renderOverlay(payload);
-        iframe.contentWindow.location.reload();
+        recordRun(payload);
       }
 
       async function requestStop() {
@@ -651,11 +951,16 @@ def _preview_page_html() -> str:
         const data = await fetchState();
         if (!data) return;
         if (!state.data || state.data.build_id !== data.build_id) {
-          iframe.contentWindow.location.reload();
+          state.data = data;
+          renderControls(data);
+          renderOverlay(data);
+          recordRun(data);
+          return;
         }
         state.data = data;
         renderControls(data);
         renderOverlay(data);
+        recordRun(data);
       }
 
       async function handleKey(event) {
@@ -669,13 +974,20 @@ def _preview_page_html() -> str:
           const nextPreset = presets.includes(state.data.style_preset)
             ? state.data.style_preset
             : (presets[0] || null);
-          await requestRender(nextTheme, nextPreset);
+          await requestRender(nextTheme, nextPreset, state.data.variant, currentFormat, autoPdfToggle.checked);
         } else if (event.key === 'p') {
           const presets = state.data.presets[state.data.theme] || [];
           const nextPreset = nextOption(presets, state.data.style_preset);
-          await requestRender(state.data.theme, nextPreset);
+          await requestRender(state.data.theme, nextPreset, state.data.variant, currentFormat, autoPdfToggle.checked);
+        } else if (event.key === 'v') {
+          const nextVariant = nextOption(state.data.variants, state.data.variant);
+          await requestRender(state.data.theme, state.data.style_preset, nextVariant, currentFormat, autoPdfToggle.checked);
+        } else if (event.key === 'f') {
+          const nextFormat = nextOption(formats, currentFormat);
+          currentFormat = nextFormat || currentFormat;
+          await requestRender(state.data.theme, state.data.style_preset, state.data.variant, currentFormat, autoPdfToggle.checked);
         } else if (event.key === 'r') {
-          await requestRender(state.data.theme, state.data.style_preset);
+          await requestRender(state.data.theme, state.data.style_preset, state.data.variant, currentFormat, autoPdfToggle.checked);
         } else if (event.key === 'x') {
           await requestStop();
         }
@@ -694,18 +1006,42 @@ def _preview_page_html() -> str:
         if (!state.data) return;
         const presets = state.data.presets[themeSelect.value] || [];
         const nextPreset = presets[0] || null;
-        await requestRender(themeSelect.value, nextPreset);
+        await requestRender(themeSelect.value, nextPreset, state.data.variant, currentFormat, autoPdfToggle.checked);
       });
 
       presetSelect.addEventListener('change', async () => {
         if (!state.data) return;
         const value = presetSelect.value || null;
-        await requestRender(themeSelect.value, value);
+        await requestRender(themeSelect.value, value, state.data.variant, currentFormat, autoPdfToggle.checked);
+      });
+
+      variantSelect.addEventListener('change', async () => {
+        if (!state.data) return;
+        await requestRender(themeSelect.value, presetSelect.value || null, variantSelect.value, currentFormat, autoPdfToggle.checked);
+      });
+
+      projectSelect.addEventListener('change', async () => {
+        return;
+      });
+
+      formatTabs.addEventListener('click', async (event) => {
+        if (!state.data) return;
+        const target = event.target;
+        if (!target || !target.dataset) return;
+        const nextFormat = target.dataset.format;
+        if (!nextFormat) return;
+        currentFormat = nextFormat;
+        await requestRender(themeSelect.value, presetSelect.value || null, state.data.variant, currentFormat, autoPdfToggle.checked);
+      });
+
+      autoPdfToggle.addEventListener('change', async () => {
+        if (!state.data) return;
+        await requestRender(themeSelect.value, presetSelect.value || null, state.data.variant, currentFormat, autoPdfToggle.checked);
       });
 
       rebuildButton.addEventListener('click', async () => {
         if (!state.data) return;
-        await requestRender(themeSelect.value, presetSelect.value || null);
+        await requestRender(themeSelect.value, presetSelect.value || null, state.data.variant, currentFormat, autoPdfToggle.checked);
       });
 
       stopButton.addEventListener('click', async () => {

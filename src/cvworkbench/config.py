@@ -130,6 +130,20 @@ def resolve_reviews_path(config_path: Path) -> Path:
     return resolve_project_root(config_path) / "reviews"
 
 
+def resolve_projects_path(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    paths = config.get("paths", {})
+    if not isinstance(paths, dict):
+        raise ValueError("Config field paths must be a mapping")
+    value = paths.get("projects")
+    if value is None:
+        return resolve_project_root(config_path) / "projects"
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Config field paths.projects must be a string")
+    return _resolve_from_config(config_path, value.strip())
+
+
 def resolve_default_variant(config_path: Path) -> str:
     config_path = resolve_config_path(config_path)
     config = load_config(config_path)

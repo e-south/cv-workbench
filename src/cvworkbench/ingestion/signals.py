@@ -25,6 +25,7 @@ def build_signals(text: str, source: dict[str, Any], limit: int = 25) -> dict[st
         "source": source,
         "word_count": len(tokens),
         "keywords": keywords,
+        "evidence": _build_evidence(text, keywords),
     }
 
 
@@ -36,3 +37,17 @@ def _keywords(tokens: list[str], limit: int) -> list[str]:
     filtered = [token for token in tokens if len(token) >= 3]
     counts = Counter(filtered)
     return [word for word, _ in counts.most_common(limit)]
+
+
+def _build_evidence(text: str, keywords: list[str]) -> dict[str, list[dict[str, int]]]:
+    lowered = text.lower()
+    evidence: dict[str, list[dict[str, int]]] = {}
+    for keyword in keywords:
+        spans: list[dict[str, int]] = []
+        for match in re.finditer(rf"\b{re.escape(keyword)}\b", lowered):
+            spans.append({"start": match.start(), "end": match.end()})
+            if len(spans) >= 3:
+                break
+        if spans:
+            evidence[keyword] = spans
+    return evidence

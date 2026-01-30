@@ -34,13 +34,17 @@ def test_preview_controller_watch_paths() -> None:
 def test_preview_page_html_contains_controls() -> None:
     html = _preview_page_html()
 
+    assert 'id="sidebar"' in html
+    assert 'id="variant-select"' in html
     assert 'id="theme-select"' in html
     assert 'id="preset-select"' in html
+    assert 'id="format-tabs"' in html
+    assert 'id="auto-pdf-toggle"' in html
     assert 'id="stop-preview"' in html
 
 
-def test_preview_page_overlay_bottom_right() -> None:
+def test_preview_page_sidebar_left() -> None:
     html = _preview_page_html()
 
-    assert "bottom: 16px" in html
-    assert "right: 16px" in html
+    assert "left: 0" in html
+    assert "width:" in html

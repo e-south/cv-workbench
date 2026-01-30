@@ -40,18 +40,19 @@ uv run cvw doctor
 uv run cvw quickstart
 uv run cvw validate --sot-path ./sot.sample
 uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf
-uv run cvw dev serve --sot-path ./sot.sample --variant base
+uv run cvw preview --sot-path ./sot.sample --variant base
 ```
 
 Build output locations are printed after `cvw build` completes, and artifacts
 are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
 
-`cvw dev serve` opens a live HTML preview that auto-rebuilds on SoT and theme
-changes. Use the control bar (or shortcuts: `t`, `p`, `r`, `x`) to cycle
-themes/presets and stop the preview. You can also run `cvw dev stop` if you
-closed the tab. If
-your system default browser is misconfigured, `cvw dev serve` will exit with an
-actionable error so you can fix it.
+`cvw preview` opens a live HTML preview that auto-rebuilds on SoT, theme, and
+variant changes (HTML + PDF by default). Use the sidebar controls (or shortcuts:
+`t`, `p`, `v`, `f`, `r`, `x`) to cycle theme/preset/variant/format, rebuild, and
+stop the preview. You can also run `cvw dev stop` if you closed the tab.
+
+If auto-open fails, the server stays up and prints a manual URL. On macOS, you
+can opt into AppleScript automation with `--open-mode applescript`.
 
 Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
 nearest `config/workbench.yaml` by walking up parent directories, so outputs
@@ -66,6 +67,7 @@ See the full walkthrough at `docs/howto/quickstart.md`.
 - `docs/concepts/architecture.md`: design principles and planes
 - `docs/howto/quickstart.md`: step-by-step local setup
 - `docs/howto/ingestion.md`: URL ingestion + registry layout
+- `docs/reference/project-contract.md`: project workspace contract
 - `docs/howto/styling.md`: theme packs and style presets
 - `docs/howto/sot-versions.md`: SoT version packs
 - `docs/howto/performance.md`: profiling guidance

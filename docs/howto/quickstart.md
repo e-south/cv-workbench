@@ -84,15 +84,18 @@ uv run cvw sync --variant base --site /path/to/astro-site
 
 ```bash
 uv run cvw theme list
-uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset modern
-uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset compact
+uv run cvw preview --sot-path ./sot.sample --variant base --style-preset modern
+uv run cvw preview --sot-path ./sot.sample --variant base --style-preset compact
 ```
 
-`cvw dev serve` opens a live HTML preview and auto-rebuilds when you edit SoT
-files, theme templates, or style presets. Use the control bar (or shortcuts):
+`cvw preview` opens a live HTML preview and auto-rebuilds when you edit SoT
+files, theme templates, or style presets. The sidebar controls (or shortcuts)
+let you cycle themes, presets, variants, and formats:
 
 - `t`: cycle theme
 - `p`: cycle style preset
+- `v`: cycle variant
+- `f`: cycle format (HTML/PDF/MD/ATS)
 - `r`: rebuild with current settings
 - `x`: stop the preview server
 
@@ -103,12 +106,11 @@ Closing the browser tab does not stop the preview server. Use the Stop button
 uv run cvw dev stop
 ```
 
-If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
-system default browser (macOS: System Settings → Desktop & Dock → Default web
-browser), then rerun the command. On macOS you may also need to grant
-Automation permission so your terminal app can control the default browser
-(System Settings → Privacy & Security → Automation). For headless usage, set
-`CVW_SKIP_OPEN=1` to skip auto-opening.
+If the browser cannot be opened, the server stays up and prints a manual URL.
+On macOS, the default open mode uses LaunchServices and avoids Automation
+permissions. To use AppleScript automation explicitly, pass
+`--open-mode applescript`. For headless usage, set `CVW_SKIP_OPEN=1` or use
+`--open-mode none`.
 
 To change the host or port:
 
@@ -137,7 +139,16 @@ to keep:
 uv run cvw variant promote --draft ./drafts/<name>
 ```
 
-## 9) Clean generated artifacts
+## 9) Start a project (job tailoring)
+
+```bash
+uv run cvw project new --job-url "https://example.com/job" --variant base
+uv run cvw preview --project <project-id>
+```
+
+Projects keep job context, signals, and proposal drafts without mutating SoT.
+
+## 10) Clean generated artifacts
 
 ```bash
 uv run cvw clean runs --yes

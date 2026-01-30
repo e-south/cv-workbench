@@ -103,6 +103,19 @@ def build_render_plan(
             theme_hash=None,
             style_hash=None,
         )
+    if output_format == "ats":
+        return RenderPlan(
+            output_format=output_format,
+            to="plain",
+            template=None,
+            pdf_engine=None,
+            defaults=[],
+            style_path=None,
+            style_kind=None,
+            theme_id=None,
+            theme_hash=None,
+            style_hash=None,
+        )
 
     if theme is None:
         raise ThemeError(f"Theme is required for output format '{output_format}'")

@@ -33,6 +33,26 @@ The context id is derived from a stable hash of the URL. If the context already
 exists, ingestion fails fast with an error so you can decide whether to delete
 or rename the existing entry.
 
+## Project ingestion (job tailoring)
+
+Use a project when you want job-specific artifacts and proposals:
+
+```bash
+uv run cvw project new --job-url https://example.com/job --variant base
+```
+
+Projects store extracted text and signals by default. Raw HTML is opt-in:
+
+```bash
+uv run cvw project new --job-url https://example.com/job --variant base --store-raw
+```
+
+If you prefer a local file:
+
+```bash
+uv run cvw project new --job-file ./job.txt --variant base
+```
+
 ## Configuration
 
 The registry path and user agent are set in `config/workbench.yaml`:

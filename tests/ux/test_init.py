@@ -166,6 +166,7 @@ def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
     assert (root / "config/variants/base.yaml").exists()
     assert (root / "config/site-sync.yaml").exists()
     assert (root / "registry/contexts").exists()
+    assert (root / "projects").exists()
     assert (root / "build/themes/default/theme.yaml").exists()
 
 

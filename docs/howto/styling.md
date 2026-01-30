@@ -27,14 +27,16 @@ uv run cvw build --sot-path ./sot.sample --variant base --theme default --style-
 ## Quick HTML preview
 
 ```bash
-uv run cvw dev serve --sot-path ./sot.sample --variant base
+uv run cvw preview --sot-path ./sot.sample --variant base
 ```
 
-The live preview auto-rebuilds on SoT/theme changes and exposes a compact
-control bar:
+The live preview auto-rebuilds on SoT/theme changes and exposes a left sidebar
+with fast controls (HTML + PDF auto-build by default):
 
 - `t`: cycle theme
 - `p`: cycle style preset
+- `v`: cycle variant
+- `f`: cycle format
 - `r`: rebuild with current settings
 - `x`: stop the preview server
 
@@ -48,11 +50,9 @@ uv run cvw dev stop
 The HTML output is written to `dist/<variant>/cv.html`. The command will open
 the preview URL in your browser unless `CVW_SKIP_OPEN=1` is set.
 
-If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
-system default browser (macOS: System Settings → Desktop & Dock → Default web
-browser), then rerun. On macOS you may also need to allow Automation for your
-terminal app (System Settings → Privacy & Security → Automation) so it can
-open the browser.
+If the browser cannot be opened, the server stays up and prints a manual URL.
+On macOS, the default open mode uses LaunchServices. To use AppleScript
+automation explicitly, pass `--open-mode applescript`.
 
 ## Theme layout
 
