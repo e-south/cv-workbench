@@ -434,8 +434,27 @@ def _run_osascript_open(app_name: str, target: str) -> tuple[bool, str | None]:
     )
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "").strip()
-        return False, message or "Browser open failed"
+        return False, _format_osascript_error(app_name, message)
     return True, None
+
+
+def _format_osascript_error(app_name: str, message: str) -> str:
+    if not message:
+        return "Browser open failed"
+    lowered = message.lower()
+    if "can't get application" in lowered or "cant get application" in lowered or "(-1728)" in lowered:
+        return (
+            f'Browser automation blocked. Allow your terminal app to control "{app_name}" '
+            "in System Settings > Privacy & Security > Automation, then rerun. "
+            "To skip auto-opening, set CVW_SKIP_OPEN=1."
+        )
+    if "connection invalid" in lowered or "hiservices" in lowered:
+        return (
+            f'Browser automation failed for "{app_name}". Check Automation permissions in '
+            "System Settings > Privacy & Security > Automation, then rerun. "
+            "To skip auto-opening, set CVW_SKIP_OPEN=1."
+        )
+    return message
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
     try:
         resolved = resolve_sot_path(sot_path, config)

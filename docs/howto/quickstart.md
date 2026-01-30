@@ -97,8 +97,10 @@ files, theme templates, or style presets. Use the overlay controls:
 
 If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
 system default browser (macOS: System Settings → Desktop & Dock → Default web
-browser), then rerun the command. For headless usage, set `CVW_SKIP_OPEN=1` to
-skip auto-opening.
+browser), then rerun the command. On macOS you may also need to grant
+Automation permission so your terminal app can control the default browser
+(System Settings → Privacy & Security → Automation). For headless usage, set
+`CVW_SKIP_OPEN=1` to skip auto-opening.
 
 To change the host or port:
 

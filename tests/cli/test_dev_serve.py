@@ -185,3 +185,21 @@ def test_open_in_browser_errors_when_macos_executable_missing(monkeypatch) -> No
     assert opened is False
     assert error is not None
     assert "browser app" in error
+
+
+def test_run_osascript_open_reports_automation_hint(monkeypatch) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    class _Result:
+        returncode = 1
+        stderr = "execution error: Can't get application \"Google Chrome\". (-1728)"
+        stdout = ""
+
+    monkeypatch.setattr(app_module.subprocess, "run", lambda *args, **kwargs: _Result())
+
+    opened, error = app_module._run_osascript_open("Google Chrome", "http://example.test")
+
+    assert opened is False
+    assert error is not None
+    assert "Automation" in error
+    assert "CVW_SKIP_OPEN" in error

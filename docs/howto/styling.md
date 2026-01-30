@@ -42,7 +42,9 @@ the preview URL in your browser unless `CVW_SKIP_OPEN=1` is set.
 
 If the browser cannot be opened, `cvw dev serve` exits with an error. Fix the
 system default browser (macOS: System Settings → Desktop & Dock → Default web
-browser), then rerun.
+browser), then rerun. On macOS you may also need to allow Automation for your
+terminal app (System Settings → Privacy & Security → Automation) so it can
+open the browser.
 
 ## Theme layout
 
