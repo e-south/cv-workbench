@@ -361,11 +361,11 @@ def _preview_page_html() -> str:
     <meta charset="utf-8" />
     <title>cv-workbench preview</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; }
+      html, body { margin: 0; padding: 0; height: 100%; background: #e8edf3; }
       #overlay {
         position: fixed;
-        top: 16px;
-        left: 16px;
+        bottom: 16px;
+        right: 16px;
         background: rgba(20, 26, 34, 0.92);
         color: #f2f5f7;
         font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -416,12 +416,22 @@ def _preview_page_html() -> str:
       }
       #status { color: #7bdff2; }
       #error { color: #ff9b9b; display: none; margin-top: 6px; }
-      #preview {
+      #preview-container {
         position: absolute;
         inset: 0;
-        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      #preview {
+        width: min(860px, 100%);
         height: 100%;
         border: none;
+        background: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 18px 60px rgba(15, 23, 42, 0.18);
       }
     </style>
   </head>
@@ -446,7 +456,9 @@ def _preview_page_html() -> str:
       <small>Keys: <kbd>t</kbd> theme <kbd>p</kbd> preset <kbd>r</kbd> rebuild <kbd>x</kbd> stop</small>
       <div id="error"></div>
     </div>
-    <iframe id="preview" src="/cv.html"></iframe>
+    <div id="preview-container">
+      <iframe id="preview" src="/cv.html"></iframe>
+    </div>
     <script>
       const state = { data: null };
       let stopped = false;

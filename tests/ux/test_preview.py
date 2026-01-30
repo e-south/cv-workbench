@@ -37,3 +37,10 @@ def test_preview_page_html_contains_controls() -> None:
     assert 'id="theme-select"' in html
     assert 'id="preset-select"' in html
     assert 'id="stop-preview"' in html
+
+
+def test_preview_page_overlay_bottom_right() -> None:
+    html = _preview_page_html()
+
+    assert "bottom: 16px" in html
+    assert "right: 16px" in html
