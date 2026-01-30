@@ -55,6 +55,20 @@ def test_config_paths_resolve_relative_to_config_dir(tmp_path: Path) -> None:
     assert resolve_default_theme(config_path) == "default"
 
 
+def test_resolve_sot_path_uses_active_version(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text("paths:\n  sot: ../sot\nvariants:\n  default: base\n")
+
+    versions_root = tmp_path / "sot" / "versions" / "base"
+    versions_root.mkdir(parents=True, exist_ok=True)
+    active_file = tmp_path / "sot" / "ACTIVE"
+    active_file.write_text("base\n")
+
+    assert resolve_sot_path(None, config_path) == versions_root.resolve()
+
+
 def test_resolve_config_path_searches_parent_dirs(tmp_path: Path, monkeypatch) -> None:
     workspace = tmp_path / "workspace"
     config_dir = workspace / "config"

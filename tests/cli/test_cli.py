@@ -47,6 +47,7 @@ def test_cli_help_lists_commands() -> None:
     assert "theme" in output
     assert "variant" in output
     assert "tags" in output
+    assert "sot" in output
 
 
 def test_validate_succeeds_with_sample_sot() -> None:

@@ -22,6 +22,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - theme (list/info)
 - variant (promote)
 - tags (list/lint/stats)
+- sot (list/new/activate/diff)
 
 Each command is single-purpose and composable.
 

@@ -16,6 +16,7 @@ from typing import Any
 
 import yaml
 
+from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 
 def load_config(config_path: Path) -> dict[str, Any]:
     config_path = resolve_config_path(config_path)
@@ -48,7 +49,10 @@ def resolve_config_path(config_path: Path) -> Path:
 
 def resolve_sot_path(sot_path: Path | None, config_path: Path) -> Path:
     if sot_path is not None:
-        return sot_path
+        try:
+            return resolve_active_sot_path(sot_path)
+        except SotVersionError as exc:
+            raise ValueError(str(exc)) from exc
 
     config_path = resolve_config_path(config_path)
     config = load_config(config_path)
@@ -60,7 +64,11 @@ def resolve_sot_path(sot_path: Path | None, config_path: Path) -> Path:
     if not value:
         raise ValueError("Config field paths.sot is required when --sot-path is not set")
 
-    return _resolve_from_config(config_path, value)
+    resolved = _resolve_from_config(config_path, value)
+    try:
+        return resolve_active_sot_path(resolved)
+    except SotVersionError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def resolve_dist_path(config_path: Path) -> Path:
