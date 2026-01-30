@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from cvworkbench.dev.open import OpenMode, open_url
+from cvworkbench.dev.open import OpenMode, open_pdf, open_url
 
 
 class _RunRecorder:
@@ -44,6 +44,19 @@ class _RunSequence:
         if not self._results:
             return False, "No results queued"
         return self._results.pop(0)
+
+
+class _SpawnRecorder:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+        self.returncode = 0
+        self.error: str | None = None
+
+    def __call__(self, args: list[str]) -> Any:
+        self.calls.append(args)
+        if self.returncode != 0:
+            return False, self.error or "spawn failed"
+        return True, None
 
 
 def test_open_url_launchservices_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,3 +158,19 @@ def test_open_url_launchservices_fallback_to_safari(monkeypatch: pytest.MonkeyPa
     assert runner.calls[0][0:2] == ["/usr/bin/open", "file:///tmp/cv.html"]
     assert runner.calls[1][0:3] == ["/usr/bin/open", "-a", "/Applications/TestBrowser.app"]
     assert runner.calls[1][-1] == "file:///tmp/cv.html"
+
+
+def test_open_pdf_uses_quicklook(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _SpawnRecorder()
+    monkeypatch.setattr("cvworkbench.dev.open._spawn_command", runner)
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._run_command", lambda *_args, **_kwargs: (False, "no")
+    )
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+
+    result = open_pdf(Path("/tmp/cv.pdf"))
+
+    assert result.opened is True
+    assert result.note is not None
+    assert "Quick Look" in result.note
+    assert runner.calls == [["/usr/bin/qlmanage", "-p", "/tmp/cv.pdf"]]

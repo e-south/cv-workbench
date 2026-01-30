@@ -45,7 +45,15 @@ from cvworkbench.config import (
     resolve_themes_dir,
     resolve_variant_path,
 )
-from cvworkbench.dev.open import OpenMode, OpenResult, open_url, resolve_open_mode
+from cvworkbench.dev.open import (
+    OpenMode,
+    OpenResult,
+    PreviewViewer,
+    open_pdf,
+    open_url,
+    resolve_open_mode,
+    resolve_preview_viewer,
+)
 from cvworkbench.dev.preview import (
     PreviewController,
     PreviewError,
@@ -302,6 +310,7 @@ def _print_serve_summary(
     opened: bool,
     watching: bool,
     open_mode: OpenMode,
+    viewer: PreviewViewer,
 ) -> None:
     print_summary(
         "serve",
@@ -311,6 +320,7 @@ def _print_serve_summary(
             ("opened_browser", str(opened).lower()),
             ("watching", str(watching).lower()),
             ("open_mode", open_mode.value),
+            ("viewer", viewer.value),
             ("controls", "t=theme p=preset v=variant f=format r=rebuild x=stop"),
         ],
     )
@@ -1236,6 +1246,14 @@ def project_new(
             envvar="CVW_OPEN_MODE",
         ),
     ] = None,
+    viewer: Annotated[
+        PreviewViewer | None,
+        typer.Option(
+            "--viewer",
+            help="Preview viewer (browser, quicklook-pdf, none)",
+            envvar="CVW_PREVIEW_VIEWER",
+        ),
+    ] = None,
     browser: Annotated[
         str | None,
         typer.Option(
@@ -1315,11 +1333,11 @@ def project_new(
         dev_serve(
             sot_path=resolved_sot,
             config=config_path,
-            variant=base_variant,
             theme=None,
             style_preset=None,
             plain=plain,
             json_output=json_output,
+            viewer=viewer,
             open_mode=open_mode,
             browser=browser,
             project=result.project_dir.name,
@@ -2011,6 +2029,14 @@ def dev_serve(
             help="Use JSON output for summaries",
         ),
     ] = False,
+    viewer: Annotated[
+        PreviewViewer | None,
+        typer.Option(
+            "--viewer",
+            help="Preview viewer (browser, quicklook-pdf, none)",
+            envvar="CVW_PREVIEW_VIEWER",
+        ),
+    ] = None,
     open_mode: Annotated[
         OpenMode | None,
         typer.Option(
@@ -2030,6 +2056,13 @@ def dev_serve(
 ) -> None:
     configure_output_mode(plain, json_output)
     resolved_open_mode = resolve_open_mode(open_mode)
+    resolved_viewer = resolve_preview_viewer(viewer)
+    if (
+        resolved_viewer == PreviewViewer.QUICKLOOK_PDF
+        and resolved_open_mode == OpenMode.APPLESCRIPT
+    ):
+        typer.echo("ERROR: quicklook-pdf viewer does not support open-mode applescript", err=True)
+        raise typer.Exit(code=2)
     config_path = resolve_config_path(config)
     project_spec = None
     try:
@@ -2073,6 +2106,7 @@ def dev_serve(
         variant_id=resolved_variant,
         theme_id=resolved_theme,
         style_preset=resolved_preset,
+        auto_pdf=True if resolved_viewer == PreviewViewer.QUICKLOOK_PDF else True,
         project_dir=project_spec.project_dir if project_spec else None,
     )
     host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
@@ -2088,24 +2122,43 @@ def dev_serve(
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         html_path = state.output_files.get("html", state.dist_dir / "cv.html")
-        open_result = _open_preview_url(html_path, resolved_open_mode, browser)
-        if not open_result.opened and open_result.error:
-            typer.echo(f"ERROR: {open_result.error}", err=True)
-            _print_open_hint(html_path)
+        open_result = OpenResult(opened=False, error=None, mode=resolved_open_mode)
+        if resolved_viewer != PreviewViewer.NONE and resolved_open_mode != OpenMode.NONE:
+            if resolved_viewer == PreviewViewer.QUICKLOOK_PDF:
+                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
+                open_result = open_pdf(pdf_path)
+            else:
+                open_result = _open_preview_url(html_path, resolved_open_mode, browser)
+            if not open_result.opened and open_result.error:
+                typer.echo(f"ERROR: {open_result.error}", err=True)
+                _print_open_hint(
+                    pdf_path if resolved_viewer == PreviewViewer.QUICKLOOK_PDF else html_path
+                )
         _print_serve_summary(
             html_path,
             str(html_path),
             open_result.opened,
             False,
             resolved_open_mode,
+            resolved_viewer,
         )
         return
 
     def _on_start(url: str, html_path: Path) -> None:
-        open_result = _open_preview_url(url, resolved_open_mode, browser)
-        if not open_result.opened and open_result.error:
-            typer.echo(f"ERROR: {open_result.error}", err=True)
-            _print_open_hint(url)
+        open_result = OpenResult(opened=False, error=None, mode=resolved_open_mode)
+        if resolved_viewer != PreviewViewer.NONE and resolved_open_mode != OpenMode.NONE:
+            if resolved_viewer == PreviewViewer.QUICKLOOK_PDF:
+                state = controller.state()
+                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
+                open_result = open_pdf(pdf_path)
+                if not open_result.opened and open_result.error:
+                    typer.echo(f"ERROR: {open_result.error}", err=True)
+                    _print_open_hint(pdf_path)
+            else:
+                open_result = _open_preview_url(url, resolved_open_mode, browser)
+                if not open_result.opened and open_result.error:
+                    typer.echo(f"ERROR: {open_result.error}", err=True)
+                    _print_open_hint(url)
         session = new_preview_session(host=host, port=port, url=url, state=controller.state())
         write_preview_session(session, config_path)
         _print_serve_summary(
@@ -2114,6 +2167,7 @@ def dev_serve(
             open_result.opened,
             True,
             resolved_open_mode,
+            resolved_viewer,
         )
 
     try:
@@ -2258,6 +2312,14 @@ def preview(
             help="Use JSON output for summaries",
         ),
     ] = False,
+    viewer: Annotated[
+        PreviewViewer | None,
+        typer.Option(
+            "--viewer",
+            help="Preview viewer (browser, quicklook-pdf, none)",
+            envvar="CVW_PREVIEW_VIEWER",
+        ),
+    ] = None,
     open_mode: Annotated[
         OpenMode | None,
         typer.Option(
@@ -2284,6 +2346,7 @@ def preview(
         style_preset=style_preset,
         plain=plain,
         json_output=json_output,
+        viewer=viewer,
         open_mode=open_mode,
         browser=browser,
     )

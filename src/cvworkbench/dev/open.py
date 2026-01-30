@@ -26,12 +26,30 @@ class OpenMode(str, Enum):
     NONE = "none"
 
 
+class PreviewViewer(str, Enum):
+    BROWSER = "browser"
+    QUICKLOOK_PDF = "quicklook-pdf"
+    NONE = "none"
+
+
 @dataclass(frozen=True)
 class OpenResult:
     opened: bool
     error: str | None
     mode: OpenMode
     note: str | None = None
+
+
+def resolve_preview_viewer(requested: PreviewViewer | None) -> PreviewViewer:
+    if requested is not None:
+        return requested
+    env_value = os.environ.get("CVW_PREVIEW_VIEWER")
+    if env_value:
+        try:
+            return PreviewViewer(env_value)
+        except ValueError as exc:
+            raise ValueError(f"Invalid preview viewer: {env_value}") from exc
+    return PreviewViewer.BROWSER
 
 
 def resolve_open_mode(requested: OpenMode | None) -> OpenMode:
@@ -132,6 +150,46 @@ def open_url(url: str, *, mode: OpenMode, browser: str | None) -> OpenResult:
     return OpenResult(opened=ok, error=error, mode=mode)
 
 
+def open_pdf(path: Path) -> OpenResult:
+    if sys.platform != "darwin":
+        return OpenResult(
+            opened=False,
+            error="quicklook-pdf viewer is only supported on macOS",
+            mode=OpenMode.LAUNCHSERVICES,
+        )
+
+    ok, error = _spawn_command(["/usr/bin/qlmanage", "-p", str(path)])
+    if ok:
+        return OpenResult(
+            opened=True,
+            error=None,
+            mode=OpenMode.LAUNCHSERVICES,
+            note="Opened PDF via Quick Look.",
+        )
+
+    ok, error = _run_command(["/usr/bin/open", str(path)])
+    if ok:
+        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
+    if error and _launchservices_missing_handler(error):
+        fallback_errors: list[str] = []
+        for name, app_path in _macos_pdf_viewer_candidates():
+            ok_fallback, error_fallback = _run_command(
+                ["/usr/bin/open", "-a", str(app_path), str(path)]
+            )
+            if ok_fallback:
+                return OpenResult(
+                    opened=True,
+                    error=None,
+                    mode=OpenMode.LAUNCHSERVICES,
+                    note=f"Opened PDF with {name} ({app_path}).",
+                )
+            if error_fallback:
+                fallback_errors.append(f"{name}: {error_fallback}")
+        if fallback_errors:
+            error = f"{error}; fallback failed: {'; '.join(fallback_errors)}"
+    return OpenResult(opened=False, error=error, mode=OpenMode.LAUNCHSERVICES)
+
+
 def _launchservices_args(url: str, browser: str | None) -> list[str]:
     if browser and browser != "default":
         return ["/usr/bin/open", "-a", browser, url]
@@ -178,6 +236,40 @@ def _macos_browser_candidates() -> list[tuple[str, Path]]:
             [
                 Path("/Applications/Arc.app"),
                 Path.home() / "Applications" / "Arc.app",
+            ],
+        ),
+    ]
+    available: list[tuple[str, Path]] = []
+    for name, paths in candidates:
+        for path in paths:
+            if path.exists():
+                available.append((name, path))
+    return available
+
+
+def _macos_pdf_viewer_candidates() -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, list[Path]]] = [
+        ("Preview", [Path("/System/Applications/Preview.app"), Path("/Applications/Preview.app")]),
+        ("Skim", [Path("/Applications/Skim.app"), Path.home() / "Applications" / "Skim.app"]),
+        (
+            "Adobe Acrobat Reader",
+            [
+                Path("/Applications/Adobe Acrobat Reader.app"),
+                Path.home() / "Applications" / "Adobe Acrobat Reader.app",
+            ],
+        ),
+        (
+            "Adobe Acrobat",
+            [
+                Path("/Applications/Adobe Acrobat.app"),
+                Path.home() / "Applications" / "Adobe Acrobat.app",
+            ],
+        ),
+        (
+            "PDF Expert",
+            [
+                Path("/Applications/PDF Expert.app"),
+                Path.home() / "Applications" / "PDF Expert.app",
             ],
         ),
     ]
@@ -295,6 +387,19 @@ def _run_command(args: list[str]) -> tuple[bool, str | None]:
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "").strip()
         return False, message or "Browser open failed"
+    return True, None
+
+
+def _spawn_command(args: list[str]) -> tuple[bool, str | None]:
+    try:
+        subprocess.Popen(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return False, str(exc)
     return True, None
 
 

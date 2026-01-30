@@ -108,3 +108,66 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
     assert result.exit_code == 1
     assert "Address already in use" in result.stderr
     assert "cvw dev stop" in result.stderr
+
+
+def test_dev_serve_quicklook_opens_pdf(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str | OpenMode | None] = {}
+
+    def _fake_open_pdf(path: Path) -> OpenResult:
+        captured["url"] = str(path)
+        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
+
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    monkeypatch.setattr(app_module, "open_pdf", _fake_open_pdf)
+
+    result = runner.invoke(
+        app,
+        [
+            "dev",
+            "serve",
+            "--viewer",
+            "quicklook-pdf",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--plain",
+        ],
+        env={"CVW_DEV_ONCE": "1"},
+    )
+
+    assert result.exit_code == 0
+    assert str(captured["url"]).endswith("dist/base/cv.pdf")
+
+
+def test_dev_serve_viewer_none_skips_open(monkeypatch) -> None:
+    runner = CliRunner()
+    called = {"count": 0}
+
+    def _fake_open(*_args, **_kwargs) -> OpenResult:
+        called["count"] += 1
+        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
+
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    monkeypatch.setattr(app_module, "_open_url", _fake_open)
+    monkeypatch.setattr(app_module, "open_pdf", _fake_open)
+
+    result = runner.invoke(
+        app,
+        [
+            "dev",
+            "serve",
+            "--viewer",
+            "none",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--plain",
+        ],
+        env={"CVW_DEV_ONCE": "1"},
+    )
+
+    assert result.exit_code == 0
+    assert called["count"] == 0

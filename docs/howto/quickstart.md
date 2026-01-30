@@ -115,6 +115,14 @@ If your system does not have a default handler for `.html` files, pass
 `--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
 When no default handler is available, cvw will attempt to auto-detect an
 installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc).
+If you want a browserless preview, run:
+
+```bash
+uv run cvw preview --viewer quicklook-pdf --sot-path ./sot.sample --variant base
+```
+
+This opens the generated PDF in your default PDF viewer (with automatic
+fallbacks to common PDF apps like Preview/Skim/Acrobat) and keeps the watcher running.
 
 To change the host or port:
 
