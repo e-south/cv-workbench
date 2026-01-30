@@ -48,6 +48,12 @@ open http://127.0.0.1:8765
 open dist/<variant>/cv.html
 ```
 
+To force a specific browser:
+
+```bash
+CVW_BROWSER="open -a /Applications/Google\\ Chrome.app" uv run cvw dev serve --sot-path ./sot.sample --variant base
+```
+
 ## Theme layout
 
 ```

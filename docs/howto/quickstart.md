@@ -103,6 +103,18 @@ open http://127.0.0.1:8765
 open dist/<variant>/cv.html
 ```
 
+If you need a specific browser, set `CVW_BROWSER`:
+
+```bash
+CVW_BROWSER="open -a /Applications/Google\\ Chrome.app" uv run cvw dev serve --sot-path ./sot.sample --variant base
+```
+
+To change the host or port:
+
+```bash
+CVW_DEV_HOST=0.0.0.0 CVW_DEV_PORT=8877 uv run cvw dev serve --sot-path ./sot.sample --variant base
+```
+
 To see a styling change, edit the preset CSS and let the watcher rebuild:
 
 ```bash

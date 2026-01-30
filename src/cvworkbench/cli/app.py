@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -291,6 +292,17 @@ def _open_in_browser(path: str | Path) -> tuple[bool, str | None]:
     if os.environ.get("CVW_SKIP_OPEN") == "1":
         return False, None
     target = str(path)
+    custom = os.environ.get("CVW_BROWSER")
+    if custom:
+        args = shlex.split(custom)
+        if not args:
+            return False, "CVW_BROWSER is empty"
+        try:
+            return _run_open_command([*args, target])
+        except FileNotFoundError as exc:
+            return False, f"Browser opener not found: {exc.filename}"
+        except OSError as exc:
+            return False, str(exc)
 
     try:
         if sys.platform == "darwin":
@@ -316,6 +328,10 @@ def _run_open_command(args: list[str]) -> tuple[bool, str | None]:
         message = (result.stderr or result.stdout or "").strip()
         return False, message or "Browser open failed"
     return True, None
+
+
+def _print_open_hint(target: str | Path) -> None:
+    typer.echo(f"HINT: open {target}", err=True)
 
 
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
@@ -1713,6 +1729,7 @@ def dev_serve(
         opened, error = _open_in_browser(state.html_path)
         if error:
             typer.echo(f"WARN: {error}", err=True)
+            _print_open_hint(state.html_path)
         _print_serve_summary(state.html_path, str(state.html_path), opened, False)
         return
 
@@ -1720,6 +1737,7 @@ def dev_serve(
         opened, error = _open_in_browser(url)
         if error:
             typer.echo(f"WARN: {error}", err=True)
+            _print_open_hint(url)
         _print_serve_summary(html_path, url, opened, True)
 
     try:

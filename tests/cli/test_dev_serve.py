@@ -11,13 +11,13 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 import importlib
+import os
 
 
 def test_dev_serve_builds_html(tmp_path: Path) -> None:
@@ -74,3 +74,38 @@ def test_dev_serve_reports_open_failure(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "opened_browser: false" in result.stdout
     assert "WARN:" in result.stderr
+    assert "HINT: open" in result.stderr
+
+
+def test_open_in_browser_uses_custom_command(monkeypatch) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    captured: dict[str, list[str]] = {}
+
+    def _fake_run(args: list[str]) -> tuple[bool, str | None]:
+        captured["args"] = args
+        return True, None
+
+    monkeypatch.setattr(app_module, "_run_open_command", _fake_run)
+    monkeypatch.setenv("CVW_BROWSER", "echo custom-browser")
+
+    opened, error = app_module._open_in_browser("http://example.test")
+
+    assert opened is True
+    assert error is None
+    assert captured["args"] == ["echo", "custom-browser", "http://example.test"]
+
+
+def test_open_in_browser_reports_missing_custom_command(monkeypatch) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    def _fake_run(_args: list[str]) -> tuple[bool, str | None]:
+        raise FileNotFoundError(2, "No such file or directory", "missing-browser")
+
+    monkeypatch.setattr(app_module, "_run_open_command", _fake_run)
+    monkeypatch.setenv("CVW_BROWSER", "missing-browser")
+
+    opened, error = app_module._open_in_browser("http://example.test")
+
+    assert opened is False
+    assert error is not None
+    assert "missing-browser" in error
