@@ -2139,7 +2139,15 @@ def dev_serve(
                 open_result = open_pdf_in_preview(pdf_path)
                 if not open_result.opened and open_result.error:
                     typer.echo(f"ERROR: {open_result.error}", err=True)
-                    _print_open_hint(pdf_path)
+                    typer.echo("HINT: Preview failed; attempting browser fallback.", err=True)
+                    fallback = _open_preview_url(html_path, resolved_open_mode, browser)
+                    if fallback.opened:
+                        open_result = fallback
+                    elif fallback.error:
+                        typer.echo(f"ERROR: {fallback.error}", err=True)
+                        _print_open_hint(html_path)
+                    else:
+                        _print_open_hint(pdf_path)
             else:
                 open_result = _open_preview_url(html_path, resolved_open_mode, browser)
                 if not open_result.opened and open_result.error:
@@ -2171,7 +2179,15 @@ def dev_serve(
                 open_result = open_pdf_in_preview(pdf_path)
                 if not open_result.opened and open_result.error:
                     typer.echo(f"ERROR: {open_result.error}", err=True)
-                    _print_open_hint(pdf_path)
+                    typer.echo("HINT: Preview failed; attempting browser fallback.", err=True)
+                    fallback = _open_preview_url(url, resolved_open_mode, browser)
+                    if fallback.opened:
+                        open_result = fallback
+                    elif fallback.error:
+                        typer.echo(f"ERROR: {fallback.error}", err=True)
+                        _print_open_hint(url)
+                    else:
+                        _print_open_hint(pdf_path)
             else:
                 open_result = _open_preview_url(url, resolved_open_mode, browser)
                 if not open_result.opened and open_result.error:

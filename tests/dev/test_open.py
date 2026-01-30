@@ -260,7 +260,7 @@ def test_open_pdf_in_preview_uses_preview_app(monkeypatch: pytest.MonkeyPatch) -
     run_open = _RunRecorder()
     monkeypatch.setattr("cvworkbench.dev.open._run_command", run_open)
     monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
-    monkeypatch.setattr("cvworkbench.dev.open._preview_process_running", lambda: True)
+    monkeypatch.setattr("cvworkbench.dev.open._wait_for_preview", lambda *_args, **_kwargs: True)
 
     result = open_pdf_in_preview(Path("/tmp/cv.pdf"))
 
@@ -276,7 +276,7 @@ def test_open_pdf_in_preview_fallbacks_to_exec(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("cvworkbench.dev.open._run_command", run_open)
     monkeypatch.setattr("cvworkbench.dev.open._spawn_command", exec_spawn)
     monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
-    monkeypatch.setattr("cvworkbench.dev.open._preview_process_running", lambda: False)
+    monkeypatch.setattr("cvworkbench.dev.open._wait_for_preview", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         "cvworkbench.dev.open._preview_app_path",
         lambda: Path("/Applications/Preview.app"),

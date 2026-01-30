@@ -226,15 +226,14 @@ def open_pdf_in_preview(path: Path) -> OpenResult:
     errors: list[str] = []
     ok, error = _run_command(["/usr/bin/open", "-a", "Preview", str(path)])
     if ok:
-        time.sleep(0.2)
-        if _preview_process_running():
+        if _wait_for_preview():
             return OpenResult(
                 opened=True,
                 error=None,
                 mode=OpenMode.LAUNCHSERVICES,
                 note="Opened PDF with Preview.",
             )
-        errors.append("Preview did not appear to start")
+        errors.append("Preview did not appear to start (may have crashed)")
     elif error:
         errors.append(error)
 
@@ -244,12 +243,14 @@ def open_pdf_in_preview(path: Path) -> OpenResult:
         if exec_path:
             ok_exec, error_exec = _spawn_command([str(exec_path), str(path)])
             if ok_exec:
-                return OpenResult(
-                    opened=True,
-                    error=None,
-                    mode=OpenMode.LAUNCHSERVICES,
-                    note="Opened PDF with Preview executable.",
-                )
+                if _wait_for_preview():
+                    return OpenResult(
+                        opened=True,
+                        error=None,
+                        mode=OpenMode.LAUNCHSERVICES,
+                        note="Opened PDF with Preview executable.",
+                    )
+                errors.append("Preview executable exited quickly (may have crashed)")
             if error_exec:
                 errors.append(error_exec)
         else:
@@ -539,6 +540,15 @@ def _preview_process_running() -> bool:
     except OSError:
         return False
     return result.returncode == 0
+
+
+def _wait_for_preview(timeout: float = 1.0, interval: float = 0.2) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _preview_process_running():
+            return True
+        time.sleep(interval)
+    return False
 
 
 def _preview_app_path() -> Path | None:
