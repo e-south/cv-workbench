@@ -145,3 +145,40 @@ def test_macos_default_handler_reads_launchservices(monkeypatch, tmp_path: Path)
     handler = app_module._macos_default_handler_for_scheme("http")
 
     assert handler == "com.example.browser"
+
+
+def test_open_in_browser_uses_macos_executable(monkeypatch, tmp_path: Path) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    monkeypatch.setattr(app_module.sys, "platform", "darwin")
+    monkeypatch.delenv("CVW_BROWSER", raising=False)
+    monkeypatch.delenv("CVW_SKIP_OPEN", raising=False)
+    monkeypatch.setattr(app_module, "_macos_default_handler_for_scheme", lambda _: "com.example.browser")
+    monkeypatch.setattr(app_module, "_macos_browser_executable", lambda _: tmp_path / "Browser")
+    captured: dict[str, list[str]] = {}
+
+    def _fake_spawn(args: list[str]) -> tuple[bool, str | None]:
+        captured["args"] = args
+        return True, None
+
+    monkeypatch.setattr(app_module, "_spawn_browser_command", _fake_spawn)
+
+    opened, error = app_module._open_in_browser("http://example.test")
+
+    assert opened is True
+    assert error is None
+    assert captured["args"][0] == str(tmp_path / "Browser")
+
+
+def test_open_in_browser_errors_when_macos_executable_missing(monkeypatch) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    monkeypatch.setattr(app_module.sys, "platform", "darwin")
+    monkeypatch.delenv("CVW_BROWSER", raising=False)
+    monkeypatch.delenv("CVW_SKIP_OPEN", raising=False)
+    monkeypatch.setattr(app_module, "_macos_default_handler_for_scheme", lambda _: "com.example.browser")
+    monkeypatch.setattr(app_module, "_macos_browser_executable", lambda _: None)
+
+    opened, error = app_module._open_in_browser("http://example.test")
+
+    assert opened is False
+    assert error is not None
+    assert "executable" in error

@@ -313,7 +313,10 @@ def _open_in_browser(path: str | Path) -> tuple[bool, str | None]:
                 return False, f"Failed to resolve default web browser: {exc}"
             if not handler:
                 return False, "No default web browser configured for http"
-            return _run_open_command(["/usr/bin/open", target])
+            executable = _macos_browser_executable(handler)
+            if not executable:
+                return False, f"Default web browser executable not found for {handler}"
+            return _spawn_browser_command([str(executable), target])
         if os.name == "nt":
             os.startfile(target)
             return True, None
@@ -369,6 +372,48 @@ def _macos_default_handler_for_scheme(scheme: str) -> str | None:
             continue
         return handler.get("LSHandlerRoleAll") or handler.get("LSHandlerRoleViewer")
     return None
+
+
+def _macos_browser_executable(bundle_id: str) -> Path | None:
+    target = bundle_id.strip().lower()
+    if not target:
+        return None
+    search_roots = [Path("/Applications"), Path.home() / "Applications"]
+    for root in search_roots:
+        if not root.exists():
+            continue
+        for app_path in root.glob("*.app"):
+            plist_path = app_path / "Contents" / "Info.plist"
+            if not plist_path.exists():
+                continue
+            try:
+                with plist_path.open("rb") as handle:
+                    info = plistlib.load(handle)
+            except (OSError, plistlib.InvalidFileException):
+                continue
+            if str(info.get("CFBundleIdentifier", "")).lower() != target:
+                continue
+            executable = info.get("CFBundleExecutable")
+            if not executable:
+                return None
+            candidate = app_path / "Contents" / "MacOS" / executable
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def _spawn_browser_command(args: list[str]) -> tuple[bool, str | None]:
+    try:
+        subprocess.Popen(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError as exc:
+        return False, f"Browser opener not found: {exc.filename}"
+    except OSError as exc:
+        return False, str(exc)
+    return True, None
 
 
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
