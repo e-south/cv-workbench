@@ -36,6 +36,7 @@ def test_cli_help_lists_commands() -> None:
     assert "build" in output
     assert "render" in output
     assert "dev" in output
+    assert "clean" in output
     assert "tailor" in output
     assert "diff" in output
     assert "sync" in output
@@ -44,6 +45,7 @@ def test_cli_help_lists_commands() -> None:
     assert "import-docx" in output
     assert "job" in output
     assert "theme" in output
+    assert "variant" in output
     assert "tags" in output
 
 

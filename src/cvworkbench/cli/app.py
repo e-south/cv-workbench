@@ -25,9 +25,11 @@ from cvworkbench.config import (
     resolve_config_path,
     resolve_default_variant,
     resolve_default_theme,
+    resolve_drafts_path,
     resolve_dist_path,
     resolve_pdf_engine,
     resolve_project_path,
+    resolve_runs_path,
     resolve_sot_path,
     resolve_style_preset,
     resolve_sync_mode,
@@ -42,12 +44,14 @@ from cvworkbench.ingestion.registry import RegistryError, add_url_context
 from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
 from cvworkbench.inputs.validation import validate_sot
 from cvworkbench.ops.apply import ApplyError, apply_draft
+from cvworkbench.ops.clean import CleanError, clean_path
 from cvworkbench.ops.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
 from cvworkbench.ops.doctor import run_doctor
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
 from cvworkbench.ops.syncing import SyncError, SyncResult, sync_site
 from cvworkbench.ops.tailor import DraftPaths, TailorError, tailor_job
+from cvworkbench.ops.variant_promote import PromoteError, promote_variant
 from cvworkbench.themes import ThemeError, build_render_plan, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
 
@@ -56,10 +60,14 @@ job_app = typer.Typer(no_args_is_help=True)
 tags_app = typer.Typer(no_args_is_help=True)
 theme_app = typer.Typer(no_args_is_help=True)
 dev_app = typer.Typer(no_args_is_help=True)
+variant_app = typer.Typer(no_args_is_help=True)
+clean_app = typer.Typer(no_args_is_help=True)
 app.add_typer(job_app, name="job")
 app.add_typer(tags_app, name="tags")
 app.add_typer(theme_app, name="theme")
 app.add_typer(dev_app, name="dev")
+app.add_typer(variant_app, name="variant")
+app.add_typer(clean_app, name="clean")
 
 
 def _not_implemented(command: str) -> None:
@@ -203,6 +211,29 @@ def _print_reviewpack_summary(summary: dict[str, str | Path]) -> None:
 def _print_import_summary(summary: dict[str, str | Path]) -> None:
     rows = [(key, value) for key, value in summary.items()]
     print_summary("import-docx", rows)
+
+
+def _print_variant_promote_summary(variant_id: str, variant_path: Path, status: str) -> None:
+    print_summary(
+        "variant.promote",
+        [
+            ("variant_id", variant_id),
+            ("variant_path", variant_path),
+            ("status", status),
+        ],
+    )
+
+
+def _print_clean_summary(target: str, path: Path, removed: int, status: str) -> None:
+    print_summary(
+        "clean",
+        [
+            ("target", target),
+            ("path", path),
+            ("removed", str(removed)),
+            ("status", status),
+        ],
+    )
 
 
 def _print_theme_list_summary(theme_ids: list[str], default_theme: str) -> None:
@@ -552,6 +583,190 @@ def theme_info(
 
     routes = list(resolved.routes.keys())
     _print_theme_info_summary(resolved.id, resolved.description, routes)
+
+
+@variant_app.command("promote")
+def variant_promote(
+    draft: Annotated[
+        Path,
+        typer.Option(
+            "--draft",
+            help="Draft directory containing variant.yaml",
+        ),
+    ],
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    variant_id: Annotated[
+        str | None,
+        typer.Option(
+            "--id",
+            help="Override the promoted variant id",
+        ),
+    ] = None,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        result = promote_variant(
+            draft_dir=draft,
+            config_path=config,
+            variant_id=variant_id,
+        )
+    except (PromoteError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_variant_promote_summary(result.variant_id, result.variant_path, result.status)
+
+
+@clean_app.command("runs")
+def clean_runs(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of all run artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        path = resolve_runs_path(config)
+        result = clean_path(target="runs", path=path, confirm=yes)
+    except (CleanError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_clean_summary(result.target, result.path, result.removed, result.status)
+    if not yes and result.status == "dry_run":
+        raise typer.Exit(code=2)
+
+
+@clean_app.command("dist")
+def clean_dist(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of all dist artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        path = resolve_dist_path(config)
+        result = clean_path(target="dist", path=path, confirm=yes)
+    except (CleanError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_clean_summary(result.target, result.path, result.removed, result.status)
+    if not yes and result.status == "dry_run":
+        raise typer.Exit(code=2)
+
+
+@clean_app.command("drafts")
+def clean_drafts(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of all draft artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        path = resolve_drafts_path(config)
+        result = clean_path(target="drafts", path=path, confirm=yes)
+    except (CleanError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_clean_summary(result.target, result.path, result.removed, result.status)
+    if not yes and result.status == "dry_run":
+        raise typer.Exit(code=2)
 
 
 @job_app.command("add")

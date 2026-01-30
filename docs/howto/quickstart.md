@@ -84,8 +84,41 @@ uv run cvw sync --variant base --site /path/to/astro-site
 
 ```bash
 uv run cvw theme list
-uv run cvw dev serve --sot-path ./sot.sample --variant base
+uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset modern
+uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset compact
 ```
 
 `cvw dev serve` renders HTML to `dist/<variant>/cv.html` and opens it in your
 browser (set `CVW_SKIP_OPEN=1` to skip opening).
+
+To see a styling change, edit the preset CSS and rerun the command:
+
+```bash
+$EDITOR build/themes/default/styles/html/compact.css
+uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset compact
+```
+
+If you want the PDF to reflect the same preset:
+
+```bash
+uv run cvw build --sot-path ./sot.sample --variant base --format pdf --style-preset compact
+```
+
+## 8) Save variants intentionally
+
+`cvw tailor` writes draft variants to `drafts/`. Promote only the ones you want
+to keep:
+
+```bash
+uv run cvw variant promote --draft ./drafts/<name>
+```
+
+## 9) Clean generated artifacts
+
+```bash
+uv run cvw clean runs --yes
+uv run cvw clean dist --yes
+uv run cvw clean drafts --yes
+```
+
+Clean commands default to a dry run unless `--yes` is provided.

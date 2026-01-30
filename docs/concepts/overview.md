@@ -11,6 +11,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - build
 - render
 - dev serve
+- clean (runs/dist/drafts)
 - tailor
 - diff
 - sync
@@ -19,6 +20,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - import-docx
 - job add
 - theme (list/info)
+- variant (promote)
 - tags (list/lint/stats)
 
 Each command is single-purpose and composable.

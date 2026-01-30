@@ -21,6 +21,7 @@ uv run cvw theme info default
 
 ```bash
 uv run cvw build --sot-path ./sot.sample --variant base --theme default --style-preset modern
+uv run cvw build --sot-path ./sot.sample --variant base --theme default --style-preset compact
 ```
 
 ## Quick HTML preview
@@ -59,6 +60,9 @@ these small and focused so they can be composed cleanly.
 Style presets live under `styles/pdf/` and `styles/html/` and are referenced by
 `--style-preset`. For PDF, presets are included via `--include-in-header`. For
 HTML, presets are attached via `--css`.
+
+Presets are the preferred way to tweak presentation without creating new
+variants. Keep variants focused on content selection.
 
 ## Template guidance
 
