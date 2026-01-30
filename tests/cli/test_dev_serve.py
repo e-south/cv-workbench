@@ -147,26 +147,29 @@ def test_macos_default_handler_reads_launchservices(monkeypatch, tmp_path: Path)
     assert handler == "com.example.browser"
 
 
-def test_open_in_browser_uses_macos_executable(monkeypatch, tmp_path: Path) -> None:
+def test_open_in_browser_uses_macos_app_path(monkeypatch, tmp_path: Path) -> None:
     app_module = importlib.import_module("cvworkbench.cli.app")
     monkeypatch.setattr(app_module.sys, "platform", "darwin")
     monkeypatch.delenv("CVW_BROWSER", raising=False)
     monkeypatch.delenv("CVW_SKIP_OPEN", raising=False)
     monkeypatch.setattr(app_module, "_macos_default_handler_for_scheme", lambda _: "com.example.browser")
-    monkeypatch.setattr(app_module, "_macos_browser_executable", lambda _: tmp_path / "Browser")
-    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(app_module, "_macos_browser_app_path", lambda _: tmp_path / "Browser.app")
+    monkeypatch.setattr(app_module, "_macos_browser_app_name", lambda _: "Browser")
+    captured: dict[str, str] = {}
 
-    def _fake_spawn(args: list[str]) -> tuple[bool, str | None]:
-        captured["args"] = args
+    def _fake_open(name: str, target: str) -> tuple[bool, str | None]:
+        captured["name"] = name
+        captured["target"] = target
         return True, None
 
-    monkeypatch.setattr(app_module, "_spawn_browser_command", _fake_spawn)
+    monkeypatch.setattr(app_module, "_run_osascript_open", _fake_open)
 
     opened, error = app_module._open_in_browser("http://example.test")
 
     assert opened is True
     assert error is None
-    assert captured["args"][0] == str(tmp_path / "Browser")
+    assert captured["name"] == "Browser"
+    assert captured["target"] == "http://example.test"
 
 
 def test_open_in_browser_errors_when_macos_executable_missing(monkeypatch) -> None:
@@ -175,10 +178,10 @@ def test_open_in_browser_errors_when_macos_executable_missing(monkeypatch) -> No
     monkeypatch.delenv("CVW_BROWSER", raising=False)
     monkeypatch.delenv("CVW_SKIP_OPEN", raising=False)
     monkeypatch.setattr(app_module, "_macos_default_handler_for_scheme", lambda _: "com.example.browser")
-    monkeypatch.setattr(app_module, "_macos_browser_executable", lambda _: None)
+    monkeypatch.setattr(app_module, "_macos_browser_app_path", lambda _: None)
 
     opened, error = app_module._open_in_browser("http://example.test")
 
     assert opened is False
     assert error is not None
-    assert "executable" in error
+    assert "browser app" in error

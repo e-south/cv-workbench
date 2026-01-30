@@ -313,10 +313,14 @@ def _open_in_browser(path: str | Path) -> tuple[bool, str | None]:
                 return False, f"Failed to resolve default web browser: {exc}"
             if not handler:
                 return False, "No default web browser configured for http"
-            executable = _macos_browser_executable(handler)
-            if not executable:
-                return False, f"Default web browser executable not found for {handler}"
-            return _spawn_browser_command([str(executable), target])
+            app_path = _macos_browser_app_path(handler)
+            if not app_path:
+                return False, f"Default web browser app not found for {handler}"
+            app_name = _macos_browser_app_name(app_path)
+            if not app_name:
+                return False, f"Default web browser name not found for {handler}"
+            normalized = _normalize_browser_target(target)
+            return _run_osascript_open(app_name, normalized)
         if os.name == "nt":
             os.startfile(target)
             return True, None
@@ -374,7 +378,7 @@ def _macos_default_handler_for_scheme(scheme: str) -> str | None:
     return None
 
 
-def _macos_browser_executable(bundle_id: str) -> Path | None:
+def _macos_browser_app_path(bundle_id: str) -> Path | None:
     target = bundle_id.strip().lower()
     if not target:
         return None
@@ -393,29 +397,45 @@ def _macos_browser_executable(bundle_id: str) -> Path | None:
                 continue
             if str(info.get("CFBundleIdentifier", "")).lower() != target:
                 continue
-            executable = info.get("CFBundleExecutable")
-            if not executable:
-                return None
-            candidate = app_path / "Contents" / "MacOS" / executable
-            if candidate.exists():
-                return candidate
+            return app_path
     return None
 
 
-def _spawn_browser_command(args: list[str]) -> tuple[bool, str | None]:
+def _macos_browser_app_name(app_path: Path) -> str | None:
+    plist_path = app_path / "Contents" / "Info.plist"
+    if not plist_path.exists():
+        return None
     try:
-        subprocess.Popen(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except FileNotFoundError as exc:
-        return False, f"Browser opener not found: {exc.filename}"
-    except OSError as exc:
-        return False, str(exc)
+        with plist_path.open("rb") as handle:
+            info = plistlib.load(handle)
+    except (OSError, plistlib.InvalidFileException):
+        return None
+    return info.get("CFBundleDisplayName") or info.get("CFBundleName")
+
+
+def _normalize_browser_target(target: str) -> str:
+    if target.startswith(("http://", "https://", "file://")):
+        return target
+    path = Path(target)
+    if path.exists():
+        return path.resolve().as_uri()
+    return target
+
+
+def _run_osascript_open(app_name: str, target: str) -> tuple[bool, str | None]:
+    escaped_name = app_name.replace('"', '\\"')
+    escaped_target = target.replace('"', '\\"')
+    script = f'tell application "{escaped_name}" to open location "{escaped_target}"'
+    result = subprocess.run(
+        ["/usr/bin/osascript", "-e", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "").strip()
+        return False, message or "Browser open failed"
     return True, None
-
-
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
     try:
         resolved = resolve_sot_path(sot_path, config)
