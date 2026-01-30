@@ -326,23 +326,19 @@ def _print_open_hint(target: str | Path) -> None:
 def _normalize_open_target(target: str | Path) -> str:
     if isinstance(target, Path):
         if target.exists():
-            return target.resolve().as_uri()
+            return str(target.resolve())
         return str(target)
     if target.startswith(("http://", "https://", "file://")):
         return target
     path = Path(target)
     if path.exists():
-        return path.resolve().as_uri()
+        return str(path.resolve())
     return target
 
 
 def _open_preview_url(url: str | Path, open_mode: OpenMode, browser: str | None) -> OpenResult:
     target = _normalize_open_target(url)
-    result = _open_url(target, mode=open_mode, browser=browser)
-    if result.error:
-        typer.echo(f"WARNING: {result.error}", err=True)
-        _print_open_hint(target)
-    return result
+    return _open_url(target, mode=open_mode, browser=browser)
 
 
 def _post_preview_stop(url: str, timeout: float = 2.0) -> tuple[bool, str | None]:

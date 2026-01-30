@@ -28,5 +28,4 @@ def test_open_preview_warning_on_error(capsys) -> None:
     assert result.opened is False
     assert result.error == "blocked"
     captured = capsys.readouterr()
-    assert "WARNING" in captured.err
-    assert "open http://localhost:1234" in captured.err
+    assert captured.err == ""

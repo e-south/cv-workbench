@@ -90,3 +90,17 @@ def test_open_url_applescript_error(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.opened is False
     assert result.error is not None
     assert "Automation" in result.error
+
+
+def test_open_url_launchservices_missing_handler_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _RunRecorder()
+    runner.returncode = 1
+    runner.stderr = "No application knows how to open URL file:///tmp/cv.html"
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", runner)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+
+    result = open_url("file:///tmp/cv.html", mode=OpenMode.LAUNCHSERVICES, browser=None)
+
+    assert result.opened is False
+    assert result.error is not None
+    assert "--browser" in result.error

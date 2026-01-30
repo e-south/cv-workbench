@@ -50,6 +50,11 @@ def open_url(url: str, *, mode: OpenMode, browser: str | None) -> OpenResult:
         if mode == OpenMode.LAUNCHSERVICES:
             args = _launchservices_args(url, browser)
             ok, error = _run_command(args)
+            if error and "No application knows how to open URL" in error:
+                error = (
+                    f"{error} (hint: set --browser \"Google Chrome\" or configure a "
+                    "default app for .html files in macOS)"
+                )
             return OpenResult(opened=ok, error=error, mode=mode)
         if mode == OpenMode.APPLESCRIPT:
             app_name = browser

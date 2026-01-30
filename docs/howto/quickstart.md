@@ -111,6 +111,8 @@ On macOS, the default open mode uses LaunchServices and avoids Automation
 permissions. To use AppleScript automation explicitly, pass
 `--open-mode applescript`. For headless usage, set `CVW_SKIP_OPEN=1` or use
 `--open-mode none`.
+If your system does not have a default handler for `.html` files, pass
+`--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
 
 To change the host or port:
 
