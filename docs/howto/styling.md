@@ -33,6 +33,12 @@ uv run cvw dev serve --sot-path ./sot.sample --variant base
 The HTML output is written to `dist/<variant>/cv.html`. The command will open it
 in your browser unless `CVW_SKIP_OPEN=1` is set.
 
+If the browser opener fails, open the file manually:
+
+```bash
+open dist/<variant>/cv.html
+```
+
 ## Theme layout
 
 ```

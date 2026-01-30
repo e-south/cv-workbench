@@ -91,6 +91,12 @@ uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset compa
 `cvw dev serve` renders HTML to `dist/<variant>/cv.html` and opens it in your
 browser (set `CVW_SKIP_OPEN=1` to skip opening).
 
+If the browser does not open automatically, open the file directly:
+
+```bash
+open dist/<variant>/cv.html
+```
+
 To see a styling change, edit the preset CSS and rerun the command:
 
 ```bash
