@@ -40,10 +40,14 @@ uv run cvw doctor
 uv run cvw quickstart
 uv run cvw validate --sot-path ./sot.sample
 uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf
+uv run cvw dev serve --sot-path ./sot.sample --variant base
 ```
 
 Build output locations are printed after `cvw build` completes, and artifacts
 are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
+
+`cvw dev serve` opens a live HTML preview that auto-rebuilds on SoT and theme
+changes. Use the overlay controls (`t`, `p`, `r`) to cycle themes/presets.
 
 Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
 nearest `config/workbench.yaml` by walking up parent directories, so outputs
@@ -59,6 +63,7 @@ See the full walkthrough at `docs/howto/quickstart.md`.
 - `docs/howto/quickstart.md`: step-by-step local setup
 - `docs/howto/ingestion.md`: URL ingestion + registry layout
 - `docs/howto/styling.md`: theme packs and style presets
+- `docs/howto/sot-versions.md`: SoT version packs
 - `docs/howto/performance.md`: profiling guidance
 - `docs/reference/site-contract.md`: Astro site sync contract
 - `docs/reference/security.md`: security posture

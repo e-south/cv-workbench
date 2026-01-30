@@ -88,20 +88,25 @@ uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset moder
 uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset compact
 ```
 
-`cvw dev serve` renders HTML to `dist/<variant>/cv.html` and opens it in your
-browser (set `CVW_SKIP_OPEN=1` to skip opening).
+`cvw dev serve` opens a live HTML preview and auto-rebuilds when you edit SoT
+files, theme templates, or style presets. Use the overlay controls:
 
-If the browser does not open automatically, open the file directly:
+- `t`: cycle theme
+- `p`: cycle style preset
+- `r`: rebuild with current settings
+
+If the browser does not open automatically, open the preview URL (printed in
+the CLI summary). As a fallback, open the file directly:
 
 ```bash
+open http://127.0.0.1:8765
 open dist/<variant>/cv.html
 ```
 
-To see a styling change, edit the preset CSS and rerun the command:
+To see a styling change, edit the preset CSS and let the watcher rebuild:
 
 ```bash
 $EDITOR build/themes/default/styles/html/compact.css
-uv run cvw dev serve --sot-path ./sot.sample --variant base --style-preset compact
 ```
 
 If you want the PDF to reflect the same preset:

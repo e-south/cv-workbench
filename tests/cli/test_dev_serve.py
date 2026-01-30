@@ -28,6 +28,7 @@ def test_dev_serve_builds_html(tmp_path: Path) -> None:
     runner = CliRunner()
     env = os.environ.copy()
     env["CVW_SKIP_OPEN"] = "1"
+    env["CVW_DEV_ONCE"] = "1"
 
     result = runner.invoke(
         app,
@@ -67,6 +68,7 @@ def test_dev_serve_reports_open_failure(monkeypatch) -> None:
             "sot.sample",
             "--plain",
         ],
+        env={"CVW_DEV_ONCE": "1"},
     )
 
     assert result.exit_code == 0

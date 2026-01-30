@@ -41,15 +41,25 @@ from cvworkbench.build.explain import ExplainError, explain_item, load_selection
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import BuildResult, build_documents
 from cvworkbench.build.rendering import RenderError, render_document
+from cvworkbench.build.styles import prepare_html_style
+from cvworkbench.dev.preview import PreviewController, PreviewError, serve_preview
 from cvworkbench.ingestion.registry import RegistryError, add_url_context
 from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
 from cvworkbench.inputs.validation import validate_sot
+from cvworkbench.inputs.sot_versions import SotVersionError, resolve_versioned_root
 from cvworkbench.ops.apply import ApplyError, apply_draft
 from cvworkbench.ops.clean import CleanError, clean_path
 from cvworkbench.ops.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
 from cvworkbench.ops.doctor import run_doctor
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
+from cvworkbench.ops.sot_versions import (
+    SotPackError,
+    activate_version,
+    create_version,
+    diff_versions,
+    list_versions,
+)
 from cvworkbench.ops.syncing import SyncError, SyncResult, sync_site
 from cvworkbench.ops.tailor import DraftPaths, TailorError, tailor_job
 from cvworkbench.ops.variant_promote import PromoteError, promote_variant
@@ -63,12 +73,14 @@ theme_app = typer.Typer(no_args_is_help=True)
 dev_app = typer.Typer(no_args_is_help=True)
 variant_app = typer.Typer(no_args_is_help=True)
 clean_app = typer.Typer(no_args_is_help=True)
+sot_app = typer.Typer(no_args_is_help=True)
 app.add_typer(job_app, name="job")
 app.add_typer(tags_app, name="tags")
 app.add_typer(theme_app, name="theme")
 app.add_typer(dev_app, name="dev")
 app.add_typer(variant_app, name="variant")
 app.add_typer(clean_app, name="clean")
+app.add_typer(sot_app, name="sot")
 
 
 def _not_implemented(command: str) -> None:
@@ -257,27 +269,36 @@ def _print_theme_info_summary(theme_id: str, description: str | None, routes: li
     print_summary("theme.info", rows)
 
 
-def _print_serve_summary(output_path: Path, opened: bool) -> None:
+def _print_serve_summary(
+    output_path: Path,
+    preview_url: str,
+    opened: bool,
+    watching: bool,
+) -> None:
     print_summary(
         "serve",
         [
             ("output_html", output_path),
+            ("preview_url", preview_url),
             ("opened_browser", str(opened).lower()),
+            ("watching", str(watching).lower()),
+            ("controls", "t=theme p=preset r=rebuild"),
         ],
     )
 
 
-def _open_in_browser(path: Path) -> tuple[bool, str | None]:
+def _open_in_browser(path: str | Path) -> tuple[bool, str | None]:
     if os.environ.get("CVW_SKIP_OPEN") == "1":
         return False, None
+    target = str(path)
 
     try:
         if sys.platform == "darwin":
-            return _run_open_command(["/usr/bin/open", str(path)])
+            return _run_open_command(["/usr/bin/open", target])
         if os.name == "nt":
-            os.startfile(str(path))
+            os.startfile(target)
             return True, None
-        return _run_open_command(["xdg-open", str(path)])
+        return _run_open_command(["xdg-open", target])
     except FileNotFoundError as exc:
         return False, f"Browser opener not found: {exc.filename}"
     except OSError as exc:
@@ -295,6 +316,15 @@ def _run_open_command(args: list[str]) -> tuple[bool, str | None]:
         message = (result.stderr or result.stdout or "").strip()
         return False, message or "Browser open failed"
     return True, None
+
+
+def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
+    try:
+        resolved = resolve_sot_path(sot_path, config)
+        return resolve_versioned_root(resolved)
+    except (FileNotFoundError, ValueError, SotVersionError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def _print_quickstart_summary(result: BuildResult, sample_sot: Path) -> None:
@@ -799,6 +829,218 @@ def clean_drafts(
     _print_clean_summary(result.target, result.path, result.removed, result.status)
     if not yes and result.status == "dry_run":
         raise typer.Exit(code=2)
+
+
+@sot_app.command("list")
+def sot_list(
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the SoT version pack root",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    root = _resolve_sot_root(sot_path, config)
+    try:
+        state = list_versions(root)
+    except (SotPackError, SotVersionError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    print_summary(
+        "sot.list",
+        [
+            ("root", state.root),
+            ("active", state.active),
+            ("versions", ", ".join(state.versions)),
+        ],
+    )
+
+
+@sot_app.command("new")
+def sot_new(
+    name: Annotated[
+        str,
+        typer.Argument(help="Name for the new SoT version"),
+    ],
+    from_version: Annotated[
+        str | None,
+        typer.Option(
+            "--from",
+            help="Base SoT version to copy from",
+        ),
+    ] = None,
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the SoT version pack root",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    root = _resolve_sot_root(sot_path, config)
+    try:
+        state = list_versions(root)
+        base = from_version or state.active
+        target = create_version(root, name, base)
+    except (SotPackError, SotVersionError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    print_summary(
+        "sot.new",
+        [
+            ("name", name),
+            ("from", base),
+            ("path", target),
+        ],
+    )
+
+
+@sot_app.command("activate")
+def sot_activate(
+    name: Annotated[
+        str,
+        typer.Argument(help="SoT version to activate"),
+    ],
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the SoT version pack root",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    root = _resolve_sot_root(sot_path, config)
+    try:
+        activate_version(root, name)
+    except (SotPackError, SotVersionError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    print_summary(
+        "sot.activate",
+        [
+            ("root", root),
+            ("active", name),
+        ],
+    )
+
+
+@sot_app.command("diff")
+def sot_diff(
+    left: Annotated[
+        str,
+        typer.Argument(help="Left-hand SoT version"),
+    ],
+    right: Annotated[
+        str,
+        typer.Argument(help="Right-hand SoT version"),
+    ],
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the SoT version pack root",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    root = _resolve_sot_root(sot_path, config)
+    try:
+        diff_text = diff_versions(root, left, right)
+    except (SotPackError, SotVersionError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if diff_text:
+        typer.echo(diff_text)
+        return
+    typer.echo("No differences found.")
 
 
 @job_app.command("add")
@@ -1350,6 +1592,8 @@ def render(
                 style_preset=preset,
                 pdf_engine=pdf_engine,
             )
+            if fmt == "html":
+                plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
             render_document(
                 canonical,
                 output_file,
@@ -1419,36 +1663,73 @@ def dev_serve(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
     try:
-        resolved = resolve_sot_path(sot_path, config)
+        resolved = resolve_sot_path(sot_path, config_path)
+    except (FileNotFoundError, ValueError, SotVersionError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        resolved_variant = variant or resolve_default_variant(config_path)
+        variant_path = resolve_variant_path(resolved_variant, config_path)
+        resolved_variant_obj = load_variant(variant_path)
+        resolved_theme = theme or resolved_variant_obj.render_theme or resolve_default_theme(config_path)
+        resolved_preset = (
+            style_preset
+            or resolved_variant_obj.render_style_preset
+            or resolve_style_preset(config_path)
+        )
     except (FileNotFoundError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    errors = validate_sot(resolved)
-    if errors:
-        for error in errors:
-            typer.echo(f"ERROR: {error}", err=True)
-        raise typer.Exit(code=1)
+    try:
+        sot_base = resolve_versioned_root(resolved)
+    except SotVersionError:
+        sot_base = resolved
+
+    controller = PreviewController(
+        sot_base=sot_base,
+        config_path=config_path,
+        variant_id=resolved_variant,
+        theme_id=resolved_theme,
+        style_preset=resolved_preset,
+    )
+    host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
+    try:
+        port = int(os.environ.get("CVW_DEV_PORT", "8765"))
+    except ValueError as exc:
+        typer.echo("ERROR: CVW_DEV_PORT must be an integer", err=True)
+        raise typer.Exit(code=1) from exc
+    preview_url = f"http://{host}:{port}/"
+
+    if os.environ.get("CVW_DEV_ONCE") == "1":
+        try:
+            state = controller.build_once()
+        except PreviewError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        opened, error = _open_in_browser(state.html_path)
+        if error:
+            typer.echo(f"WARN: {error}", err=True)
+        _print_serve_summary(state.html_path, str(state.html_path), opened, False)
+        return
+
+    def _on_start(url: str, html_path: Path) -> None:
+        opened, error = _open_in_browser(url)
+        if error:
+            typer.echo(f"WARN: {error}", err=True)
+        _print_serve_summary(html_path, url, opened, True)
 
     try:
-        result = build_documents(
-            sot_path=resolved,
-            config_path=config,
-            variant_id=variant,
-            formats=["html"],
-            theme=theme,
-            style_preset=style_preset,
-        )
-    except (ValueError, RenderError) as exc:
+        serve_preview(controller=controller, host=host, port=port, on_start=_on_start)
+    except PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-
-    html_path = output_path(result.dist_dir, result.variant, "html")
-    opened, error = _open_in_browser(html_path)
-    if error:
-        typer.echo(f"WARN: {error}", err=True)
-    _print_serve_summary(html_path, opened)
+    except OSError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()

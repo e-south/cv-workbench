@@ -32,6 +32,7 @@ from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.rendering import render_document
 from cvworkbench.build.resume import build_resume, write_resume
 from cvworkbench.build.selection import build_selection
+from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.inputs.sot import load_sot
 from cvworkbench.themes import ThemeError, build_render_plan, hash_theme, resolve_theme
 from cvworkbench.variants import Variant, load_variant
@@ -56,6 +57,7 @@ def build_documents(
     formats: list[str] | None,
     theme: str | None = None,
     style_preset: str | None = None,
+    run_dir: Path | None = None,
 ) -> BuildResult:
     resolved_variant = variant_id or resolve_default_variant(config_path)
     variant_path = resolve_variant_path(resolved_variant, config_path)
@@ -66,7 +68,7 @@ def build_documents(
     markdown = build_markdown(sot, variant)
     selection = build_selection(sot, variant)
 
-    run_dir = _create_run_dir(resolve_runs_path(config_path))
+    run_dir = _ensure_run_dir(resolve_runs_path(config_path), run_dir)
     canonical_path = run_dir / "canonical.md"
     canonical_path.write_text(markdown)
     resume_payload = build_resume(sot)
@@ -101,6 +103,8 @@ def build_documents(
             style_preset=preset,
             pdf_engine=pdf_engine,
         )
+        if fmt == "html":
+            plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
         render_document(
             canonical_path,
             output_file,
@@ -153,5 +157,12 @@ def build_documents(
 def _create_run_dir(runs_root: Path) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     run_dir = runs_root / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def _ensure_run_dir(runs_root: Path, run_dir: Path | None) -> Path:
+    if run_dir is None:
+        return _create_run_dir(runs_root)
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir

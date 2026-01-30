@@ -30,12 +30,21 @@ uv run cvw build --sot-path ./sot.sample --variant base --theme default --style-
 uv run cvw dev serve --sot-path ./sot.sample --variant base
 ```
 
-The HTML output is written to `dist/<variant>/cv.html`. The command will open it
-in your browser unless `CVW_SKIP_OPEN=1` is set.
+The live preview auto-rebuilds on SoT/theme changes and exposes lightweight
+overlay controls:
 
-If the browser opener fails, open the file manually:
+- `t`: cycle theme
+- `p`: cycle style preset
+- `r`: rebuild with current settings
+
+The HTML output is written to `dist/<variant>/cv.html`. The command will open
+the preview URL in your browser unless `CVW_SKIP_OPEN=1` is set.
+
+If the browser opener fails, open the preview URL (printed by the CLI). As a
+fallback, open the file manually:
 
 ```bash
+open http://127.0.0.1:8765
 open dist/<variant>/cv.html
 ```
 
