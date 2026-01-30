@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import json
 import os
-import webbrowser
+import subprocess
+import sys
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -266,6 +267,36 @@ def _print_serve_summary(output_path: Path, opened: bool) -> None:
     )
 
 
+def _open_in_browser(path: Path) -> tuple[bool, str | None]:
+    if os.environ.get("CVW_SKIP_OPEN") == "1":
+        return False, None
+
+    try:
+        if sys.platform == "darwin":
+            return _run_open_command(["/usr/bin/open", str(path)])
+        if os.name == "nt":
+            os.startfile(str(path))
+            return True, None
+        return _run_open_command(["xdg-open", str(path)])
+    except FileNotFoundError as exc:
+        return False, f"Browser opener not found: {exc.filename}"
+    except OSError as exc:
+        return False, str(exc)
+
+
+def _run_open_command(args: list[str]) -> tuple[bool, str | None]:
+    result = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "").strip()
+        return False, message or "Browser open failed"
+    return True, None
+
+
 def _print_quickstart_summary(result: BuildResult, sample_sot: Path) -> None:
     rows: list[tuple[str, str | Path]] = [
         ("sample_sot", sample_sot),
@@ -279,6 +310,7 @@ def _print_quickstart_summary(result: BuildResult, sample_sot: Path) -> None:
         rows.append(("theme", result.theme_id))
     if result.style_preset:
         rows.append(("style_preset", result.style_preset))
+    rows.append(("next_step", "cvw dev serve --sot-path ./sot.sample --variant base"))
     for fmt in result.formats:
         rows.append((f"output_{fmt}", output_path(result.dist_dir, result.variant, fmt)))
     print_summary("quickstart", rows)
@@ -1413,9 +1445,9 @@ def dev_serve(
         raise typer.Exit(code=1) from exc
 
     html_path = output_path(result.dist_dir, result.variant, "html")
-    opened = False
-    if os.environ.get("CVW_SKIP_OPEN") != "1":
-        opened = webbrowser.open(html_path.as_uri())
+    opened, error = _open_in_browser(html_path)
+    if error:
+        typer.echo(f"WARN: {error}", err=True)
     _print_serve_summary(html_path, opened)
 
 
