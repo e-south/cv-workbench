@@ -113,6 +113,8 @@ permissions. To use AppleScript automation explicitly, pass
 `--open-mode none`.
 If your system does not have a default handler for `.html` files, pass
 `--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
+When no default handler is available, cvw will attempt to auto-detect an
+installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc).
 
 To change the host or port:
 

@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -33,10 +34,27 @@ class _RunRecorder:
         return True, None
 
 
+class _RunSequence:
+    def __init__(self, results: list[tuple[bool, str | None]]) -> None:
+        self.calls: list[list[str]] = []
+        self._results = results
+
+    def __call__(self, args: list[str], **kwargs: Any) -> Any:
+        self.calls.append(args)
+        if not self._results:
+            return False, "No results queued"
+        return self._results.pop(0)
+
+
 def test_open_url_launchservices_default(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _RunRecorder()
     monkeypatch.setattr("cvworkbench.dev.open._run_command", runner)
     monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._macos_browser_candidates",
+        lambda: [("TestBrowser", Path("/Applications/TestBrowser.app"))],
+    )
+    monkeypatch.setattr("cvworkbench.dev.open._macos_default_handler_for_scheme", lambda _: None)
 
     result = open_url("http://localhost:8000", mode=OpenMode.LAUNCHSERVICES, browser=None)
 
@@ -102,3 +120,28 @@ def test_open_url_launchservices_missing_handler_hint(monkeypatch: pytest.Monkey
     assert result.opened is False
     assert result.error is not None
     assert "--browser" in result.error
+
+
+def test_open_url_launchservices_fallback_to_safari(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _RunSequence(
+        [
+            (False, "No application knows how to open URL file:///tmp/cv.html"),
+            (True, None),
+        ]
+    )
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", runner)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.setattr(
+        "cvworkbench.dev.open._macos_browser_candidates",
+        lambda: [("TestBrowser", Path("/Applications/TestBrowser.app"))],
+    )
+
+    result = open_url("file:///tmp/cv.html", mode=OpenMode.LAUNCHSERVICES, browser=None)
+
+    assert result.opened is True
+    assert result.error is None
+    assert result.note is not None
+    assert "detected browser" in result.note
+    assert runner.calls[0][0:2] == ["/usr/bin/open", "file:///tmp/cv.html"]
+    assert runner.calls[1][0:3] == ["/usr/bin/open", "-a", "/Applications/TestBrowser.app"]
+    assert runner.calls[1][-1] == "file:///tmp/cv.html"

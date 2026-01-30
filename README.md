@@ -55,6 +55,8 @@ If auto-open fails, the server stays up and prints a manual URL. On macOS, you
 can opt into AppleScript automation with `--open-mode applescript`.
 If your system does not have a default handler for `.html` files, pass
 `--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
+When no default handler is available, cvw will also attempt to auto-detect an
+installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc) and open it for you.
 
 Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
 nearest `config/workbench.yaml` by walking up parent directories, so outputs

@@ -31,6 +31,7 @@ class OpenResult:
     opened: bool
     error: str | None
     mode: OpenMode
+    note: str | None = None
 
 
 def resolve_open_mode(requested: OpenMode | None) -> OpenMode:
@@ -49,12 +50,50 @@ def open_url(url: str, *, mode: OpenMode, browser: str | None) -> OpenResult:
         if mode == OpenMode.LAUNCHSERVICES:
             args = _launchservices_args(url, browser)
             ok, error = _run_command(args)
+            if ok:
+                return OpenResult(opened=True, error=None, mode=mode)
+            if not browser and error and _launchservices_missing_handler(error):
+                fallback_errors: list[str] = []
+                for name, path in _macos_browser_candidates():
+                    args = ["/usr/bin/open", "-a", str(path), url]
+                    ok_fallback, error_fallback = _run_command(args)
+                    if ok_fallback:
+                        return OpenResult(
+                            opened=True,
+                            error=None,
+                            mode=mode,
+                            note=(
+                                f"Opened with detected browser {name} ({path}) after "
+                                "LaunchServices failed to resolve a handler."
+                            ),
+                        )
+                    if error_fallback:
+                        fallback_errors.append(f"{name}: {error_fallback}")
+                default_bundle = _macos_default_handler_for_scheme("http")
+                if default_bundle:
+                    ok_fallback, error_fallback = _run_command(
+                        _launchservices_bundle_args(url, default_bundle)
+                    )
+                    if ok_fallback:
+                        return OpenResult(
+                            opened=True,
+                            error=None,
+                            mode=mode,
+                            note=(
+                                f"Opened with fallback bundle {default_bundle} after "
+                                "LaunchServices failed to resolve a handler."
+                            ),
+                        )
+                    if error_fallback:
+                        fallback_errors.append(f"bundle {default_bundle}: {error_fallback}")
+                if fallback_errors:
+                    error = f"{error}; fallback failed: {'; '.join(fallback_errors)}"
             if error and "No application knows how to open URL" in error:
                 error = (
                     f'{error} (hint: set --browser "Google Chrome" or configure a '
                     "default app for .html files in macOS)"
                 )
-            return OpenResult(opened=ok, error=error, mode=mode)
+            return OpenResult(opened=False, error=error, mode=mode)
         if mode == OpenMode.APPLESCRIPT:
             app_name = browser
             if not app_name or app_name == "default":
@@ -97,6 +136,67 @@ def _launchservices_args(url: str, browser: str | None) -> list[str]:
     if browser and browser != "default":
         return ["/usr/bin/open", "-a", browser, url]
     return ["/usr/bin/open", url]
+
+
+def _launchservices_bundle_args(url: str, bundle_id: str) -> list[str]:
+    return ["/usr/bin/open", "-b", bundle_id, url]
+
+
+def _macos_browser_candidates() -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, list[Path]]] = [
+        ("Safari", [Path("/System/Applications/Safari.app"), Path("/Applications/Safari.app")]),
+        (
+            "Google Chrome",
+            [
+                Path("/Applications/Google Chrome.app"),
+                Path.home() / "Applications" / "Google Chrome.app",
+            ],
+        ),
+        (
+            "Microsoft Edge",
+            [
+                Path("/Applications/Microsoft Edge.app"),
+                Path.home() / "Applications" / "Microsoft Edge.app",
+            ],
+        ),
+        (
+            "Brave Browser",
+            [
+                Path("/Applications/Brave Browser.app"),
+                Path.home() / "Applications" / "Brave Browser.app",
+            ],
+        ),
+        (
+            "Firefox",
+            [
+                Path("/Applications/Firefox.app"),
+                Path.home() / "Applications" / "Firefox.app",
+            ],
+        ),
+        (
+            "Arc",
+            [
+                Path("/Applications/Arc.app"),
+                Path.home() / "Applications" / "Arc.app",
+            ],
+        ),
+    ]
+    available: list[tuple[str, Path]] = []
+    for name, paths in candidates:
+        for path in paths:
+            if path.exists():
+                available.append((name, path))
+    return available
+
+
+def _launchservices_missing_handler(message: str) -> bool:
+    lowered = message.lower()
+    return (
+        "no application knows how to open url" in lowered
+        or "klsnoexecutabler" in lowered
+        or "klsnoexecutableerr" in lowered
+        or "klexecutableincorrectformat" in lowered
+    )
 
 
 def _applescript_args(app_name: str, url: str) -> list[str]:

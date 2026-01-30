@@ -338,7 +338,10 @@ def _normalize_open_target(target: str | Path) -> str:
 
 def _open_preview_url(url: str | Path, open_mode: OpenMode, browser: str | None) -> OpenResult:
     target = _normalize_open_target(url)
-    return _open_url(target, mode=open_mode, browser=browser)
+    result = _open_url(target, mode=open_mode, browser=browser)
+    if result.note:
+        typer.echo(f"NOTICE: {result.note}", err=True)
+    return result
 
 
 def _post_preview_stop(url: str, timeout: float = 2.0) -> tuple[bool, str | None]:
