@@ -92,6 +92,22 @@ def open_url(url: str, *, mode: OpenMode, browser: str | None) -> OpenResult:
                         )
                     if error_fallback:
                         fallback_errors.append(f"{name}: {error_fallback}")
+                default_browser = _resolve_default_browser_name("http")
+                if default_browser:
+                    args = _applescript_args(default_browser, url)
+                    ok_fallback, error_fallback = _run_command(args)
+                    if ok_fallback:
+                        return OpenResult(
+                            opened=True,
+                            error=None,
+                            mode=mode,
+                            note=(
+                                f"Opened with AppleScript in {default_browser} after "
+                                "LaunchServices failed."
+                            ),
+                        )
+                    if error_fallback:
+                        fallback_errors.append(f"applescript {default_browser}: {error_fallback}")
                 default_bundle = _macos_default_handler_for_scheme("http")
                 if default_bundle:
                     ok_fallback, error_fallback = _run_command(

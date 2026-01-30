@@ -192,6 +192,25 @@ def test_open_url_launchservices_fallback_on_executable_format(monkeypatch: pyte
     assert runner.calls[1][0:3] == ["/usr/bin/open", "-a", "TestBrowser"]
 
 
+def test_open_url_launchservices_fallback_to_applescript(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _RunSequence(
+        [
+            (False, "No application knows how to open URL file:///tmp/cv.html"),
+            (True, None),
+        ]
+    )
+    monkeypatch.setattr("cvworkbench.dev.open._run_command", runner)
+    monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
+    monkeypatch.setattr("cvworkbench.dev.open._resolve_default_browser_name", lambda _s: "Chrome")
+    monkeypatch.setattr("cvworkbench.dev.open._macos_browser_candidates", lambda: [])
+
+    result = open_url("file:///tmp/cv.html", mode=OpenMode.LAUNCHSERVICES, browser=None)
+
+    assert result.opened is True
+    assert result.note is not None
+    assert runner.calls[1][0:2] == ["/usr/bin/osascript", "-e"]
+
+
 def test_open_pdf_uses_quicklook(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _SpawnRecorder()
     monkeypatch.setattr("cvworkbench.dev.open._spawn_quicklook", runner)
