@@ -331,7 +331,14 @@ _open_url = open_url
 
 
 def _print_open_hint(target: str | Path) -> None:
-    typer.echo(f"HINT: open {target}", err=True)
+    resolved = _normalize_open_target(target)
+    typer.echo(f"HINT: open {resolved}", err=True)
+    payload = {
+        "kind": "url" if str(resolved).startswith(("http://", "https://", "file://")) else "file",
+        "target": str(resolved),
+        "command": f'open "{resolved}"',
+    }
+    typer.echo(f"CVW_OPEN_REQUEST: {json.dumps(payload, sort_keys=True)}", err=True)
 
 
 def _normalize_open_target(target: str | Path) -> str:

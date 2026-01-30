@@ -84,6 +84,7 @@ def test_dev_serve_reports_open_failure(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "ERROR: open failed" in result.stderr
     assert "HINT: open" in result.stderr
+    assert "CVW_OPEN_REQUEST" in result.stderr
 
 
 def test_dev_serve_reports_port_in_use(monkeypatch) -> None:

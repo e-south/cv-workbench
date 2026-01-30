@@ -126,6 +126,8 @@ uv run cvw preview --viewer preview-app --sot-path ./sot.sample --variant base
 
 This opens the generated PDF in Preview and keeps the watcher running. You can
 also use `--viewer quicklook-pdf` to use Quick Look instead.
+If auto-open fails, cvw prints a `CVW_OPEN_REQUEST: {...}` line that you can
+hand to a local opener (or Codex rules) to open the artifact outside a sandbox.
 
 To change the host or port:
 

@@ -61,6 +61,9 @@ installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc) and open it for you.
 If you want a browserless preview, use `--viewer preview-app` (default on macOS)
 or `--viewer quicklook-pdf` to open the generated PDF in a PDF viewer while the
 server continues watching for changes.
+When auto-open fails, cvw also prints a machine-readable
+`CVW_OPEN_REQUEST: {...}` line so external automation (e.g., Codex rules) can
+launch the preview outside the sandbox.
 
 Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
 nearest `config/workbench.yaml` by walking up parent directories, so outputs
