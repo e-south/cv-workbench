@@ -16,21 +16,26 @@ import os
 import signal
 import socket
 import time
-from urllib import error as url_error
-from urllib import request as url_request
 from pathlib import Path
 from typing import Annotated, Any
+from urllib import error as url_error
+from urllib import request as url_request
 
 import typer
 
+from cvworkbench.build.explain import ExplainError, explain_item, load_selection
+from cvworkbench.build.paths import filters_dir, output_path
+from cvworkbench.build.pipeline import BuildResult, build_documents, create_run_dir
+from cvworkbench.build.rendering import RenderError, render_document
+from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, resolve_selection_path
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.config import (
     resolve_config_path,
-    resolve_default_variant,
     resolve_default_theme,
-    resolve_drafts_path,
+    resolve_default_variant,
     resolve_dist_path,
+    resolve_drafts_path,
     resolve_pdf_engine,
     resolve_project_path,
     resolve_runs_path,
@@ -40,11 +45,7 @@ from cvworkbench.config import (
     resolve_themes_dir,
     resolve_variant_path,
 )
-from cvworkbench.build.explain import ExplainError, explain_item, load_selection
-from cvworkbench.build.paths import filters_dir, output_path
-from cvworkbench.build.pipeline import BuildResult, build_documents, create_run_dir
-from cvworkbench.build.rendering import RenderError, render_document
-from cvworkbench.build.styles import prepare_html_style
+from cvworkbench.dev.open import OpenMode, OpenResult, open_url, resolve_open_mode
 from cvworkbench.dev.preview import (
     PreviewController,
     PreviewError,
@@ -54,21 +55,18 @@ from cvworkbench.dev.preview import (
     serve_preview,
     write_preview_session,
 )
-from cvworkbench.dev.open import OpenMode, OpenResult, open_url, resolve_open_mode
 from cvworkbench.ingestion.registry import RegistryError, add_url_context
-from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
-from cvworkbench.inputs.validation import validate_sot
 from cvworkbench.inputs.sot_versions import (
     SotVersionError,
     resolve_active_sot_path,
     resolve_versioned_root,
 )
+from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
+from cvworkbench.inputs.validation import validate_sot
 from cvworkbench.ops.apply import ApplyError, apply_draft
 from cvworkbench.ops.clean import CleanError, clean_path
 from cvworkbench.ops.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
 from cvworkbench.ops.doctor import run_doctor
-from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
-from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
 from cvworkbench.ops.projects import (
     ProjectError,
     apply_project_patch,
@@ -78,6 +76,8 @@ from cvworkbench.ops.projects import (
     prepare_project_sot,
     resolve_project_dir,
 )
+from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
+from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
 from cvworkbench.ops.sot_versions import (
     SotPackError,
     activate_version,
@@ -371,6 +371,8 @@ def _terminate_preview_process(pid: int) -> None:
     except OSError as exc:
         typer.echo(f"ERROR: Failed to terminate preview process: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
     try:
         resolved = resolve_sot_path(sot_path, config)
@@ -2045,7 +2047,9 @@ def dev_serve(
             resolved_variant = variant or resolve_default_variant(config_path)
             variant_path = resolve_variant_path(resolved_variant, config_path)
             resolved_variant_obj = load_variant(variant_path)
-        resolved_theme = theme or resolved_variant_obj.render_theme or resolve_default_theme(config_path)
+        resolved_theme = (
+            theme or resolved_variant_obj.render_theme or resolve_default_theme(config_path)
+        )
         resolved_preset = (
             style_preset
             or resolved_variant_obj.render_style_preset
@@ -2074,8 +2078,6 @@ def dev_serve(
     except ValueError as exc:
         typer.echo("ERROR: CVW_DEV_PORT must be an integer", err=True)
         raise typer.Exit(code=1) from exc
-    preview_url = f"http://{host}:{port}/"
-
     if os.environ.get("CVW_DEV_ONCE") == "1":
         try:
             state = controller.build_once()

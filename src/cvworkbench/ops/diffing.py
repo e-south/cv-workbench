@@ -16,13 +16,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.build.paths import output_path
 from cvworkbench.config import (
     resolve_default_variant,
     resolve_dist_path,
     resolve_runs_path,
     resolve_variant_path,
 )
-from cvworkbench.build.paths import output_path
 from cvworkbench.variants import load_variant
 
 

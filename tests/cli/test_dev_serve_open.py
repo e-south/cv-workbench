@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import importlib
+
 from cvworkbench.dev.open import OpenMode, OpenResult
 
 

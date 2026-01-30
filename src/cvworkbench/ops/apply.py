@@ -15,6 +15,7 @@ from pathlib import Path
 
 from cvworkbench.ops.patches import PatchError, apply_patch_file
 
+
 class ApplyError(RuntimeError):
     pass
 

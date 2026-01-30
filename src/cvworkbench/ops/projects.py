@@ -223,9 +223,7 @@ def _write_project_files(
                 "source": job_source,
                 "extracted_path": str(_relative_path(project_dir, extracted_path)),
                 "extracted_hash": _hash_file(extracted_path),
-                "raw_path": str(_relative_path(project_dir, raw_path))
-                if raw_path
-                else None,
+                "raw_path": str(_relative_path(project_dir, raw_path)) if raw_path else None,
             },
             "signals": {
                 "path": str(_relative_path(project_dir, signals_path)),
@@ -329,6 +327,7 @@ def prepare_project_sot(*, project_dir: Path, sot_path: Path, run_dir: Path) -> 
     except PatchError as exc:
         raise ProjectError(str(exc)) from exc
     return target_dir
+
 
 def _prepare_project_dir(project_id: str, config_path: Path) -> Path:
     projects_root = resolve_projects_path(config_path)

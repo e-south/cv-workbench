@@ -11,6 +11,5 @@ Module Author(s): Eric J. South
 
 from cvworkbench.cli import app
 
-
 if __name__ == "__main__":
     app()

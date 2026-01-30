@@ -58,9 +58,7 @@ def test_open_url_launchservices_browser(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert result.opened is True
     assert result.error is None
-    assert runner.calls == [
-        ["/usr/bin/open", "-a", "Google Chrome", "http://localhost:8000"]
-    ]
+    assert runner.calls == [["/usr/bin/open", "-a", "Google Chrome", "http://localhost:8000"]]
 
 
 def test_open_url_none_skips(monkeypatch: pytest.MonkeyPatch) -> None:

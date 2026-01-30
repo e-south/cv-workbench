@@ -17,8 +17,8 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 import cvworkbench.ingestion.registry as registry_module
-from cvworkbench.ingestion.ingest import ExtractResult
 from cvworkbench.cli import app
+from cvworkbench.ingestion.ingest import ExtractResult
 
 
 def _write_minimal_config(root: Path) -> Path:
@@ -64,7 +64,7 @@ def test_job_add_creates_registry_entry(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(registry_module, "fetch_and_extract", fake_extract)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [

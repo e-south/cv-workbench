@@ -11,31 +11,30 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import os
 import threading
-import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
-from cvworkbench.build.pipeline import build_documents
 from cvworkbench.build.paths import filters_dir, output_path
+from cvworkbench.build.pipeline import build_documents
 from cvworkbench.config import (
     resolve_dist_path,
+    resolve_projects_path,
     resolve_runs_path,
     resolve_sot_path,
     resolve_themes_dir,
     resolve_variant_path,
-    resolve_projects_path,
 )
-from cvworkbench.inputs.validation import validate_sot
 from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
+from cvworkbench.inputs.validation import validate_sot
+from cvworkbench.ops.projects import ProjectError, load_project, prepare_project_sot
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
-from cvworkbench.ops.projects import ProjectError, load_project, prepare_project_sot
 
 
 class PreviewError(RuntimeError):
@@ -142,7 +141,9 @@ class PreviewController:
                     variant_path_override = project_spec.variant_path
                     self._variant_id = load_variant(project_spec.variant_path).id
                     sot_path = resolve_active_sot_path(project_spec.sot_path)
-                    run_dir = resolve_runs_path(self._config_path) / "preview" / project_spec.project_id
+                    run_dir = (
+                        resolve_runs_path(self._config_path) / "preview" / project_spec.project_id
+                    )
                     run_dir.mkdir(parents=True, exist_ok=True)
                     sot_path = prepare_project_sot(
                         project_dir=project_spec.project_dir,
@@ -478,7 +479,9 @@ def serve_preview(
     controller.build_once()
     state = controller.state()
     stop_event = threading.Event()
-    server = ThreadingHTTPServer((host, port), _make_handler(controller, state.dist_dir, stop_event))
+    server = ThreadingHTTPServer(
+        (host, port), _make_handler(controller, state.dist_dir, stop_event)
+    )
     preview_url = f"http://{host}:{port}/"
     try:
         html_path = state.output_files.get("html", state.dist_dir / "cv.html")

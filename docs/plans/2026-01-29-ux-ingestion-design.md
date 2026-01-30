@@ -84,4 +84,3 @@ Commands fail fast with actionable messages:
 - Ingestion unit tests (mocked fetch/extract)
 - Signals and strategy generation tests
 - Publish gating enforcement tests
-

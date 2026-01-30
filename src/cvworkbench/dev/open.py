@@ -11,14 +11,13 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 import os
-from pathlib import Path
 import shlex
 import subprocess
 import sys
-from typing import Any
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
 
 
 class OpenMode(str, Enum):
@@ -52,7 +51,7 @@ def open_url(url: str, *, mode: OpenMode, browser: str | None) -> OpenResult:
             ok, error = _run_command(args)
             if error and "No application knows how to open URL" in error:
                 error = (
-                    f"{error} (hint: set --browser \"Google Chrome\" or configure a "
+                    f'{error} (hint: set --browser "Google Chrome" or configure a '
                     "default app for .html files in macOS)"
                 )
             return OpenResult(opened=ok, error=error, mode=mode)
@@ -210,7 +209,11 @@ def _format_applescript_error(app_name: str, message: str) -> str:
             "You can also use --open-mode launchservices. "
             'Open settings: open "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"'
         )
-    if "(-1728)" in lowered or "can't get application" in lowered or "cant get application" in lowered:
+    if (
+        "(-1728)" in lowered
+        or "can't get application" in lowered
+        or "cant get application" in lowered
+    ):
         return (
             f'Browser automation failed for "{app_name}". Check Automation permissions '
             "and retry, or use --open-mode launchservices."

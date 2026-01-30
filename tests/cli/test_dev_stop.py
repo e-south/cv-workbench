@@ -11,13 +11,13 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
-import importlib
 
 
 def _write_config(config_path: Path, runs_path: Path) -> None:

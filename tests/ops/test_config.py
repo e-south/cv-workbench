@@ -15,9 +15,9 @@ from pathlib import Path
 
 from cvworkbench.config import (
     resolve_config_path,
+    resolve_default_theme,
     resolve_dist_path,
     resolve_drafts_path,
-    resolve_default_theme,
     resolve_project_path,
     resolve_project_root,
     resolve_reviews_path,

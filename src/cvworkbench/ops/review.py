@@ -11,26 +11,23 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import hashlib
+import json
 import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
-import json
-
+from cvworkbench.build.paths import output_path
 from cvworkbench.config import (
-    resolve_drafts_path,
     resolve_dist_path,
+    resolve_drafts_path,
     resolve_project_path,
     resolve_reviews_path,
     resolve_runs_path,
     resolve_variant_path,
 )
-from cvworkbench.build.paths import output_path
-from cvworkbench.variants import Variant, load_variant
+from cvworkbench.variants import load_variant
 
 
 class ReviewError(RuntimeError):

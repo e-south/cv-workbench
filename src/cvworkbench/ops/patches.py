@@ -11,8 +11,8 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 
 class PatchError(RuntimeError):

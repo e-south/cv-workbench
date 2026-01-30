@@ -11,10 +11,10 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import difflib
-from pathlib import Path
 import shutil
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 import yaml

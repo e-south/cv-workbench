@@ -11,14 +11,14 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import importlib
+import os
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 from cvworkbench.dev.open import OpenMode, OpenResult
-import importlib
-import os
 
 
 def test_dev_serve_builds_html(tmp_path: Path) -> None:

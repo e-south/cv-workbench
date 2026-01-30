@@ -18,6 +18,7 @@ import yaml
 
 from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 
+
 def load_config(config_path: Path) -> dict[str, Any]:
     config_path = resolve_config_path(config_path)
     if not config_path.exists():

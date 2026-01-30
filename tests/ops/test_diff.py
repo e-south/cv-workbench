@@ -17,7 +17,6 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
-
 from tests.utils import strip_ansi
 
 

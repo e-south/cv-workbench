@@ -11,21 +11,11 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from cvworkbench.config import (
-    resolve_default_variant,
-    resolve_dist_path,
-    resolve_default_theme,
-    resolve_pdf_engine,
-    resolve_runs_path,
-    resolve_style_preset,
-    resolve_themes_dir,
-    resolve_variant_path,
-)
 from cvworkbench.build.manifest import build_manifest, write_manifest
 from cvworkbench.build.markdown import build_markdown
 from cvworkbench.build.paths import filters_dir, output_path
@@ -33,6 +23,16 @@ from cvworkbench.build.rendering import render_document
 from cvworkbench.build.resume import build_resume, write_resume
 from cvworkbench.build.selection import build_selection
 from cvworkbench.build.styles import prepare_html_style
+from cvworkbench.config import (
+    resolve_default_theme,
+    resolve_default_variant,
+    resolve_dist_path,
+    resolve_pdf_engine,
+    resolve_runs_path,
+    resolve_style_preset,
+    resolve_themes_dir,
+    resolve_variant_path,
+)
 from cvworkbench.inputs.sot import load_sot
 from cvworkbench.themes import ThemeError, build_render_plan, hash_theme, resolve_theme
 from cvworkbench.variants import Variant, load_variant

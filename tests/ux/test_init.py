@@ -15,8 +15,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from cvworkbench.ops.scaffold import resolve_template_root
 from cvworkbench.cli import app
+from cvworkbench.ops.scaffold import resolve_template_root
 
 
 def _write_minimal_sot_sample(root: Path) -> None:
