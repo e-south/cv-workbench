@@ -23,3 +23,13 @@ def test_build_signals_includes_evidence() -> None:
     assert isinstance(spans, list)
     assert spans[0]["start"] == 0
     assert spans[0]["end"] == 6
+
+
+def test_build_signals_filters_stopwords() -> None:
+    signals = build_signals("Leadership and reliability with focus", source={}, limit=10)
+
+    keywords = signals.get("keywords", [])
+    assert "leadership" in keywords
+    assert "reliability" in keywords
+    assert "and" not in keywords
+    assert "with" not in keywords

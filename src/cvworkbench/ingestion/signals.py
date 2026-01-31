@@ -34,9 +34,70 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _keywords(tokens: list[str], limit: int) -> list[str]:
-    filtered = [token for token in tokens if len(token) >= 3]
+    filtered = [
+        token
+        for token in tokens
+        if len(token) >= 3 and token not in _STOPWORDS
+    ]
     counts = Counter(filtered)
     return [word for word, _ in counts.most_common(limit)]
+
+
+_STOPWORDS = {
+    "about",
+    "after",
+    "against",
+    "also",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "because",
+    "been",
+    "before",
+    "being",
+    "but",
+    "can",
+    "could",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "how",
+    "into",
+    "its",
+    "more",
+    "most",
+    "not",
+    "our",
+    "out",
+    "over",
+    "that",
+    "the",
+    "their",
+    "them",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "to",
+    "under",
+    "upon",
+    "was",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "will",
+    "with",
+    "your",
+}
 
 
 def _build_evidence(text: str, keywords: list[str]) -> dict[str, list[dict[str, int]]]:

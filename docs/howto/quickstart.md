@@ -184,4 +184,12 @@ uv run cvw clean registry --yes
 uv run cvw clean projects --yes
 ```
 
+To prune old runs without wiping everything, keep the most recent runs per
+variant:
+
+```bash
+uv run cvw runs gc --keep-latest 2
+uv run cvw runs gc --keep-latest 2 --yes
+```
+
 Clean commands default to a dry run unless `--yes` is provided.

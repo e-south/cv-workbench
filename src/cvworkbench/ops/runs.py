@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +39,24 @@ class RunInfo:
 class RunCatalog:
     runs: list[RunInfo]
     invalid: list[Path]
+
+
+@dataclass(frozen=True)
+class RunGcCandidate:
+    run_id: str
+    path: Path
+    variant_id: str
+    created_at: datetime
+    reason: str
+
+
+@dataclass(frozen=True)
+class RunGcSummary:
+    candidates: list[RunGcCandidate]
+    kept: list[RunInfo]
+    invalid: list[Path]
+    removed: int
+    status: str
 
 
 def scan_runs(config_path: Path, *, strict: bool = False) -> RunCatalog:
@@ -130,6 +149,93 @@ def _parse_manifest(manifest_path: Path, run_id: str) -> RunInfo:
     )
 
 
+def gc_runs(
+    *,
+    config_path: Path,
+    keep_latest: int,
+    keep: list[str],
+    include_invalid: bool,
+    confirm: bool,
+) -> RunGcSummary:
+    if keep_latest < 0:
+        raise RunError("keep_latest must be zero or greater")
+
+    catalog = scan_runs(config_path, strict=False)
+    runs = catalog.runs
+    invalid = catalog.invalid
+
+    if not runs and not invalid:
+        return RunGcSummary(candidates=[], kept=[], invalid=[], removed=0, status="empty")
+
+    run_by_id = {run.run_id: run for run in runs}
+    invalid_ids = {path.name for path in invalid}
+    unknown = [run_id for run_id in keep if run_id not in run_by_id and run_id not in invalid_ids]
+    if unknown:
+        raise RunError(f"Unknown run id(s): {', '.join(sorted(unknown))}")
+
+    keep_ids = set(keep)
+    kept_by_latest: set[str] = set()
+    grouped = group_runs_by_variant(runs)
+    for variant_runs in grouped.values():
+        for run in variant_runs[:keep_latest]:
+            kept_by_latest.add(run.run_id)
+
+    kept_ids = keep_ids | kept_by_latest
+    candidates: list[RunGcCandidate] = []
+    kept: list[RunInfo] = []
+    for run in runs:
+        if run.run_id in kept_ids:
+            kept.append(run)
+            continue
+        candidates.append(
+            RunGcCandidate(
+                run_id=run.run_id,
+                path=run.path,
+                variant_id=run.variant_id,
+                created_at=run.created_at,
+                reason="older_than_keep_latest",
+            )
+        )
+
+    candidates.sort(key=lambda item: item.created_at)
+    kept.sort(key=lambda item: item.created_at, reverse=True)
+
+    if not candidates and not (include_invalid and invalid):
+        return RunGcSummary(
+            candidates=[],
+            kept=kept,
+            invalid=invalid,
+            removed=0,
+            status="empty",
+        )
+
+    if not confirm:
+        return RunGcSummary(
+            candidates=candidates,
+            kept=kept,
+            invalid=invalid,
+            removed=0,
+            status="dry_run",
+        )
+
+    removed = 0
+    for candidate in candidates:
+        _remove_run_dir(candidate.path)
+        removed += 1
+    if include_invalid:
+        for path in invalid:
+            _remove_run_dir(path)
+            removed += 1
+
+    return RunGcSummary(
+        candidates=candidates,
+        kept=kept,
+        invalid=invalid,
+        removed=removed,
+        status="cleaned",
+    )
+
+
 def _parse_timestamp(value: object, manifest_path: Path) -> datetime:
     if not isinstance(value, str) or not value.strip():
         raise RunError(f"Run manifest missing created_at: {manifest_path}")
@@ -170,3 +276,11 @@ def _require_outputs(value: object, manifest_path: Path) -> dict[str, str]:
             raise RunError(f"Run manifest invalid outputs: {manifest_path}")
         outputs[key] = item.strip()
     return outputs
+
+
+def _remove_run_dir(path: Path) -> None:
+    if not path.exists():
+        raise RunError(f"Run path not found: {path}")
+    if not path.is_dir():
+        raise RunError(f"Run path is not a directory: {path}")
+    shutil.rmtree(path)

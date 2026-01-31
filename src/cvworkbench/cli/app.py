@@ -83,7 +83,15 @@ from cvworkbench.ops.projects import (
     prepare_project_sot,
     resolve_project_dir,
 )
-from cvworkbench.ops.runs import RunInfo, latest_runs_by_variant, resolve_latest_run
+from cvworkbench.ops.runs import (
+    RunError,
+    RunGcCandidate,
+    RunGcSummary,
+    RunInfo,
+    gc_runs,
+    latest_runs_by_variant,
+    resolve_latest_run,
+)
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
 from cvworkbench.ops.sot_versions import (
@@ -116,11 +124,13 @@ variant_app = typer.Typer(no_args_is_help=True)
 clean_app = typer.Typer(no_args_is_help=True)
 sot_app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True)
+runs_app = typer.Typer(no_args_is_help=True)
 app.add_typer(job_app, name="job")
 app.add_typer(tags_app, name="tags")
 app.add_typer(theme_app, name="theme")
 app.add_typer(dev_app, name="dev")
 app.add_typer(variant_app, name="variant")
+app.add_typer(runs_app, name="runs")
 app.add_typer(clean_app, name="clean")
 app.add_typer(sot_app, name="sot")
 app.add_typer(project_app, name="project")
@@ -491,6 +501,29 @@ def _run_payload(run: RunInfo) -> dict[str, Any]:
         "formats": run.formats,
         "outputs": run.outputs,
     }
+
+
+def _run_gc_candidate_payload(candidate: RunGcCandidate) -> dict[str, Any]:
+    return {
+        "run_id": candidate.run_id,
+        "path": str(candidate.path),
+        "variant_id": candidate.variant_id,
+        "created_at": candidate.created_at.isoformat(),
+        "reason": candidate.reason,
+    }
+
+
+def _print_runs_gc_summary(summary: RunGcSummary, keep_latest: int, include_invalid: bool) -> None:
+    rows = [
+        ("status", summary.status),
+        ("keep_latest", str(keep_latest)),
+        ("candidates", str(len(summary.candidates))),
+        ("kept", str(len(summary.kept))),
+        ("removed", str(summary.removed)),
+    ]
+    if include_invalid:
+        rows.append(("invalid", str(len(summary.invalid))))
+    print_summary("runs.gc", rows)
 
 
 def _runs_summary_line(latest: dict[str, list[dict[str, Any]]]) -> str:
@@ -1685,6 +1718,96 @@ def variant_gc(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _print_variant_gc_summary(summary.expired, summary.kept_pruned, summary.status)
+    if not yes and summary.status == "dry_run":
+        raise typer.Exit(code=2)
+
+
+@runs_app.command("gc")
+def runs_gc(
+    keep_latest: Annotated[
+        int,
+        typer.Option(
+            "--keep-latest",
+            min=0,
+            help="Number of most recent runs to keep per variant",
+        ),
+    ] = 1,
+    keep: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--keep",
+            help="Run id to keep (repeatable)",
+        ),
+    ] = None,
+    include_invalid: Annotated[
+        bool,
+        typer.Option(
+            "--include-invalid",
+            help="Delete invalid run directories as part of GC",
+        ),
+    ] = False,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of selected run artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        config_path = resolve_config_path(config)
+        runs_root = resolve_runs_path(config_path)
+        _require_var_path("runs", runs_root, config_path)
+        summary = gc_runs(
+            config_path=config_path,
+            keep_latest=keep_latest,
+            keep=keep or [],
+            include_invalid=include_invalid,
+            confirm=yes,
+        )
+    except (RunError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    payload = {
+        "command": "runs.gc",
+        "keep_latest": keep_latest,
+        "keep": keep or [],
+        "include_invalid": include_invalid,
+        "status": summary.status,
+        "removed": summary.removed,
+        "candidates": [_run_gc_candidate_payload(candidate) for candidate in summary.candidates],
+        "kept": [_run_payload(run) for run in summary.kept],
+        "invalid": [str(path) for path in summary.invalid],
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        _print_runs_gc_summary(summary, keep_latest, include_invalid)
+
     if not yes and summary.status == "dry_run":
         raise typer.Exit(code=2)
 

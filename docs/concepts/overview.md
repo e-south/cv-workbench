@@ -23,6 +23,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - job add
 - theme (list/info)
 - variant (list/promote/keep/discard/gc/inbox)
+- runs (gc)
 - project (new/guide/apply)
 - tags (list/lint/stats)
 - sot (list/new/activate/diff)
