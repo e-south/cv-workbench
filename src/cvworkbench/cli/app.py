@@ -16,12 +16,14 @@ import os
 import signal
 import socket
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 from urllib import error as url_error
 from urllib import request as url_request
 
 import typer
+import yaml
 
 from cvworkbench.build.explain import ExplainError, explain_item, load_selection
 from cvworkbench.build.paths import filters_dir, output_path
@@ -47,6 +49,7 @@ from cvworkbench.config import (
     resolve_sync_mode,
     resolve_themes_dir,
     resolve_var_root,
+    resolve_variant_ttl_days,
     resolve_variant_path,
 )
 from cvworkbench.dev.preview import (
@@ -59,6 +62,7 @@ from cvworkbench.dev.preview import (
     write_preview_session,
 )
 from cvworkbench.ingestion.registry import RegistryError, add_url_context
+from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES, load_sot
 from cvworkbench.inputs.sot_versions import (
     SotVersionError,
     resolve_active_sot_path,
@@ -79,6 +83,7 @@ from cvworkbench.ops.projects import (
     prepare_project_sot,
     resolve_project_dir,
 )
+from cvworkbench.ops.runs import RunInfo, latest_runs_by_variant, resolve_latest_run
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
 from cvworkbench.ops.sot_versions import (
@@ -99,6 +104,7 @@ from cvworkbench.ops.variant_lifecycle import (
 )
 from cvworkbench.ops.variant_promote import PromoteError, promote_variant
 from cvworkbench.themes import ThemeError, build_render_plan, list_themes, resolve_theme
+from cvworkbench.text import normalize_tag
 from cvworkbench.variants import load_variant
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -261,6 +267,320 @@ def _print_reviewpack_summary(summary: dict[str, str | Path]) -> None:
 def _print_import_summary(summary: dict[str, str | Path]) -> None:
     rows = [(key, value) for key, value in summary.items()]
     print_summary("import-docx", rows)
+
+
+def _print_status_summary(summary: dict[str, Any]) -> None:
+    rows = [
+        ("sot_path", summary["sot"]["path"]),
+        ("sot_files", summary["sot"]["files_summary"]),
+        ("sot_sections", summary["sot"]["sections_summary"]),
+        ("sot_tags_top", summary["sot"]["tags_summary"]),
+        ("variants", summary["variants"]["summary"]),
+        ("variant_inbox", summary["variants"]["inbox_summary"]),
+        ("runs_latest", summary["runs"]["latest_summary"]),
+        ("runs_recent", summary["runs"]["recents_summary"]),
+        ("projects", summary["projects"]["summary"]),
+        ("reviews", summary["reviews"]["summary"]),
+    ]
+    if summary["runs"]["invalid_summary"]:
+        rows.append(("runs_invalid", summary["runs"]["invalid_summary"]))
+    if summary["sot"]["versions_summary"]:
+        rows.append(("sot_versions", summary["sot"]["versions_summary"]))
+    print_summary("status", rows)
+
+
+def _format_timestamp(value: float) -> str:
+    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+
+
+def _collect_sot_files(sot_path: Path) -> list[dict[str, Any]]:
+    files: list[dict[str, Any]] = []
+    for filename in list(REQUIRED_FILES.keys()) + list(OPTIONAL_FILES.keys()):
+        path = sot_path / filename
+        if path.exists():
+            files.append(
+                {
+                    "name": filename,
+                    "path": str(path),
+                    "status": "present",
+                    "modified_at": _format_timestamp(path.stat().st_mtime),
+                }
+            )
+        else:
+            files.append(
+                {
+                    "name": filename,
+                    "path": str(path),
+                    "status": "missing",
+                    "modified_at": None,
+                }
+            )
+    return files
+
+
+def _count_list_section(payload: dict[str, Any], section: str, key: str) -> int:
+    data = payload.get(section)
+    if not isinstance(data, dict):
+        return 0
+    values = data.get(key)
+    if not isinstance(values, list):
+        return 0
+    return len(values)
+
+
+def _summarize_sot_sections(payload: dict[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    experience = payload.get("experience")
+    roles_count = 0
+    bullets_count = 0
+    if isinstance(experience, dict):
+        roles = experience.get("roles")
+        if isinstance(roles, list):
+            roles_count = len(roles)
+            for role in roles:
+                if not isinstance(role, dict):
+                    continue
+                bullets = role.get("bullets")
+                if isinstance(bullets, list):
+                    bullets_count += len(bullets)
+    summary["experience"] = {"roles": roles_count, "bullets": bullets_count}
+    summary["projects"] = {"count": _count_list_section(payload, "projects", "projects")}
+    summary["skills"] = {"count": _count_list_section(payload, "skills", "skills")}
+    summary["education"] = {"count": _count_list_section(payload, "education", "education")}
+    summary["publications"] = {"count": _count_list_section(payload, "publications", "publications")}
+    summary["honors"] = {"count": _count_list_section(payload, "honors", "honors")}
+    summary["service"] = {"count": _count_list_section(payload, "service", "service")}
+    summary["teaching"] = {"count": _count_list_section(payload, "teaching", "teaching")}
+    summary["conferences"] = {"count": _count_list_section(payload, "conferences", "conferences")}
+    summary["references"] = {"count": _count_list_section(payload, "references", "references")}
+    letters_count = 0
+    letter_sections = 0
+    letters = payload.get("letters")
+    if isinstance(letters, dict):
+        letter_list = letters.get("letters")
+        if isinstance(letter_list, list):
+            letters_count = len(letter_list)
+            for letter in letter_list:
+                if not isinstance(letter, dict):
+                    continue
+                sections = letter.get("sections")
+                if isinstance(sections, list):
+                    letter_sections += len(sections)
+    summary["letters"] = {"letters": letters_count, "sections": letter_sections}
+    snippets_count = 0
+    snippets = payload.get("snippets")
+    if isinstance(snippets, dict):
+        snippet_list = snippets.get("snippets")
+        if isinstance(snippet_list, list):
+            snippets_count = len(snippet_list)
+    summary["snippets"] = {"count": snippets_count}
+    return summary
+
+
+def _summarize_sections_line(summary: dict[str, Any]) -> str:
+    parts: list[str] = []
+    experience = summary.get("experience", {})
+    parts.append(
+        f"experience roles={experience.get('roles', 0)} bullets={experience.get('bullets', 0)}"
+    )
+    for key in [
+        "projects",
+        "skills",
+        "education",
+        "publications",
+        "conferences",
+        "honors",
+        "service",
+        "teaching",
+        "references",
+    ]:
+        count = summary.get(key, {}).get("count", 0)
+        parts.append(f"{key}={count}")
+    letters = summary.get("letters", {})
+    parts.append(f"letters={letters.get('letters', 0)} sections={letters.get('sections', 0)}")
+    snippets = summary.get("snippets", {})
+    parts.append(f"snippets={snippets.get('count', 0)}")
+    return "; ".join(parts)
+
+
+def _top_tags(counts: dict[str, int], limit: int = 10) -> list[dict[str, Any]]:
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [{"tag": tag, "count": count} for tag, count in ordered[:limit]]
+
+
+def _tags_summary_line(tags: list[dict[str, Any]]) -> str:
+    if not tags:
+        return "none"
+    return ", ".join([f"{item['tag']}({item['count']})" for item in tags])
+
+
+def _variants_dir(config_path: Path) -> Path:
+    return config_path.parent / "variants"
+
+
+def _load_variants_from_config(config_path: Path) -> list[dict[str, Any]]:
+    variants_dir = _variants_dir(config_path)
+    if not variants_dir.exists():
+        raise ValueError(f"Variants directory not found: {variants_dir}")
+    variants: list[dict[str, Any]] = []
+    for path in sorted(variants_dir.glob("*.yaml")):
+        variant = load_variant(path)
+        variants.append(
+            {
+                "id": variant.id,
+                "document_type": variant.document_type,
+                "outputs": variant.outputs,
+                "include_tags": variant.include_tags,
+                "exclude_tags": variant.exclude_tags,
+                "letter_id": variant.letter_id,
+                "render_theme": variant.render_theme,
+                "render_style_preset": variant.render_style_preset,
+                "max_bullets_per_role": variant.max_bullets_per_role,
+                "path": str(path),
+            }
+        )
+    if not variants:
+        raise ValueError("No variants found")
+    return variants
+
+
+def _variants_summary_line(variants: list[dict[str, Any]]) -> str:
+    return ", ".join(
+        [f"{variant['id']} ({variant['document_type']})" for variant in variants]
+    )
+
+
+def _inbox_entry_payload(entry: Any) -> dict[str, Any]:
+    return {
+        "variant_id": entry.variant_id,
+        "variant_path": str(entry.variant_path),
+        "source": entry.source,
+        "status": entry.status,
+        "expires_at": entry.expires_at,
+        "label": entry.label,
+    }
+
+
+def _inbox_summary_line(entries: list[dict[str, Any]]) -> str:
+    if not entries:
+        return "count=0"
+    lines = [f"{entry['label'] or entry['variant_id']} | {entry['source']} | {entry['expires_at']}" for entry in entries]
+    return f"count={len(entries)}\n" + "\n".join(lines)
+
+
+def _run_payload(run: RunInfo) -> dict[str, Any]:
+    return {
+        "run_id": run.run_id,
+        "path": str(run.path),
+        "created_at": run.created_at.isoformat(),
+        "variant_id": run.variant_id,
+        "formats": run.formats,
+        "outputs": run.outputs,
+    }
+
+
+def _runs_summary_line(latest: dict[str, list[dict[str, Any]]]) -> str:
+    if not latest:
+        return "none"
+    lines = []
+    for variant_id, runs in latest.items():
+        if not runs:
+            continue
+        lines.append(f"{variant_id}: {runs[0]['run_id']}")
+    return "\n".join(lines) if lines else "none"
+
+
+def _runs_recents_line(recents: dict[str, list[dict[str, Any]]]) -> str:
+    if not recents:
+        return "none"
+    lines = []
+    for variant_id, runs in recents.items():
+        if not runs:
+            continue
+        run_ids = ", ".join([run["run_id"] for run in runs])
+        lines.append(f"{variant_id}: {run_ids}")
+    return "\n".join(lines) if lines else "none"
+
+
+def _invalid_runs_line(paths: list[Path]) -> str:
+    if not paths:
+        return ""
+    return ", ".join([path.name for path in paths])
+
+
+def _load_project_summaries(config_path: Path) -> tuple[list[dict[str, Any]], list[Path]]:
+    projects_root = resolve_projects_path(config_path)
+    if not projects_root.exists():
+        return [], []
+    summaries: list[dict[str, Any]] = []
+    invalid: list[Path] = []
+    for path in sorted([p for p in projects_root.iterdir() if p.is_dir()]):
+        project_file = path / "project.yaml"
+        if not project_file.exists():
+            invalid.append(path)
+            continue
+        raw = yaml.safe_load(project_file.read_text())
+        if not isinstance(raw, dict):
+            invalid.append(path)
+            continue
+        project = raw.get("project")
+        if not isinstance(project, dict):
+            invalid.append(path)
+            continue
+        project_id = str(project.get("id", "")).strip()
+        base_variant = str(project.get("base_variant", "")).strip()
+        created_at = str(project.get("created_at", "")).strip()
+        job = project.get("job", {})
+        job_source = None
+        if isinstance(job, dict):
+            source = job.get("source", {})
+            if isinstance(source, dict):
+                job_source = source.get("value") or source.get("type")
+        if not project_id or not base_variant:
+            invalid.append(path)
+            continue
+        summaries.append(
+            {
+                "project_id": project_id,
+                "project_dir": str(path),
+                "base_variant": base_variant,
+                "created_at": created_at or None,
+                "job_source": job_source,
+            }
+        )
+    return summaries, invalid
+
+
+def _projects_summary_line(projects: list[dict[str, Any]]) -> str:
+    if not projects:
+        return "count=0"
+    lines = [f"{item['project_id']} ({item['base_variant']})" for item in projects]
+    return f"count={len(projects)}\n" + "\n".join(lines)
+
+
+def _load_review_summaries(config_path: Path) -> list[dict[str, Any]]:
+    reviews_root = resolve_reviews_path(config_path)
+    if not reviews_root.exists():
+        return []
+    summaries: list[dict[str, Any]] = []
+    for path in sorted([p for p in reviews_root.iterdir() if p.is_dir()]):
+        summaries.append(
+            {
+                "review_id": path.name,
+                "path": str(path),
+                "docx": str(path / "cv.docx") if (path / "cv.docx").exists() else None,
+                "pdf": str(path / "cv.pdf") if (path / "cv.pdf").exists() else None,
+                "review": str(path / "review.md") if (path / "review.md").exists() else None,
+            }
+        )
+    return summaries
+
+
+def _reviews_summary_line(reviews: list[dict[str, Any]]) -> str:
+    if not reviews:
+        return "count=0"
+    lines = [item["review_id"] for item in reviews]
+    return f"count={len(reviews)}\n" + "\n".join(lines)
 
 
 def _print_variant_promote_summary(variant_id: str, variant_path: Path, status: str) -> None:
@@ -620,6 +940,165 @@ def doctor(
 
 
 @app.command()
+def status(
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
+    try:
+        resolved_sot = resolve_sot_path(sot_path, config_path)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    errors = validate_sot(resolved_sot)
+    if errors:
+        for error in errors:
+            typer.echo(f"ERROR: {error}", err=True)
+        raise typer.Exit(code=1)
+    try:
+        payload = load_sot(resolved_sot)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    files = _collect_sot_files(resolved_sot)
+    files_summary = ", ".join([item["name"] for item in files if item["status"] == "present"])
+    sections = _summarize_sot_sections(payload)
+    sections_summary = _summarize_sections_line(sections)
+    tags = extract_tags(payload)
+    counts = tag_counts(tags)
+    tags_top = _top_tags(counts)
+    tags_summary = _tags_summary_line(tags_top)
+
+    versions_summary = ""
+    versions_info: dict[str, Any] | None = None
+    try:
+        version_root = resolve_versioned_root(resolved_sot)
+    except SotVersionError:
+        version_root = None
+    if version_root is not None:
+        try:
+            version_state = list_versions(version_root)
+        except SotPackError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        versions_info = {
+            "root": str(version_state.root),
+            "active": version_state.active,
+            "versions": version_state.versions,
+        }
+        versions_summary = (
+            f"root={version_state.root} active={version_state.active} "
+            f"count={len(version_state.versions)}"
+        )
+
+    try:
+        variants = _load_variants_from_config(config_path)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    variants_summary = _variants_summary_line(variants)
+
+    inbox_entries = list_variant_inbox(config_path)
+    inbox_payload = [_inbox_entry_payload(entry) for entry in inbox_entries]
+    inbox_summary = _inbox_summary_line(inbox_payload)
+    ttl_days = resolve_variant_ttl_days(config_path)
+
+    recents_by_variant, invalid_runs = latest_runs_by_variant(config_path, limit=3)
+    recents_payload: dict[str, list[dict[str, Any]]] = {}
+    for variant in variants:
+        runs = recents_by_variant.get(variant["id"], [])
+        recents_payload[variant["id"]] = [_run_payload(run) for run in runs]
+    latest_payload = {key: value[:1] for key, value in recents_payload.items()}
+
+    latest_summary = _runs_summary_line(latest_payload)
+    recents_summary = _runs_recents_line(recents_payload)
+    invalid_summary = _invalid_runs_line(invalid_runs)
+
+    projects, invalid_projects = _load_project_summaries(config_path)
+    projects_summary = _projects_summary_line(projects)
+
+    reviews = _load_review_summaries(config_path)
+    reviews_summary = _reviews_summary_line(reviews)
+
+    summary = {
+        "sot": {
+            "path": str(resolved_sot),
+            "files": files,
+            "files_summary": files_summary or "none",
+            "sections": sections,
+            "sections_summary": sections_summary,
+            "tags_top": tags_top,
+            "tags_summary": tags_summary,
+            "versions": versions_info,
+            "versions_summary": versions_summary,
+        },
+        "variants": {
+            "config": variants,
+            "config_count": len(variants),
+            "summary": variants_summary,
+            "inbox": inbox_payload,
+            "inbox_count": len(inbox_payload),
+            "inbox_summary": inbox_summary,
+            "ttl_days": ttl_days,
+        },
+        "runs": {
+            "latest_by_variant": latest_payload,
+            "recents_by_variant": recents_payload,
+            "latest_summary": latest_summary,
+            "recents_summary": recents_summary,
+            "invalid": [str(path) for path in invalid_runs],
+            "invalid_summary": invalid_summary,
+        },
+        "projects": {
+            "items": projects,
+            "count": len(projects),
+            "summary": projects_summary,
+            "invalid": [str(path) for path in invalid_projects],
+        },
+        "reviews": {
+            "items": reviews,
+            "count": len(reviews),
+            "summary": reviews_summary,
+        },
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps({"command": "status", **summary}, indent=2, sort_keys=True))
+        return
+
+    _print_status_summary(summary)
+
+
+@app.command()
 def init(
     plain: Annotated[
         bool,
@@ -846,6 +1325,62 @@ def variant_promote(
         raise typer.Exit(code=1) from exc
 
     _print_variant_promote_summary(result.variant_id, result.variant_path, result.status)
+
+
+@variant_app.command("list")
+def variant_list(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
+    try:
+        variants = _load_variants_from_config(config_path)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    inbox_entries = list_variant_inbox(config_path)
+    inbox_payload = [_inbox_entry_payload(entry) for entry in inbox_entries]
+    ttl_days = resolve_variant_ttl_days(config_path)
+
+    payload = {
+        "command": "variant.list",
+        "variants": variants,
+        "ttl_days": ttl_days,
+        "inbox": inbox_payload,
+        "inbox_count": len(inbox_payload),
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    rows = [
+        ("count", str(len(variants))),
+        ("variants", _variants_summary_line(variants) or "none"),
+        ("inbox", _inbox_summary_line(inbox_payload)),
+        ("ttl_days", str(ttl_days)),
+    ]
+    print_summary("variant.list", rows)
 
 
 @variant_app.command("inbox")
@@ -2022,6 +2557,7 @@ def reviewpack(
         "docx": pack.docx_path,
         "pdf": pack.pdf_path,
         "review": pack.review_path,
+        "run_id": pack.run_id,
     }
     _print_reviewpack_summary(summary)
 
@@ -2040,6 +2576,13 @@ def import_docx(
         typer.Option(
             "--run",
             help="Run id or path to locate canonical markdown",
+        ),
+    ] = None,
+    variant: Annotated[
+        str | None,
+        typer.Option(
+            "--variant",
+            help="Variant id to resolve the latest run",
         ),
     ] = None,
     config: Annotated[
@@ -2065,11 +2608,15 @@ def import_docx(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
+    if run and variant:
+        typer.echo("ERROR: --run cannot be combined with --variant", err=True)
+        raise typer.Exit(code=2)
     try:
         result = import_docx_review(
             docx_path=docx_path,
             config_path=config,
             run=run,
+            variant_id=variant,
         )
     except ReviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -2080,6 +2627,7 @@ def import_docx(
         "patch": result.patch_path,
         "notes": result.notes_path,
         "imported_markdown": result.imported_path,
+        "run_id": result.run_id,
     }
     _print_import_summary(summary)
 
