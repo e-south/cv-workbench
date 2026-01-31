@@ -83,6 +83,20 @@ def init_project(root: Path) -> InitResult:
         "themes",
     )
 
+    var_root = root / "var"
+    var_targets = {
+        "dist": var_root / "dist",
+        "runs": var_root / "runs",
+        "drafts": var_root / "drafts",
+        "reviews": var_root / "reviews",
+    }
+    for label, target in var_targets.items():
+        if not target.exists():
+            target.mkdir(parents=True, exist_ok=True)
+            statuses[label] = "created"
+        else:
+            statuses[label] = "exists"
+
     registry_target = root / "var" / "registry" / "contexts"
     if not registry_target.exists():
         registry_target.mkdir(parents=True, exist_ok=True)

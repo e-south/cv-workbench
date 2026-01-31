@@ -6,3 +6,4 @@
 - Added Playwright preview control selectors and a contract test for stable UI hooks.
 - Updated docs to reflect Playwright-first preview and local/var layout paths.
 - Completed Playwright-first preview refactor and repo layout consolidation (local/ + var/).
+- Init now creates var/dist, var/runs, var/drafts, and var/reviews so clean is idempotent.
