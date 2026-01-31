@@ -16,6 +16,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib import request as url_request
 
+from cvworkbench.config import resolve_config_path, resolve_themes_dir
 from cvworkbench.dev.preview import PreviewController, _make_handler, _preview_page_html
 
 
@@ -32,6 +33,25 @@ def test_preview_controller_watch_paths() -> None:
     paths = controller.resolve_watch_paths()
 
     assert paths
+
+
+def test_preview_watch_paths_include_variants_and_themes_root() -> None:
+    config_path = Path("config/workbench.yaml")
+    controller = PreviewController(
+        sot_base=Path("sot.sample"),
+        config_path=config_path,
+        variant_id="base",
+        theme_id="default",
+        style_preset="modern",
+    )
+
+    paths = controller.resolve_watch_paths()
+    resolved_config = resolve_config_path(config_path)
+    variants_dir = resolved_config.parent / "variants"
+    themes_root = resolve_themes_dir(config_path)
+
+    assert variants_dir in paths
+    assert themes_root in paths
 
 
 def test_preview_page_html_contains_controls() -> None:

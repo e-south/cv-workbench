@@ -7,3 +7,6 @@
 - Updated docs to reflect Playwright-first preview and local/var layout paths.
 - Completed Playwright-first preview refactor and repo layout consolidation (local/ + var/).
 - Init now creates var/dist, var/runs, var/drafts, and var/reviews so clean is idempotent.
+- Quickstart output now points to `cvw preview` instead of `cvw dev serve`.
+- Preview watcher now includes variants and themes roots to detect new assets.
+- Preview session parsing now fails fast on missing fields.

@@ -52,6 +52,10 @@ def test_dev_stop_removes_session(monkeypatch, tmp_path: Path) -> None:
                 "host": "127.0.0.1",
                 "port": 8877,
                 "url": "http://127.0.0.1:8877/",
+                "variant": "base",
+                "theme": "default",
+                "style_preset": "modern",
+                "started_at": "2026-01-31T00:00:00+00:00",
             }
         )
     )

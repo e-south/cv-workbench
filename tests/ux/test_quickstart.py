@@ -159,5 +159,6 @@ def test_quickstart_builds_sample(tmp_path: Path, monkeypatch) -> None:
         result = runner.invoke(app, ["quickstart", "--plain"])
 
     assert result.exit_code == 0
+    assert "next_step: cvw preview --sot-path ./sot.sample --variant base" in result.stdout
     dist_dir = Path(cwd) / "var" / "dist" / "base"
     assert (dist_dir / "cv.md").exists()

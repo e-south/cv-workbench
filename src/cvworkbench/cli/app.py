@@ -394,7 +394,7 @@ def _print_quickstart_summary(result: BuildResult, sample_sot: Path) -> None:
         rows.append(("theme", result.theme_id))
     if result.style_preset:
         rows.append(("style_preset", result.style_preset))
-    rows.append(("next_step", "cvw dev serve --sot-path ./sot.sample --variant base"))
+    rows.append(("next_step", "cvw preview --sot-path ./sot.sample --variant base"))
     for fmt in result.formats:
         rows.append((f"output_{fmt}", output_path(result.dist_dir, result.variant, fmt)))
     print_summary("quickstart", rows)

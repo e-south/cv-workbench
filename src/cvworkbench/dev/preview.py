@@ -23,6 +23,7 @@ from typing import Any, Callable
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import build_documents
 from cvworkbench.config import (
+    resolve_config_path,
     resolve_dist_path,
     resolve_projects_path,
     resolve_runs_path,
@@ -206,6 +207,10 @@ class PreviewController:
     def resolve_watch_paths(self) -> list[Path]:
         paths: list[Path] = []
         paths.append(self._config_path)
+        resolved_config = resolve_config_path(self._config_path)
+        variants_dir = resolved_config.parent / "variants"
+        if variants_dir.exists():
+            paths.append(variants_dir)
         try:
             variant_path = resolve_variant_path(self._variant_id, self._config_path)
             paths.append(variant_path)
@@ -225,6 +230,8 @@ class PreviewController:
 
         try:
             theme_root = resolve_themes_dir(self._config_path)
+            if theme_root.exists():
+                paths.append(theme_root)
             theme_dir = resolve_theme(theme_root, self._theme_id).root
             paths.append(theme_dir)
         except (ValueError, ThemeError, FileNotFoundError):
@@ -368,24 +375,38 @@ def load_preview_session(config_path: Path) -> PreviewSession:
         raise PreviewError("Preview session file is invalid")
     try:
         pid = int(raw["pid"])
-        host = str(raw["host"])
+        host = raw["host"]
         port = int(raw["port"])
-        url = str(raw["url"])
-        variant_id = str(raw.get("variant", ""))
-        theme_id = str(raw.get("theme", ""))
-        style_preset = raw.get("style_preset")
-        started_at = str(raw.get("started_at", ""))
+        url = raw["url"]
+        variant_id = raw["variant"]
+        theme_id = raw["theme"]
+        style_preset = raw["style_preset"]
+        started_at = raw["started_at"]
     except (KeyError, ValueError, TypeError) as exc:
         raise PreviewError("Preview session file is invalid") from exc
+    if not isinstance(host, str) or not host.strip():
+        raise PreviewError("Preview session file is invalid")
+    if not isinstance(url, str) or not url.strip():
+        raise PreviewError("Preview session file is invalid")
+    if not isinstance(variant_id, str) or not variant_id.strip():
+        raise PreviewError("Preview session file is invalid")
+    if not isinstance(theme_id, str) or not theme_id.strip():
+        raise PreviewError("Preview session file is invalid")
+    if style_preset is not None:
+        if not isinstance(style_preset, str) or not style_preset.strip():
+            raise PreviewError("Preview session file is invalid")
+        style_preset = style_preset.strip()
+    if not isinstance(started_at, str) or not started_at.strip():
+        raise PreviewError("Preview session file is invalid")
     return PreviewSession(
         pid=pid,
-        host=host,
+        host=host.strip(),
         port=port,
-        url=url,
-        variant_id=variant_id,
-        theme_id=theme_id,
-        style_preset=style_preset if style_preset else None,
-        started_at=started_at,
+        url=url.strip(),
+        variant_id=variant_id.strip(),
+        theme_id=theme_id.strip(),
+        style_preset=style_preset,
+        started_at=started_at.strip(),
     )
 
 
