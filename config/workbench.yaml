@@ -10,6 +10,8 @@ paths:
   projects: ../var/projects
 variants:
   default: base
+variant_lifecycle:
+  ttl_days: 7
 render:
   themes_dir: ../build/themes
   theme: default

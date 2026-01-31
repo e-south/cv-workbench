@@ -53,6 +53,14 @@ If you prefer a local file:
 uv run cvw project new --job-file ./job.txt --variant base
 ```
 
+Project proposals are ephemeral. Promote or discard them explicitly:
+
+```bash
+uv run cvw variant inbox
+uv run cvw variant keep --path ./var/projects/<slug>/proposals/variant.yaml --id <variant-id>
+uv run cvw variant discard --path ./var/projects/<slug>/proposals/variant.yaml --yes
+```
+
 ## Configuration
 
 The registry path and user agent are set in `config/workbench.yaml`:

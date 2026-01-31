@@ -99,6 +99,8 @@ def _write_minimal_config(root: Path) -> None:
                 "  sot: ../local/sot",
                 "  dist: ../var/dist",
                 "  runs: ../var/runs",
+                "variant_lifecycle:",
+                "  ttl_days: 7",
                 "render:",
                 "  themes_dir: ../build/themes",
                 "  theme: default",
@@ -168,6 +170,7 @@ def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
     assert (root / "var/dist").exists()
     assert (root / "var/runs").exists()
     assert (root / "var/drafts").exists()
+    assert (root / "var/variants").exists()
     assert (root / "var/reviews").exists()
     assert (root / "var/registry/contexts").exists()
     assert (root / "var/projects").exists()

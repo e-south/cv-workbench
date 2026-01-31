@@ -90,6 +90,13 @@ from cvworkbench.ops.sot_versions import (
 )
 from cvworkbench.ops.syncing import SyncError, SyncResult, sync_site
 from cvworkbench.ops.tailor import DraftPaths, TailorError, tailor_job
+from cvworkbench.ops.variant_lifecycle import (
+    VariantLifecycleError,
+    discard_variant,
+    gc_variants,
+    keep_variant,
+    list_variant_inbox,
+)
 from cvworkbench.ops.variant_promote import PromoteError, promote_variant
 from cvworkbench.themes import ThemeError, build_render_plan, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
@@ -265,6 +272,67 @@ def _print_variant_promote_summary(variant_id: str, variant_path: Path, status: 
             ("status", status),
         ],
     )
+
+
+def _print_variant_keep_summary(variant_id: str, variant_path: Path, status: str) -> None:
+    print_summary(
+        "variant.keep",
+        [
+            ("variant_id", variant_id),
+            ("variant_path", variant_path),
+            ("status", status),
+        ],
+    )
+
+
+def _print_variant_discard_summary(variant_path: Path, status: str) -> None:
+    print_summary(
+        "variant.discard",
+        [
+            ("variant_path", variant_path),
+            ("status", status),
+        ],
+    )
+
+
+def _print_variant_gc_summary(expired: int, kept_pruned: int, status: str) -> None:
+    print_summary(
+        "variant.gc",
+        [
+            ("expired", str(expired)),
+            ("kept_pruned", str(kept_pruned)),
+            ("status", status),
+        ],
+    )
+
+
+def _print_variant_inbox(entries: list[Any]) -> None:
+    if get_output_mode() == OutputMode.JSON:
+        payload = {
+            "command": "variant.inbox",
+            "entries": [
+                {
+                    "variant_id": entry.variant_id,
+                    "variant_path": str(entry.variant_path),
+                    "expires_at": entry.expires_at,
+                    "source": entry.source,
+                    "label": entry.label,
+                }
+                for entry in entries
+            ],
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    lines = [
+        f"{entry.variant_id} | {entry.source} | {entry.expires_at} | {entry.variant_path}"
+        for entry in entries
+    ]
+    rows: list[tuple[str, str | Path]] = [
+        ("count", str(len(entries))),
+    ]
+    if lines:
+        rows.append(("entries", "\n".join(lines)))
+    print_summary("variant.inbox", rows)
 
 
 def _print_clean_summary(target: str, path: Path, removed: int, status: str) -> None:
@@ -778,6 +846,193 @@ def variant_promote(
         raise typer.Exit(code=1) from exc
 
     _print_variant_promote_summary(result.variant_id, result.variant_path, result.status)
+
+
+@variant_app.command("inbox")
+def variant_inbox(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        entries = list_variant_inbox(config)
+    except (VariantLifecycleError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _print_variant_inbox(entries)
+
+
+@variant_app.command("keep")
+def variant_keep(
+    path: Annotated[
+        Path,
+        typer.Option(
+            "--path",
+            help="Path to variant.yaml to promote",
+        ),
+    ],
+    variant_id: Annotated[
+        str | None,
+        typer.Option(
+            "--id",
+            help="Override the promoted variant id",
+        ),
+    ] = None,
+    label: Annotated[
+        str | None,
+        typer.Option(
+            "--label",
+            help="Checkpoint label for the kept variant",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        result = keep_variant(
+            variant_path=path,
+            config_path=config,
+            variant_id=variant_id,
+            label=label,
+        )
+    except (VariantLifecycleError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _print_variant_keep_summary(result.variant_id, result.variant_path, result.status)
+
+
+@variant_app.command("discard")
+def variant_discard(
+    path: Annotated[
+        Path,
+        typer.Option(
+            "--path",
+            help="Path to variant.yaml to discard",
+        ),
+    ],
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of the draft/proposal artifacts",
+        ),
+    ] = False,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        result = discard_variant(
+            variant_path=path,
+            config_path=config,
+            confirm=yes,
+        )
+    except (VariantLifecycleError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _print_variant_discard_summary(result.variant_path, result.status)
+    if not yes and result.status == "dry_run":
+        raise typer.Exit(code=2)
+
+
+@variant_app.command("gc")
+def variant_gc(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of expired draft/proposal artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        summary = gc_variants(config_path=config, confirm=yes)
+    except (VariantLifecycleError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _print_variant_gc_summary(summary.expired, summary.kept_pruned, summary.status)
+    if not yes and summary.status == "dry_run":
+        raise typer.Exit(code=2)
 
 
 @clean_app.command("runs")

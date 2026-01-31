@@ -98,6 +98,8 @@ def _write_minimal_config(root: Path) -> None:
                 "  sot: ../local/sot",
                 "  dist: ../var/dist",
                 "  runs: ../var/runs",
+                "variant_lifecycle:",
+                "  ttl_days: 7",
                 "render:",
                 "  themes_dir: ../build/themes",
                 "  theme: default",

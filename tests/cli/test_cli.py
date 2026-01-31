@@ -72,9 +72,36 @@ def test_validate_fails_on_missing_required_file(tmp_path: Path) -> None:
 
 
 def test_tailor_prints_draft_paths(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md]",
+            ]
+        )
+        + "\n"
+    )
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  drafts: ../var/drafts",
+                "variant_lifecycle:",
+                "  ttl_days: 7",
+                "variants:",
+                "  default: base",
+            ]
+        )
+        + "\n"
+    )
     job_path = tmp_path / "job.md"
     job_path.write_text("Role: Test\nNeeds: Python\n")
-    draft_dir = tmp_path / "drafts" / "sample-role"
+    draft_dir = tmp_path / "var" / "drafts" / "sample-role"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -87,6 +114,8 @@ def test_tailor_prints_draft_paths(tmp_path: Path) -> None:
             str(draft_dir),
             "--base-variant",
             "base",
+            "--config",
+            str(config_path),
         ],
     )
 

@@ -20,7 +20,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - import-docx
 - job add
 - theme (list/info)
-- variant (promote)
+- variant (promote/keep/discard/gc/inbox)
 - tags (list/lint/stats)
 - sot (list/new/activate/diff)
 

@@ -10,3 +10,6 @@
 - Quickstart output now points to `cvw preview` instead of `cvw dev serve`.
 - Preview watcher now includes variants and themes roots to detect new assets.
 - Preview session parsing now fails fast on missing fields.
+- Added variant lifecycle registry with keep/discard/gc/inbox flows.
+- Tailor and project creation now register ephemeral variants for cleanup.
+- Init scaffolding now creates `var/variants` alongside other var targets.

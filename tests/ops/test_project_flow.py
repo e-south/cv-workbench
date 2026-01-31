@@ -40,7 +40,16 @@ def _write_config(root: Path) -> Path:
     }
     (variants_dir / "base.yaml").write_text(yaml.safe_dump(base_variant, sort_keys=False))
     config_path = config_dir / "workbench.yaml"
-    config_path.write_text("paths: {}\n")
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths: {}",
+                "variant_lifecycle:",
+                "  ttl_days: 7",
+            ]
+        )
+        + "\n"
+    )
     return config_path
 
 

@@ -22,6 +22,7 @@ from typing import Any
 import yaml
 
 from cvworkbench.config import resolve_variant_path
+from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, register_variant
 
 
 class TailorError(RuntimeError):
@@ -85,6 +86,17 @@ def tailor_job(
         signals_path=signals_path,
     )
     prompt_path.write_text(json.dumps(prompt_payload, indent=2, sort_keys=True) + "\n")
+
+    try:
+        register_variant(
+            variant_path=variant_path,
+            cleanup_path=output_dir,
+            source="draft",
+            config_path=config_path,
+            label=draft_variant_id,
+        )
+    except VariantLifecycleError as exc:
+        raise TailorError(str(exc)) from exc
 
     return DraftPaths(
         job_path=job_copy_path,

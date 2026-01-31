@@ -128,12 +128,28 @@ uv run cvw build --sot-path ./sot.sample --variant base --format pdf --style-pre
 
 ## 8) Save variants intentionally
 
-`cvw tailor` writes draft variants to `var/drafts/`. Promote only the ones you want
-to keep:
+`cvw tailor` writes draft variants to `var/drafts/` and registers them as
+ephemeral. Promote only the ones you want to keep:
 
 ```bash
-uv run cvw variant promote --draft ./var/drafts/<name>
+uv run cvw variant keep --path ./var/drafts/<name>/variant.yaml --id <variant-id>
 ```
+
+To discard or clean up drafts:
+
+```bash
+uv run cvw variant discard --path ./var/drafts/<name>/variant.yaml --yes
+uv run cvw variant gc --yes
+```
+
+List pending drafts with:
+
+```bash
+uv run cvw variant inbox
+```
+
+The retention window is controlled by `variant_lifecycle.ttl_days` in
+`config/workbench.yaml`.
 
 ## 9) Start a project (job tailoring)
 

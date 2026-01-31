@@ -29,6 +29,20 @@ var/projects/<slug>/
     patch.yaml
 ```
 
+## Variant lifecycle
+
+Project proposal variants are ephemeral until explicitly kept. They are tracked
+in `var/variants/registry.json` and expire based on
+`variant_lifecycle.ttl_days` in `config/workbench.yaml`.
+
+Use:
+- `cvw variant inbox` to list pending proposals.
+- `cvw variant keep --path var/projects/<slug>/proposals/variant.yaml --id <new-id>`
+  to promote a proposal into `config/variants/`.
+- `cvw variant discard --path var/projects/<slug>/proposals/variant.yaml --yes` to
+  discard proposal artifacts.
+- `cvw variant gc --yes` to remove expired proposal artifacts.
+
 ## Apply semantics
 
 - `cvw build --project <slug>` and `cvw preview --project <slug>` apply proposal

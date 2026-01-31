@@ -24,6 +24,7 @@ from cvworkbench.config import (
     resolve_runs_path,
     resolve_sot_path,
     resolve_themes_dir,
+    resolve_variant_ttl_days,
 )
 
 
@@ -99,3 +100,20 @@ def test_project_paths_default_to_repo_root(tmp_path: Path) -> None:
         resolve_project_path(Path("var/drafts/demo"), config_path)
         == (tmp_path / "var" / "drafts" / "demo").resolve()
     )
+
+
+def test_resolve_variant_ttl_days(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "variant_lifecycle:",
+                "  ttl_days: 7",
+            ]
+        )
+        + "\n"
+    )
+
+    assert resolve_variant_ttl_days(config_path) == 7

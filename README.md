@@ -66,6 +66,7 @@ See the full walkthrough at `docs/howto/quickstart.md`.
 - `docs/howto/ingestion.md`: URL ingestion + registry layout
 - `docs/reference/project-contract.md`: project workspace contract
 - `docs/reference/preview-contract.md`: preview UI/API contract
+- `docs/reference/variant-lifecycle.md`: variant lifecycle and cleanup flows
 - `docs/howto/styling.md`: theme packs and style presets
 - `docs/howto/sot-versions.md`: SoT version packs
 - `docs/howto/performance.md`: profiling guidance

@@ -20,10 +20,38 @@ from cvworkbench.cli import app
 
 
 def test_tailor_writes_draft_files(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md]",
+            ]
+        )
+        + "\n"
+    )
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  drafts: ../var/drafts",
+                "variant_lifecycle:",
+                "  ttl_days: 7",
+                "variants:",
+                "  default: base",
+            ]
+        )
+        + "\n"
+    )
+
     job_path = tmp_path / "job.md"
     job_path.write_text("Sample job description.\n")
 
-    output_dir = tmp_path / "drafts" / "sample-role"
+    output_dir = tmp_path / "var" / "drafts" / "sample-role"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -36,6 +64,8 @@ def test_tailor_writes_draft_files(tmp_path: Path) -> None:
             "base",
             "--out",
             str(output_dir),
+            "--config",
+            str(config_path),
         ],
     )
 

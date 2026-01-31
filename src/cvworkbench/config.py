@@ -151,6 +151,18 @@ def resolve_projects_path(config_path: Path) -> Path:
     return _resolve_from_config(config_path, value.strip())
 
 
+def resolve_variant_ttl_days(config_path: Path) -> int:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    lifecycle = config.get("variant_lifecycle", {})
+    if not isinstance(lifecycle, dict):
+        raise ValueError("Config field variant_lifecycle must be a mapping")
+    value = lifecycle.get("ttl_days")
+    if not isinstance(value, int) or value <= 0:
+        raise ValueError("Config field variant_lifecycle.ttl_days must be a positive integer")
+    return value
+
+
 def resolve_default_variant(config_path: Path) -> str:
     config_path = resolve_config_path(config_path)
     config = load_config(config_path)

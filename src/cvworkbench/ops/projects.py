@@ -25,6 +25,7 @@ from cvworkbench.ingestion.ingest import IngestError, fetch_and_extract
 from cvworkbench.ingestion.registry import load_registry_settings
 from cvworkbench.ingestion.signals import build_signals
 from cvworkbench.ops.patches import PatchError, apply_patch_text
+from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, register_variant
 
 
 class ProjectError(RuntimeError):
@@ -232,6 +233,17 @@ def _write_project_files(
         }
     }
     project_file.write_text(yaml.safe_dump(project_payload, sort_keys=False))
+
+    try:
+        register_variant(
+            variant_path=variant_path,
+            cleanup_path=proposals_dir,
+            source="project",
+            config_path=config_path,
+            label=project_id,
+        )
+    except VariantLifecycleError as exc:
+        raise ProjectError(str(exc)) from exc
 
     return ProjectPaths(
         project_dir=project_dir,

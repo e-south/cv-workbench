@@ -88,6 +88,7 @@ def init_project(root: Path) -> InitResult:
         "dist": var_root / "dist",
         "runs": var_root / "runs",
         "drafts": var_root / "drafts",
+        "variants": var_root / "variants",
         "reviews": var_root / "reviews",
     }
     for label, target in var_targets.items():
