@@ -13,3 +13,4 @@
 - Added variant lifecycle registry with keep/discard/gc/inbox flows.
 - Tailor and project creation now register ephemeral variants for cleanup.
 - Init scaffolding now creates `var/variants` alongside other var targets.
+- Preview UI now surfaces disconnected-state errors and marks the active format button for automation.

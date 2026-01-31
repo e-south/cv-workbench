@@ -42,3 +42,15 @@ def test_preview_page_html_guards_preview_src_updates() -> None:
     html = _preview_page_html()
     assert "currentPreviewSrc" in html
     assert "nextPreviewSrc !== currentPreviewSrc" in html
+
+
+def test_preview_page_html_marks_active_format_button() -> None:
+    html = _preview_page_html()
+    assert "data-cvw-active" in html
+    assert "aria-pressed" in html
+
+
+def test_preview_page_html_handles_state_fetch_errors() -> None:
+    html = _preview_page_html()
+    assert "connectionError" in html
+    assert "Preview disconnected" in html

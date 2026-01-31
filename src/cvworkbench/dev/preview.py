@@ -822,9 +822,11 @@ def _preview_page_html() -> str:
       </main>
     </div>
     <script>
+      const DISCONNECTED_MESSAGE = 'Preview disconnected';
       const state = { data: null };
       const history = [];
       let stopped = false;
+      let connectionError = null;
       let currentFormat = 'html';
       const iframe = document.getElementById('preview');
       const projectSelect = document.getElementById('project-select');
@@ -846,7 +848,9 @@ def _preview_page_html() -> str:
 
       async function fetchState() {
         const res = await fetch('/api/state');
-        if (!res.ok) return null;
+        if (!res.ok) {
+          throw new Error(DISCONNECTED_MESSAGE);
+        }
         return res.json();
       }
 
@@ -879,13 +883,21 @@ def _preview_page_html() -> str:
       }
 
       function overlaySignature(data) {
-        return [stopped ? 'stopped' : 'live', data.last_error || ''].join('::');
+        const lastError = data && data.last_error ? data.last_error : '';
+        return [stopped ? 'stopped' : 'live', lastError, connectionError || ''].join('::');
       }
 
       function renderOverlay(data) {
+        const lastError = data && data.last_error ? data.last_error : '';
+        if (connectionError) {
+          statusEl.textContent = DISCONNECTED_MESSAGE + '.';
+          errorEl.textContent = connectionError;
+          errorEl.style.display = 'block';
+          return;
+        }
         statusEl.textContent = stopped ? 'Preview stopped.' : 'Listening for changes…';
-        if (data.last_error) {
-          errorEl.textContent = data.last_error;
+        if (lastError) {
+          errorEl.textContent = lastError;
           errorEl.style.display = 'block';
         } else {
           errorEl.style.display = 'none';
@@ -955,11 +967,14 @@ def _preview_page_html() -> str:
       function updateFormatButtons() {
         const buttons = formatTabs.querySelectorAll('button');
         buttons.forEach((btn) => {
-          if (btn.dataset.format === currentFormat) {
+          const active = btn.dataset.format === currentFormat;
+          if (active) {
             btn.classList.add('active');
           } else {
             btn.classList.remove('active');
           }
+          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+          btn.setAttribute('data-cvw-active', active ? 'true' : 'false');
         });
       }
 
@@ -1029,6 +1044,7 @@ def _preview_page_html() -> str:
           return;
         }
         stopped = true;
+        connectionError = null;
         setControlsEnabled(false);
         const data = state.data || {};
         renderOverlay(data);
@@ -1037,9 +1053,19 @@ def _preview_page_html() -> str:
 
       async function refresh() {
         if (stopped) return;
-        const data = await fetchState();
-        if (!data) return;
-        applyState(data);
+        try {
+          const data = await fetchState();
+          connectionError = null;
+          applyState(data);
+        } catch (_) {
+          connectionError = DISCONNECTED_MESSAGE;
+          const data = state.data || {};
+          const nextOverlayKey = overlaySignature(data);
+          if (nextOverlayKey !== lastOverlayKey) {
+            lastOverlayKey = nextOverlayKey;
+            renderOverlay(data);
+          }
+        }
       }
 
       async function handleKey(event) {

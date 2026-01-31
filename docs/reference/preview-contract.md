@@ -48,13 +48,14 @@ Playwright should target the `data-cvw-*` hooks:
 
 - `data-cvw-control="project|variant|theme|preset|format-tabs|auto-pdf"`
 - `data-cvw-format="html|pdf|md|ats"` on each format button
+- `data-cvw-active="true|false"` + `aria-pressed` on the active format button
 - `data-cvw-action="rebuild|stop"`
 - `data-cvw-status="status|error|run-list"`
 - `data-cvw-build-id` on `<body>` (updated on successful rebuild)
 - `data-cvw-view="preview-frame"`
 
-The project selector is read-only unless the preview was started with
-`--project`.
+The project selector is read-only and displays the active project (if the
+preview was started with `--project`).
 
 ## Interaction semantics
 
@@ -63,6 +64,8 @@ The project selector is read-only unless the preview was started with
 - UI controls call `/api/render`; state updates are visible via `/api/state`.
 - The Stop button (or `POST /api/stop`) shuts down the server and disables UI
   controls.
+- If the preview API becomes unreachable, the error status shows a
+  "Preview disconnected" message.
 
 ## Playwright interaction recipe
 
