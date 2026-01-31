@@ -16,3 +16,5 @@ targets.
 
 `repo_path` in the site sync config is resolved relative to the config file
 location.
+
+Sync fails fast if `repo_path` does not exist or is not a directory.

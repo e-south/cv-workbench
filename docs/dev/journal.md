@@ -14,3 +14,4 @@
 - Tailor and project creation now register ephemeral variants for cleanup.
 - Init scaffolding now creates `var/variants` alongside other var targets.
 - Preview UI now surfaces disconnected-state errors and marks the active format button for automation.
+- Sync fails fast if the site repo path is missing or not a directory.

@@ -95,6 +95,10 @@ def load_site_sync(path: Path) -> SiteSyncConfig:
     site = parsed.site
     base = path.parent
     repo_path = _resolve_path(base, site.repo_path)
+    if not repo_path.exists():
+        raise SyncError(f"Site repo path not found: {repo_path}")
+    if not repo_path.is_dir():
+        raise SyncError(f"Site repo path is not a directory: {repo_path}")
     return SiteSyncConfig(
         repo_path=repo_path,
         publish_variant=site.publish_variant,
