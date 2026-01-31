@@ -3,7 +3,7 @@
 ## Decoupling decisions
 - Public engine, private SoT provided via `--sot-path`; no real CV data in git.
 - YAML SoT compiled to JSON Resume as an internal interchange format.
-- Build pipeline is deterministic; outputs are artifacts (`dist/`, `runs/`) and never committed.
+- Build pipeline is deterministic; outputs are artifacts (`var/dist/`, `var/runs/`) and never committed.
 - Site integration is an adapter (`sync`), keeping the Astro site as a consumer.
 - MCP/tooling surface stays small and stable: validate, build, render, tailor, diff, sync.
 
@@ -13,7 +13,7 @@
 
 ## Current state
 - validate/build/render implemented with Pandoc + Lua filters.
-- JSON Resume materialization emitted to `runs/<timestamp>/resume.json`.
+- JSON Resume materialization emitted to `var/runs/<timestamp>/resume.json`.
 - Manifests include SoT hashes, variant hash, and resume hash.
 - sync/diff/tailor scaffolding implemented with tests.
 - Cover-letter variants and tag filtering supported.

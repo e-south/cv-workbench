@@ -79,8 +79,10 @@ def resolve_dist_path(config_path: Path) -> Path:
     if not isinstance(paths, dict):
         raise ValueError("Config field paths must be a mapping")
 
-    value = paths.get("dist", "dist")
-    return _resolve_from_config(config_path, value)
+    value = paths.get("dist")
+    if value:
+        return _resolve_from_config(config_path, value)
+    return resolve_var_root(config_path) / "dist"
 
 
 def resolve_runs_path(config_path: Path) -> Path:
@@ -90,8 +92,10 @@ def resolve_runs_path(config_path: Path) -> Path:
     if not isinstance(paths, dict):
         raise ValueError("Config field paths must be a mapping")
 
-    value = paths.get("runs", "runs")
-    return _resolve_from_config(config_path, value)
+    value = paths.get("runs")
+    if value:
+        return _resolve_from_config(config_path, value)
+    return resolve_var_root(config_path) / "runs"
 
 
 def resolve_registry_path(config_path: Path) -> Path:
@@ -101,8 +105,10 @@ def resolve_registry_path(config_path: Path) -> Path:
     if not isinstance(paths, dict):
         raise ValueError("Config field paths must be a mapping")
 
-    value = paths.get("registry", "registry")
-    return _resolve_from_config(config_path, value)
+    value = paths.get("registry")
+    if value:
+        return _resolve_from_config(config_path, value)
+    return resolve_var_root(config_path) / "registry"
 
 
 def resolve_drafts_path(config_path: Path) -> Path:
@@ -115,7 +121,7 @@ def resolve_drafts_path(config_path: Path) -> Path:
     value = paths.get("drafts")
     if value:
         return _resolve_from_config(config_path, value)
-    return resolve_project_root(config_path) / "drafts"
+    return resolve_var_root(config_path) / "drafts"
 
 
 def resolve_reviews_path(config_path: Path) -> Path:
@@ -128,7 +134,7 @@ def resolve_reviews_path(config_path: Path) -> Path:
     value = paths.get("reviews")
     if value:
         return _resolve_from_config(config_path, value)
-    return resolve_project_root(config_path) / "reviews"
+    return resolve_var_root(config_path) / "reviews"
 
 
 def resolve_projects_path(config_path: Path) -> Path:
@@ -139,7 +145,7 @@ def resolve_projects_path(config_path: Path) -> Path:
         raise ValueError("Config field paths must be a mapping")
     value = paths.get("projects")
     if value is None:
-        return resolve_project_root(config_path) / "projects"
+        return resolve_var_root(config_path) / "projects"
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Config field paths.projects must be a string")
     return _resolve_from_config(config_path, value.strip())
@@ -237,6 +243,10 @@ def resolve_project_root(config_path: Path) -> Path:
     if config_dir.name == "config":
         return config_dir.parent.resolve()
     return config_dir.resolve()
+
+
+def resolve_var_root(config_path: Path) -> Path:
+    return resolve_project_root(config_path) / "var"
 
 
 def resolve_project_path(path: Path, config_path: Path) -> Path:

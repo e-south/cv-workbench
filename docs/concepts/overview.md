@@ -11,7 +11,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - build
 - render
 - dev serve
-- clean (runs/dist/drafts)
+- clean (var/runs, var/dist, var/drafts, var/reviews, var/registry, var/projects)
 - tailor
 - diff
 - sync
@@ -34,7 +34,7 @@ Selection metadata is written to `selection.json` for explainable filtering.
 Variants can target different document types (resume, cover-letter). Tag filters
 apply to bullet entries and cover-letter sections for consistent selection.
 
-URL ingestion creates local registry entries under `registry/contexts/` and
+URL ingestion creates local registry entries under `var/registry/contexts/` and
 stores extracted text, deterministic signals, and a draft strategy file.
 
 Tags are normalized (case/punctuation-insensitive) and can be namespaced using

@@ -29,9 +29,9 @@ def _write_minimal_config(root: Path) -> Path:
         "\n".join(
             [
                 "paths:",
-                "  dist: dist",
-                "  runs: runs",
-                "  sot: sot",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "  sot: ../local/sot",
                 "variants:",
                 "  default: base",
             ]
@@ -53,7 +53,7 @@ def _write_minimal_config(root: Path) -> Path:
 
 def test_reviewpack_creates_bundle(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
-    dist_dir = tmp_path / "config" / "dist" / "base"
+    dist_dir = tmp_path / "var" / "dist" / "base"
     dist_dir.mkdir(parents=True, exist_ok=True)
     (dist_dir / "cv.docx").write_bytes(b"docx")
     (dist_dir / "cv.pdf").write_bytes(b"pdf")
@@ -77,7 +77,7 @@ def test_reviewpack_creates_bundle(tmp_path: Path) -> None:
 
 def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_minimal_config(tmp_path)
-    runs_dir = tmp_path / "config" / "runs" / "2026-01-01T00-00-00Z"
+    runs_dir = tmp_path / "var" / "runs" / "2026-01-01T00-00-00Z"
     runs_dir.mkdir(parents=True, exist_ok=True)
     (runs_dir / "canonical.md").write_text("before\n")
 

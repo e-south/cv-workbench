@@ -29,7 +29,7 @@ def test_sync_local_updates_site(tmp_path: Path) -> None:
     (site_repo / "public/cv/cv.pdf").write_bytes(b"old")
     (site_repo / "src/content/page-cv/cv.md").write_text("---\ncvPdf: /cv/old.pdf\n---\ncontent\n")
 
-    dist_dir = tmp_path / "dist" / "base"
+    dist_dir = tmp_path / "var" / "dist" / "base"
     dist_dir.mkdir(parents=True, exist_ok=True)
     (dist_dir / "cv.md").write_text("new\n")
     (dist_dir / "cv.pdf").write_bytes(b"new")
@@ -55,9 +55,9 @@ def test_sync_local_updates_site(tmp_path: Path) -> None:
         "\n".join(
             [
                 "paths:",
-                "  dist: dist",
-                "  runs: runs",
-                "  sot: sot",
+                "  dist: var/dist",
+                "  runs: var/runs",
+                "  sot: local/sot",
                 "variants:",
                 "  default: base",
                 "site:",
@@ -123,7 +123,7 @@ def test_sync_defaults_to_config_mode(tmp_path: Path) -> None:
     (site_repo / "public/cv/cv.pdf").write_bytes(b"old")
     (site_repo / "src/content/page-cv/cv.md").write_text("---\ncvPdf: /cv/old.pdf\n---\ncontent\n")
 
-    dist_dir = tmp_path / "dist" / "base"
+    dist_dir = tmp_path / "var" / "dist" / "base"
     dist_dir.mkdir(parents=True, exist_ok=True)
     (dist_dir / "cv.md").write_text("new\n")
     (dist_dir / "cv.pdf").write_bytes(b"new")
@@ -150,9 +150,9 @@ def test_sync_defaults_to_config_mode(tmp_path: Path) -> None:
         "\n".join(
             [
                 "paths:",
-                "  dist: dist",
-                "  runs: runs",
-                "  sot: sot",
+                "  dist: var/dist",
+                "  runs: var/runs",
+                "  sot: local/sot",
                 "variants:",
                 "  default: base",
                 "site:",

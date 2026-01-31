@@ -25,4 +25,4 @@ This workbench separates three planes:
 Outputs are always treated as build artifacts and are never committed.
 
 Local context ingestion writes extracted text, deterministic signals, and draft
-strategy files under `registry/contexts/` for auditability.
+strategy files under `var/registry/contexts/` for auditability.

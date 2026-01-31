@@ -21,7 +21,7 @@ from tests.utils import strip_ansi
 
 
 def test_diff_resume_json_output() -> None:
-    runs_root = Path("runs")
+    runs_root = Path("var/runs")
     run_a = runs_root / "2026-01-01T00-00-00Z"
     run_b = runs_root / "2026-01-02T00-00-00Z"
     run_a.mkdir(parents=True, exist_ok=True)
@@ -53,7 +53,7 @@ def test_diff_resume_json_output() -> None:
 
 
 def test_diff_unified_prints_summary() -> None:
-    runs_root = Path("runs")
+    runs_root = Path("var/runs")
     run_a = runs_root / "2026-01-03T00-00-00Z"
     run_b = runs_root / "2026-01-04T00-00-00Z"
     run_a.mkdir(parents=True, exist_ok=True)

@@ -1,7 +1,7 @@
 # SoT version packs
 
 Use version packs to experiment safely without overwriting your canonical SoT.
-Each version lives under `sot/versions/<name>/`, with `sot/ACTIVE` selecting the
+Each version lives under `local/sot/versions/<name>/`, with `local/sot/ACTIVE` selecting the
 current version.
 
 ## List versions

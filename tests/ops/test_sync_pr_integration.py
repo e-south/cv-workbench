@@ -58,7 +58,7 @@ def test_sync_pr_creates_branch_and_pr(tmp_path: Path) -> None:
     if not site_cv_page.exists():
         pytest.fail(f"Missing site CV page: {site_cv_page}")
 
-    dist_dir = Path("dist/base")
+    dist_dir = Path("var/dist/base")
     dist_dir.mkdir(parents=True, exist_ok=True)
     existing = site_cv_md.read_text()
     unique_line = f"\nSync integration test: {os.getpid()}\n"

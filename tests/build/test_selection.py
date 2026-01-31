@@ -26,7 +26,7 @@ def test_build_writes_selection() -> None:
         ["build", "--plain", "--variant", "base", "--format", "md", "--sot-path", "sot.sample"],
     )
     assert result.exit_code == 0
-    selection_path = Path("dist/base/selection.json")
+    selection_path = Path("var/dist/base/selection.json")
     payload = json.loads(selection_path.read_text())
     assert isinstance(payload.get("items"), list)
 

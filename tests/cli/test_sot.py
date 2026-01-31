@@ -22,7 +22,7 @@ def _write_config(root: Path) -> Path:
     config_dir = root / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path = config_dir / "workbench.yaml"
-    config_path.write_text("paths:\n  sot: ../sot\nvariants:\n  default: base\n")
+    config_path.write_text("paths:\n  sot: ../local/sot\nvariants:\n  default: base\n")
     return config_path
 
 
@@ -75,15 +75,15 @@ def _write_minimal_sot(version_dir: Path, name: str) -> None:
 
 
 def _write_versions(root: Path) -> None:
-    versions_root = root / "sot" / "versions"
+    versions_root = root / "local" / "sot" / "versions"
     _write_minimal_sot(versions_root / "base", "base")
-    (root / "sot" / "ACTIVE").write_text("base\n")
+    (root / "local" / "sot" / "ACTIVE").write_text("base\n")
 
 
 def test_sot_list_and_activate(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     _write_versions(tmp_path)
-    _write_minimal_sot(tmp_path / "sot" / "versions" / "alt", "alt")
+    _write_minimal_sot(tmp_path / "local" / "sot" / "versions" / "alt", "alt")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -115,7 +115,7 @@ def test_sot_list_and_activate(tmp_path: Path) -> None:
 
     assert activate.exit_code == 0
     assert "active: alt" in activate.stdout
-    assert (tmp_path / "sot" / "ACTIVE").read_text().strip() == "alt"
+    assert (tmp_path / "local" / "sot" / "ACTIVE").read_text().strip() == "alt"
 
 
 def test_sot_new_and_diff(tmp_path: Path) -> None:

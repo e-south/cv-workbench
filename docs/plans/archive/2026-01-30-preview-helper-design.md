@@ -1,3 +1,5 @@
+> Archived: superseded by docs/plans/2026-01-31-preview-playwright-clean-refactor.md
+
 ---
 title: Preview Helper App Design (PDF-first)
 date: 2026-01-30
@@ -45,14 +47,14 @@ Example contract:
 ```
 POST /open
 {
-  "pdf_path": "/path/to/dist/base/cv.pdf",
+  "pdf_path": "/path/to/var/dist/base/cv.pdf",
   "html_url": "http://127.0.0.1:8765/",
   "focus": true
 }
 
 POST /reload
 {
-  "pdf_path": "/path/to/dist/base/cv.pdf",
+  "pdf_path": "/path/to/var/dist/base/cv.pdf",
   "html_url": "http://127.0.0.1:8765/"
 }
 

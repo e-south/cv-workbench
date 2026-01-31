@@ -96,9 +96,9 @@ def _write_minimal_config(root: Path) -> None:
         "\n".join(
             [
                 "paths:",
-                "  sot: ../sot",
-                "  dist: ../dist",
-                "  runs: ../runs",
+                "  sot: ../local/sot",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
                 "render:",
                 "  themes_dir: ../build/themes",
                 "  theme: default",
@@ -161,12 +161,12 @@ def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
 
     assert result.exit_code == 0
     root = Path(cwd)
-    assert (root / "sot").exists()
+    assert (root / "local/sot").exists()
     assert (root / "config/workbench.yaml").exists()
     assert (root / "config/variants/base.yaml").exists()
     assert (root / "config/site-sync.yaml").exists()
-    assert (root / "registry/contexts").exists()
-    assert (root / "projects").exists()
+    assert (root / "var/registry/contexts").exists()
+    assert (root / "var/projects").exists()
     assert (root / "build/themes/default/theme.yaml").exists()
 
 

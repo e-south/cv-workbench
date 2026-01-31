@@ -30,10 +30,10 @@ def _write_minimal_config(root: Path) -> Path:
         "\n".join(
             [
                 "paths:",
-                "  sot: ../sot",
-                "  dist: ../dist",
-                "  runs: ../runs",
-                "  registry: ../registry",
+                "  sot: ../local/sot",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "  registry: ../var/registry",
                 "variants:",
                 "  default: base",
             ]
@@ -79,7 +79,7 @@ def test_job_add_creates_registry_entry(tmp_path: Path, monkeypatch) -> None:
         )
 
     assert result.exit_code == 0
-    registry_dir = tmp_path / "registry" / "contexts" / expected_id
+    registry_dir = tmp_path / "var" / "registry" / "contexts" / expected_id
     assert (registry_dir / "source.json").exists()
     assert (registry_dir / "extracted.md").read_text() == "Sample job text\n"
     assert (registry_dir / "signals.json").exists()

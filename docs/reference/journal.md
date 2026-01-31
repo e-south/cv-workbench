@@ -6,7 +6,7 @@
 - Public engine with private SoT via --sot-path (no submodule)
 - SoT YAML compiled to JSON Resume; PDF via Pandoc -> LaTeX
 - Variants allow selection rules + AI-assisted rewrites (drafts only)
-- Run manifests and AI logs stay local under runs/
+- Run manifests and AI logs stay local under var/runs/
 - Sync default is PR automation to site repo
 - Outputs include short resume, long CV, cover letters
 - LLM integration via Codex CLI
@@ -15,7 +15,7 @@
 - Added canonical markdown materialization scaffolding and variant metadata defaults
 - Added build pipeline with Pandoc filters for tag selection and bullet limits
 - Documented Pandoc and LaTeX prerequisites for PDF rendering
-- Added manifest generation with SoT hashes and tool metadata written to dist/ and runs/
+- Added manifest generation with SoT hashes and tool metadata written to var/dist/ and var/runs/
 - Added JSON Resume materialization to run outputs and tracked resume hashes in manifests
 - Added strict schema validation with pydantic models and extra-field rejection
 - Implemented render command plus shared path helpers

@@ -23,7 +23,7 @@ def test_render_writes_output(tmp_path: Path) -> None:
     canonical_path = tmp_path / "canonical.md"
     canonical_path.write_text("# Sample\n")
 
-    output_path = Path("dist/base/cv.md")
+    output_path = Path("var/dist/base/cv.md")
     if output_path.exists():
         output_path.unlink()
 

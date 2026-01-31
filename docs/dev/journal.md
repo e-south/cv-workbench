@@ -5,3 +5,4 @@
 - Default preview viewer is browser on macOS; Preview.app can be selected explicitly.
 - Added tests for dynamic preview serving and updated macOS default viewer expectation.
 - Updated quickstart docs to reflect the browser-first preview default.
+- Started Playwright-first preview refactor and repo layout consolidation (local/ + var/).

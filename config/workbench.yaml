@@ -1,13 +1,13 @@
 project:
   name: cv-workbench
 paths:
-  sot: ../sot
-  dist: ../dist
-  runs: ../runs
-  drafts: ../drafts
-  reviews: ../reviews
-  registry: ../registry
-  projects: ../projects
+  sot: ../local/sot
+  dist: ../var/dist
+  runs: ../var/runs
+  drafts: ../var/drafts
+  reviews: ../var/reviews
+  registry: ../var/registry
+  projects: ../var/projects
 variants:
   default: base
 render:

@@ -1,3 +1,5 @@
+> Archived: superseded by docs/plans/2026-01-31-preview-playwright-clean-refactor.md
+
 # Live Preview + SoT Version Packs Design
 
 ## Context
@@ -33,14 +35,14 @@ on a single mutable source.
   and rebuilds, or fails fast with an error banner.
 
 ### SoT version packs
-- Store SoT versions in `sot/versions/<name>/`.
-- Active version selected by `sot/ACTIVE` pointer file.
+- Store SoT versions in `local/sot/versions/<name>/`.
+- Active version selected by `local/sot/ACTIVE` pointer file.
 - CLI namespace:
   - `cvw sot list`
   - `cvw sot new <name> --from <base>`
   - `cvw sot activate <name>`
   - `cvw sot diff <a> <b>` (structural diff)
-- Dev server watches `sot/ACTIVE` and active version contents.
+- Dev server watches `local/sot/ACTIVE` and active version contents.
 
 ## Invariants and error handling
 - No silent fallbacks: unknown theme/preset/version fails fast.

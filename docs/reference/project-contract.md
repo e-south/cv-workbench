@@ -6,18 +6,18 @@ explicitly apply a patch.
 
 ## Default location
 
-Projects live under `projects/` by default (gitignored). Override the path in
+Projects live under `var/projects/` by default (gitignored). Override the path in
 `config/workbench.yaml`:
 
 ```yaml
 paths:
-  projects: ../projects
+  projects: ../var/projects
 ```
 
 ## Layout
 
 ```
-projects/<slug>/
+var/projects/<slug>/
   project.yaml
   job/
     source.url        # or source.path

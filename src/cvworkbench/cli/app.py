@@ -38,22 +38,16 @@ from cvworkbench.config import (
     resolve_drafts_path,
     resolve_pdf_engine,
     resolve_project_path,
+    resolve_projects_path,
+    resolve_registry_path,
+    resolve_reviews_path,
     resolve_runs_path,
     resolve_sot_path,
     resolve_style_preset,
     resolve_sync_mode,
     resolve_themes_dir,
+    resolve_var_root,
     resolve_variant_path,
-)
-from cvworkbench.dev.open import (
-    OpenMode,
-    OpenResult,
-    PreviewViewer,
-    open_pdf_in_preview,
-    open_pdf,
-    open_url,
-    resolve_open_mode,
-    resolve_preview_viewer,
 )
 from cvworkbench.dev.preview import (
     PreviewController,
@@ -308,58 +302,42 @@ def _print_theme_info_summary(theme_id: str, description: str | None, routes: li
 def _print_serve_summary(
     output_path: Path,
     preview_url: str,
-    opened: bool,
     watching: bool,
-    open_mode: OpenMode,
-    viewer: PreviewViewer,
 ) -> None:
     print_summary(
         "serve",
         [
             ("output_html", output_path),
             ("preview_url", preview_url),
-            ("opened_browser", str(opened).lower()),
             ("watching", str(watching).lower()),
-            ("open_mode", open_mode.value),
-            ("viewer", viewer.value),
             ("controls", "t=theme p=preset v=variant f=format r=rebuild x=stop"),
         ],
     )
 
 
-_open_url = open_url
+def _reject_legacy_preview_env() -> None:
+    legacy_vars = [
+        "CVW_SKIP_OPEN",
+        "CVW_PREVIEW_VIEWER",
+        "CVW_OPEN_MODE",
+        "CVW_BROWSER",
+    ]
+    for key in legacy_vars:
+        if os.environ.get(key):
+            typer.echo(
+                f"ERROR: legacy preview environment variable is not supported: {key}",
+                err=True,
+            )
+            raise typer.Exit(code=2)
 
 
-def _print_open_hint(target: str | Path) -> None:
-    resolved = _normalize_open_target(target)
-    typer.echo(f"HINT: open {resolved}", err=True)
-    payload = {
-        "kind": "url" if str(resolved).startswith(("http://", "https://", "file://")) else "file",
-        "target": str(resolved),
-        "command": f'open "{resolved}"',
-    }
-    typer.echo(f"CVW_OPEN_REQUEST: {json.dumps(payload, sort_keys=True)}", err=True)
-
-
-def _normalize_open_target(target: str | Path) -> str:
-    if isinstance(target, Path):
-        if target.exists():
-            return str(target.resolve())
-        return str(target)
-    if target.startswith(("http://", "https://", "file://")):
-        return target
-    path = Path(target)
-    if path.exists():
-        return str(path.resolve())
-    return target
-
-
-def _open_preview_url(url: str | Path, open_mode: OpenMode, browser: str | None) -> OpenResult:
-    target = _normalize_open_target(url)
-    result = _open_url(target, mode=open_mode, browser=browser)
-    if result.note:
-        typer.echo(f"NOTICE: {result.note}", err=True)
-    return result
+def _require_var_path(target: str, path: Path, config_path: Path) -> None:
+    var_root = resolve_var_root(config_path).resolve()
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(var_root)
+    except ValueError as exc:
+        raise CleanError(f"{target} path is outside var: {resolved}") from exc
 
 
 def _post_preview_stop(url: str, timeout: float = 2.0) -> tuple[bool, str | None]:
@@ -835,7 +813,9 @@ def clean_runs(
 ) -> None:
     configure_output_mode(plain, json_output)
     try:
-        path = resolve_runs_path(config)
+        config_path = resolve_config_path(config)
+        path = resolve_runs_path(config_path)
+        _require_var_path("runs", path, config_path)
         result = clean_path(target="runs", path=path, confirm=yes)
     except (CleanError, FileNotFoundError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -879,7 +859,9 @@ def clean_dist(
 ) -> None:
     configure_output_mode(plain, json_output)
     try:
-        path = resolve_dist_path(config)
+        config_path = resolve_config_path(config)
+        path = resolve_dist_path(config_path)
+        _require_var_path("dist", path, config_path)
         result = clean_path(target="dist", path=path, confirm=yes)
     except (CleanError, FileNotFoundError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -923,8 +905,148 @@ def clean_drafts(
 ) -> None:
     configure_output_mode(plain, json_output)
     try:
-        path = resolve_drafts_path(config)
+        config_path = resolve_config_path(config)
+        path = resolve_drafts_path(config_path)
+        _require_var_path("drafts", path, config_path)
         result = clean_path(target="drafts", path=path, confirm=yes)
+    except (CleanError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_clean_summary(result.target, result.path, result.removed, result.status)
+    if not yes and result.status == "dry_run":
+        raise typer.Exit(code=2)
+
+
+@clean_app.command("registry")
+def clean_registry(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of all registry artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        config_path = resolve_config_path(config)
+        path = resolve_registry_path(config_path)
+        _require_var_path("registry", path, config_path)
+        result = clean_path(target="registry", path=path, confirm=yes)
+    except (CleanError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_clean_summary(result.target, result.path, result.removed, result.status)
+    if not yes and result.status == "dry_run":
+        raise typer.Exit(code=2)
+
+
+@clean_app.command("reviews")
+def clean_reviews(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of all review artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        config_path = resolve_config_path(config)
+        path = resolve_reviews_path(config_path)
+        _require_var_path("reviews", path, config_path)
+        result = clean_path(target="reviews", path=path, confirm=yes)
+    except (CleanError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_clean_summary(result.target, result.path, result.removed, result.status)
+    if not yes and result.status == "dry_run":
+        raise typer.Exit(code=2)
+
+
+@clean_app.command("projects")
+def clean_projects(
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Confirm deletion of all project artifacts",
+        ),
+    ] = False,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        config_path = resolve_config_path(config)
+        path = resolve_projects_path(config_path)
+        _require_var_path("projects", path, config_path)
+        result = clean_path(target="projects", path=path, confirm=yes)
     except (CleanError, FileNotFoundError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -1246,30 +1368,6 @@ def project_new(
             help="Open preview after creating the project",
         ),
     ] = False,
-    open_mode: Annotated[
-        OpenMode | None,
-        typer.Option(
-            "--open-mode",
-            help="Browser open mode (launchservices, applescript, none)",
-            envvar="CVW_OPEN_MODE",
-        ),
-    ] = None,
-    viewer: Annotated[
-        PreviewViewer | None,
-        typer.Option(
-            "--viewer",
-            help="Preview viewer (browser, preview-app, quicklook-pdf, none)",
-            envvar="CVW_PREVIEW_VIEWER",
-        ),
-    ] = None,
-    browser: Annotated[
-        str | None,
-        typer.Option(
-            "--browser",
-            help="Browser app name (macOS) or opener command",
-            envvar="CVW_BROWSER",
-        ),
-    ] = None,
     config: Annotated[
         Path,
         typer.Option(
@@ -1345,9 +1443,6 @@ def project_new(
             style_preset=None,
             plain=plain,
             json_output=json_output,
-            viewer=viewer,
-            open_mode=open_mode,
-            browser=browser,
             project=result.project_dir.name,
         )
 
@@ -2037,43 +2132,9 @@ def dev_serve(
             help="Use JSON output for summaries",
         ),
     ] = False,
-    viewer: Annotated[
-        PreviewViewer | None,
-        typer.Option(
-            "--viewer",
-            help="Preview viewer (browser, preview-app, quicklook-pdf, none)",
-            envvar="CVW_PREVIEW_VIEWER",
-        ),
-    ] = None,
-    open_mode: Annotated[
-        OpenMode | None,
-        typer.Option(
-            "--open-mode",
-            help="Browser open mode (launchservices, applescript, none)",
-            envvar="CVW_OPEN_MODE",
-        ),
-    ] = None,
-    browser: Annotated[
-        str | None,
-        typer.Option(
-            "--browser",
-            help="Browser app name (macOS) or opener command",
-            envvar="CVW_BROWSER",
-        ),
-    ] = None,
 ) -> None:
     configure_output_mode(plain, json_output)
-    resolved_open_mode = resolve_open_mode(open_mode)
-    resolved_viewer = resolve_preview_viewer(viewer)
-    if resolved_open_mode == OpenMode.APPLESCRIPT and resolved_viewer in {
-        PreviewViewer.QUICKLOOK_PDF,
-        PreviewViewer.PREVIEW_APP,
-    }:
-        typer.echo(
-            "ERROR: preview-app/quicklook-pdf viewers do not support open-mode applescript",
-            err=True,
-        )
-        raise typer.Exit(code=2)
+    _reject_legacy_preview_env()
     config_path = resolve_config_path(config)
     project_spec = None
     try:
@@ -2117,7 +2178,7 @@ def dev_serve(
         variant_id=resolved_variant,
         theme_id=resolved_theme,
         style_preset=resolved_preset,
-        auto_pdf=True if resolved_viewer == PreviewViewer.QUICKLOOK_PDF else True,
+        auto_pdf=True,
         project_dir=project_spec.project_dir if project_spec else None,
     )
     host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
@@ -2133,82 +2194,20 @@ def dev_serve(
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         html_path = state.output_files.get("html", state.dist_dir / "cv.html")
-        open_result = OpenResult(opened=False, error=None, mode=resolved_open_mode)
-        if resolved_viewer != PreviewViewer.NONE and resolved_open_mode != OpenMode.NONE:
-            if resolved_viewer == PreviewViewer.QUICKLOOK_PDF:
-                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
-                open_result = open_pdf(pdf_path)
-                if not open_result.opened and open_result.error:
-                    typer.echo(f"ERROR: {open_result.error}", err=True)
-                    _print_open_hint(pdf_path)
-            elif resolved_viewer == PreviewViewer.PREVIEW_APP:
-                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
-                open_result = open_pdf_in_preview(pdf_path)
-                if not open_result.opened and open_result.error:
-                    typer.echo(f"ERROR: {open_result.error}", err=True)
-                    typer.echo("HINT: Preview failed; attempting browser fallback.", err=True)
-                    fallback = _open_preview_url(html_path, resolved_open_mode, browser)
-                    if fallback.opened:
-                        open_result = fallback
-                    elif fallback.error:
-                        typer.echo(f"ERROR: {fallback.error}", err=True)
-                        _print_open_hint(html_path)
-                    else:
-                        _print_open_hint(pdf_path)
-            else:
-                open_result = _open_preview_url(html_path, resolved_open_mode, browser)
-                if not open_result.opened and open_result.error:
-                    typer.echo(f"ERROR: {open_result.error}", err=True)
-                    _print_open_hint(html_path)
         _print_serve_summary(
             html_path,
             str(html_path),
-            open_result.opened,
             False,
-            resolved_open_mode,
-            resolved_viewer,
         )
         return
 
     def _on_start(url: str, html_path: Path) -> None:
-        open_result = OpenResult(opened=False, error=None, mode=resolved_open_mode)
-        if resolved_viewer != PreviewViewer.NONE and resolved_open_mode != OpenMode.NONE:
-            if resolved_viewer == PreviewViewer.QUICKLOOK_PDF:
-                state = controller.state()
-                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
-                open_result = open_pdf(pdf_path)
-                if not open_result.opened and open_result.error:
-                    typer.echo(f"ERROR: {open_result.error}", err=True)
-                    _print_open_hint(pdf_path)
-            elif resolved_viewer == PreviewViewer.PREVIEW_APP:
-                state = controller.state()
-                pdf_path = state.output_files.get("pdf", state.dist_dir / "cv.pdf")
-                open_result = open_pdf_in_preview(pdf_path)
-                if not open_result.opened and open_result.error:
-                    typer.echo(f"ERROR: {open_result.error}", err=True)
-                    typer.echo("HINT: Preview failed; attempting browser fallback.", err=True)
-                    fallback = _open_preview_url(url, resolved_open_mode, browser)
-                    if fallback.opened:
-                        open_result = fallback
-                    elif fallback.error:
-                        typer.echo(f"ERROR: {fallback.error}", err=True)
-                        _print_open_hint(url)
-                    else:
-                        _print_open_hint(pdf_path)
-            else:
-                open_result = _open_preview_url(url, resolved_open_mode, browser)
-                if not open_result.opened and open_result.error:
-                    typer.echo(f"ERROR: {open_result.error}", err=True)
-                    _print_open_hint(url)
         session = new_preview_session(host=host, port=port, url=url, state=controller.state())
         write_preview_session(session, config_path)
         _print_serve_summary(
             html_path,
             url,
-            open_result.opened,
             True,
-            resolved_open_mode,
-            resolved_viewer,
         )
 
     try:
@@ -2353,30 +2352,6 @@ def preview(
             help="Use JSON output for summaries",
         ),
     ] = False,
-    viewer: Annotated[
-        PreviewViewer | None,
-        typer.Option(
-            "--viewer",
-            help="Preview viewer (browser, preview-app, quicklook-pdf, none)",
-            envvar="CVW_PREVIEW_VIEWER",
-        ),
-    ] = None,
-    open_mode: Annotated[
-        OpenMode | None,
-        typer.Option(
-            "--open-mode",
-            help="Browser open mode (launchservices, applescript, none)",
-            envvar="CVW_OPEN_MODE",
-        ),
-    ] = None,
-    browser: Annotated[
-        str | None,
-        typer.Option(
-            "--browser",
-            help="Browser app name (macOS) or opener command",
-            envvar="CVW_BROWSER",
-        ),
-    ] = None,
 ) -> None:
     dev_serve(
         sot_path=sot_path,
@@ -2387,9 +2362,6 @@ def preview(
         style_preset=style_preset,
         plain=plain,
         json_output=json_output,
-        viewer=viewer,
-        open_mode=open_mode,
-        browser=browser,
     )
 
 

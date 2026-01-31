@@ -46,13 +46,13 @@ locations. The default outputs are written to:
 `cvw quickstart` also creates the default scaffold (config, variants, and
 templates) if they are missing.
 
-- `dist/base/cv.md`
-- `dist/base/cv.pdf`
-- `dist/base/cv.docx`
-- `dist/base/manifest.json`
-- `runs/<timestamp>/canonical.md`
-- `runs/<timestamp>/resume.json`
-- `runs/<timestamp>/selection.json`
+- `var/dist/base/cv.md`
+- `var/dist/base/cv.pdf`
+- `var/dist/base/cv.docx`
+- `var/dist/base/manifest.json`
+- `var/runs/<timestamp>/canonical.md`
+- `var/runs/<timestamp>/resume.json`
+- `var/runs/<timestamp>/selection.json`
 
 You can run these commands from any subdirectory inside the repo. The CLI walks
 up to the nearest `config/workbench.yaml` and resolves outputs relative to that
@@ -89,10 +89,10 @@ uv run cvw preview --sot-path ./sot.sample --variant base --style-preset compact
 ```
 
 `cvw preview` starts a live preview server and auto-rebuilds when you edit SoT
-files, theme templates, or style presets. The default viewer opens the HTML
-preview UI in your browser (with sidebar controls and shortcuts). To open the
-PDF in Preview, pass `--viewer preview-app`. The sidebar controls (or shortcuts)
-let you cycle themes, presets, variants, and formats:
+files, theme templates, or style presets. The command prints a local preview URL;
+use Playwright to open and interact with the preview UI (sidebar controls and
+shortcuts). The sidebar controls (or shortcuts) let you cycle themes, presets,
+variants, and formats:
 
 - `t`: cycle theme
 - `p`: cycle style preset
@@ -107,26 +107,6 @@ Closing the browser tab does not stop the preview server. Use the Stop button
 ```bash
 uv run cvw dev stop
 ```
-
-If the browser cannot be opened, the server stays up and prints a manual URL.
-On macOS, the default open mode uses LaunchServices and avoids Automation
-permissions. To use AppleScript automation explicitly, pass
-`--open-mode applescript`. For headless usage, set `CVW_SKIP_OPEN=1` or use
-`--open-mode none`.
-If your system does not have a default handler for `.html` files, pass
-`--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
-When no default handler is available, cvw will attempt to auto-detect an
-installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc).
-If you want a browserless preview (or to force Preview explicitly), run:
-
-```bash
-uv run cvw preview --viewer preview-app --sot-path ./sot.sample --variant base
-```
-
-This opens the generated PDF in Preview and keeps the watcher running. You can
-also use `--viewer quicklook-pdf` to use Quick Look instead.
-If auto-open fails, cvw prints a `CVW_OPEN_REQUEST: {...}` line that you can
-hand to a local opener (or Codex rules) to open the artifact outside a sandbox.
 
 To change the host or port:
 
@@ -170,6 +150,9 @@ Projects keep job context, signals, and proposal drafts without mutating SoT.
 uv run cvw clean runs --yes
 uv run cvw clean dist --yes
 uv run cvw clean drafts --yes
+uv run cvw clean reviews --yes
+uv run cvw clean registry --yes
+uv run cvw clean projects --yes
 ```
 
 Clean commands default to a dry run unless `--yes` is provided.

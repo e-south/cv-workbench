@@ -1,3 +1,5 @@
+> Archived: superseded by docs/plans/2026-01-31-preview-playwright-clean-refactor.md
+
 --------------------------------------------------------------------------------
 cv-workbench
 cv-workbench/docs/plans/2026-01-30-preview-ux-design.md
@@ -77,7 +79,7 @@ The UI switches to a stopped state with a restart hint.
 
 ### Session hygiene
 
-Write a minimal session record under `runs/preview/`:
+Write a minimal session record under `var/runs/preview/`:
 - PID, port, URL
 - Theme/preset
 - Start time

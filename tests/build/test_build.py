@@ -19,7 +19,7 @@ from cvworkbench.cli import app
 
 
 def test_build_generates_markdown() -> None:
-    output_path = Path("dist/base/cv.md")
+    output_path = Path("var/dist/base/cv.md")
     if output_path.exists():
         output_path.unlink()
 
@@ -37,7 +37,7 @@ def test_build_generates_markdown() -> None:
 
 
 def test_build_marks_publication_roles() -> None:
-    output_path = Path("dist/base/cv.md")
+    output_path = Path("var/dist/base/cv.md")
     if output_path.exists():
         output_path.unlink()
 

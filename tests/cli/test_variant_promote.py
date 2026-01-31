@@ -27,7 +27,7 @@ def _write_minimal_config(root: Path) -> Path:
         "\n".join(
             [
                 "paths:",
-                "  sot: ../sot",
+                "  sot: ../local/sot",
                 "variants:",
                 "  default: base",
             ]
@@ -48,7 +48,7 @@ def _write_minimal_config(root: Path) -> Path:
 
 
 def _write_draft_variant(root: Path, draft_id: str) -> Path:
-    draft_dir = root / "drafts" / draft_id
+    draft_dir = root / "var" / "drafts" / draft_id
     draft_dir.mkdir(parents=True, exist_ok=True)
     (draft_dir / "variant.yaml").write_text(
         "\n".join(

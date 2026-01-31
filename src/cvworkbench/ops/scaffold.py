@@ -35,7 +35,7 @@ def init_project(root: Path) -> InitResult:
     template_root = resolve_template_root()
     statuses: dict[str, str] = {}
 
-    sot_target = root / "sot"
+    sot_target = root / "local" / "sot"
     _ensure_dir_from_template(template_root / "sot.sample", sot_target, statuses, "sot")
 
     config_target = root / "config"
@@ -83,14 +83,14 @@ def init_project(root: Path) -> InitResult:
         "themes",
     )
 
-    registry_target = root / "registry" / "contexts"
+    registry_target = root / "var" / "registry" / "contexts"
     if not registry_target.exists():
         registry_target.mkdir(parents=True, exist_ok=True)
         statuses["registry"] = "created"
     else:
         statuses["registry"] = "exists"
 
-    projects_target = root / "projects"
+    projects_target = root / "var" / "projects"
     if not projects_target.exists():
         projects_target.mkdir(parents=True, exist_ok=True)
         statuses["projects"] = "created"

@@ -47,12 +47,8 @@ or run:
 uv run cvw dev stop
 ```
 
-The HTML output is written to `dist/<variant>/cv.html`. The command will open
-the preview URL in your browser unless `CVW_SKIP_OPEN=1` is set.
-
-If the browser cannot be opened, the server stays up and prints a manual URL.
-On macOS, the default open mode uses LaunchServices. To use AppleScript
-automation explicitly, pass `--open-mode applescript`.
+The HTML output is written to `var/dist/<variant>/cv.html`. The command prints
+the local preview URL; use Playwright to open and interact with it.
 
 ## Theme layout
 

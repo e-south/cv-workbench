@@ -17,10 +17,10 @@ This command:
 ## Registry layout
 
 Entries live under the registry path configured in `config/workbench.yaml`
-(default: `../registry`):
+(default: `../var/registry`):
 
 ```
-registry/
+var/registry/
   contexts/
     context-<hash>/
       source.json
@@ -59,7 +59,7 @@ The registry path and user agent are set in `config/workbench.yaml`:
 
 ```yaml
 paths:
-  registry: ../registry
+  registry: ../var/registry
 registry:
   user_agent: cv-workbench/0.1
 ```

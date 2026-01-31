@@ -26,7 +26,7 @@ def _write_config(config_path: Path, runs_path: Path) -> None:
 
 def test_dev_stop_errors_without_session(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
-    _write_config(config_path, tmp_path / "runs")
+    _write_config(config_path, tmp_path / "var" / "runs")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -40,7 +40,7 @@ def test_dev_stop_errors_without_session(tmp_path: Path) -> None:
 
 def test_dev_stop_removes_session(monkeypatch, tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
-    runs_path = tmp_path / "runs"
+    runs_path = tmp_path / "var" / "runs"
     _write_config(config_path, runs_path)
     session_dir = runs_path / "preview"
     session_dir.mkdir(parents=True)

@@ -95,9 +95,9 @@ def _write_minimal_config(root: Path) -> None:
         "\n".join(
             [
                 "paths:",
-                "  sot: ../sot",
-                "  dist: ../dist",
-                "  runs: ../runs",
+                "  sot: ../local/sot",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
                 "render:",
                 "  themes_dir: ../build/themes",
                 "  theme: default",
@@ -159,5 +159,5 @@ def test_quickstart_builds_sample(tmp_path: Path, monkeypatch) -> None:
         result = runner.invoke(app, ["quickstart", "--plain"])
 
     assert result.exit_code == 0
-    dist_dir = Path(cwd) / "dist" / "base"
+    dist_dir = Path(cwd) / "var" / "dist" / "base"
     assert (dist_dir / "cv.md").exists()

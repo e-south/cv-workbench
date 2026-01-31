@@ -1,3 +1,5 @@
+> Archived: superseded by docs/plans/2026-01-31-preview-playwright-clean-refactor.md
+
 # CVW Dev Spec: Zero-Friction Browser Open + Project-Centric Job Tailoring UX
 
 ## Summary
@@ -51,11 +53,11 @@ MCP-ready while preserving strict validation, determinism, and auditability.
 
 ### Storage (default)
 
-Projects live at repo root under `projects/` (gitignored by default), with a
+Projects live at repo root under `var/projects/` (gitignored by default), with a
 config override in `config/workbench.yaml`.
 
 ```
-projects/<slug>/
+var/projects/<slug>/
   project.yaml
   job/
     source.url
@@ -122,7 +124,7 @@ No new implicit mutations; orchestration commands only call existing verbs.
 - `tests/dev/test_open_modes.py` for open selection + messaging.
 - `tests/cli/test_dev_serve_open.py` for CLI parsing + non-fatal open failure.
 - `tests/ux/test_preview_sidebar.py` for sidebar controls + rebuild behavior.
-- `tests/projects/test_project_flow.py` for project scaffolding + in-memory apply.
+- `tests/ops/test_project_flow.py` for project scaffolding + in-memory apply.
 
 ### Docs
 

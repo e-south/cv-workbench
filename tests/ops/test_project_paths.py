@@ -24,4 +24,4 @@ def test_resolve_projects_path_default(tmp_path: Path) -> None:
 
     resolved = resolve_projects_path(config_path)
 
-    assert resolved == tmp_path / "projects"
+    assert resolved == tmp_path / "var" / "projects"

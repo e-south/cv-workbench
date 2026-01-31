@@ -11,7 +11,7 @@
 - SoT is YAML-first and compiled to JSON Resume internally.
 - PDF default is Pandoc -> LaTeX/ConTeXt.
 - Variants support selection rules and optional AI-assisted rewrites.
-- Run manifests and AI logs stay local under `runs/` (not committed).
+- Run manifests and AI logs stay local under `var/runs/` (not committed).
 - Public engine + private SoT using a `--sot-path` contract (no submodules).
 - Sync default is PR automation into the site repo.
 - Outputs extend beyond CV: short resume, long CV, cover letters.

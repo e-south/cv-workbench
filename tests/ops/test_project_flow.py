@@ -46,7 +46,7 @@ def _write_config(root: Path) -> Path:
 
 def test_create_project_from_url(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_config(tmp_path)
-    sot_path = tmp_path / "sot"
+    sot_path = tmp_path / "local" / "sot"
     sot_path.mkdir()
 
     def _fake_extract(url: str, user_agent: str | None) -> ExtractResult:
@@ -68,7 +68,7 @@ def test_create_project_from_url(tmp_path: Path, monkeypatch) -> None:
         store_raw=False,
     )
 
-    project_dir = tmp_path / "projects" / "acme"
+    project_dir = tmp_path / "var" / "projects" / "acme"
     assert result.project_dir == project_dir
     assert (project_dir / "project.yaml").exists()
     assert (project_dir / "job" / "extracted.txt").read_text() == "Sample job text\n"
@@ -80,7 +80,7 @@ def test_create_project_from_url(tmp_path: Path, monkeypatch) -> None:
 
 def test_create_project_from_file(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
-    sot_path = tmp_path / "sot"
+    sot_path = tmp_path / "local" / "sot"
     sot_path.mkdir()
     job_path = tmp_path / "job.txt"
     job_path.write_text("Job description text")
@@ -94,7 +94,7 @@ def test_create_project_from_file(tmp_path: Path) -> None:
         store_raw=False,
     )
 
-    project_dir = tmp_path / "projects" / "orbit"
+    project_dir = tmp_path / "var" / "projects" / "orbit"
     assert result.project_dir == project_dir
     assert (project_dir / "job" / "extracted.txt").read_text() == "Job description text\n"
 

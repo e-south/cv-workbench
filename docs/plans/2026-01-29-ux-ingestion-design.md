@@ -31,7 +31,7 @@ plain/json modes for agents and CI.
 `cvw job add --url <url>`:
 
 1) Fetch URL and extract main content via Trafilatura.
-2) Create a registry entry under `registry/contexts/context-<hash>/`.
+2) Create a registry entry under `var/registry/contexts/context-<hash>/`.
 3) Write:
    - `source.json` (URL, retrieved timestamp, extractor version, title)
    - `extracted.md` (cleaned text)
@@ -43,7 +43,7 @@ Raw HTML is not stored by default. The registry is local-only and ignored by git
 ## Registry Layout
 
 ```
-registry/
+var/registry/
   contexts/
     context-<hash>/
       source.json

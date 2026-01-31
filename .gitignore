@@ -17,14 +17,8 @@ coverage.xml
 .DS_Store
 
 # Workbench private inputs and artifacts
-sot/
-dist/
-runs/
-drafts/
-jobs/
-registry/
-reviews/
-projects/
+local/
+var/
 
 # Env files
 .env

@@ -18,17 +18,15 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
-from cvworkbench.dev.open import OpenMode, OpenResult
 
 
-def test_dev_serve_builds_html(tmp_path: Path) -> None:
-    html_path = Path("dist/base/cv.html")
+def test_dev_serve_builds_html() -> None:
+    html_path = Path("var/dist/base/cv.html")
     if html_path.exists():
         html_path.unlink()
 
     runner = CliRunner()
     env = os.environ.copy()
-    env["CVW_SKIP_OPEN"] = "1"
     env["CVW_DEV_ONCE"] = "1"
 
     result = runner.invoke(
@@ -36,8 +34,6 @@ def test_dev_serve_builds_html(tmp_path: Path) -> None:
         [
             "dev",
             "serve",
-            "--viewer",
-            "browser",
             "--variant",
             "base",
             "--sot-path",
@@ -49,42 +45,6 @@ def test_dev_serve_builds_html(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert html_path.exists()
     assert html_path.stat().st_size > 0
-
-
-def test_dev_serve_reports_open_failure(monkeypatch) -> None:
-    runner = CliRunner()
-
-    def _fake_open(
-        _url: str,
-        *,
-        mode: OpenMode,
-        browser: str | None,
-    ) -> OpenResult:
-        return OpenResult(opened=False, error="open failed", mode=mode)
-
-    app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "_open_url", _fake_open)
-
-    result = runner.invoke(
-        app,
-        [
-            "dev",
-            "serve",
-            "--viewer",
-            "browser",
-            "--variant",
-            "base",
-            "--sot-path",
-            "sot.sample",
-            "--plain",
-        ],
-        env={"CVW_DEV_ONCE": "1"},
-    )
-
-    assert result.exit_code == 0
-    assert "ERROR: open failed" in result.stderr
-    assert "HINT: open" in result.stderr
-    assert "CVW_OPEN_REQUEST" in result.stderr
 
 
 def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
@@ -107,7 +67,6 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
             "sot.sample",
             "--plain",
         ],
-        env={"CVW_SKIP_OPEN": "1"},
     )
 
     assert result.exit_code == 1
@@ -115,16 +74,31 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
     assert "cvw dev stop" in result.stderr
 
 
-def test_dev_serve_quicklook_opens_pdf(monkeypatch) -> None:
+def test_dev_serve_rejects_legacy_preview_env() -> None:
     runner = CliRunner()
-    captured: dict[str, str | OpenMode | None] = {}
+    env = os.environ.copy()
+    env["CVW_SKIP_OPEN"] = "1"
 
-    def _fake_open_pdf(path: Path) -> OpenResult:
-        captured["url"] = str(path)
-        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
+    result = runner.invoke(
+        app,
+        [
+            "dev",
+            "serve",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--plain",
+        ],
+        env=env,
+    )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "open_pdf", _fake_open_pdf)
+    assert result.exit_code == 2
+    assert "legacy preview environment" in result.stderr
+
+
+def test_dev_serve_rejects_legacy_flag() -> None:
+    runner = CliRunner()
 
     result = runner.invoke(
         app,
@@ -132,121 +106,13 @@ def test_dev_serve_quicklook_opens_pdf(monkeypatch) -> None:
             "dev",
             "serve",
             "--viewer",
-            "quicklook-pdf",
+            "browser",
             "--variant",
             "base",
             "--sot-path",
             "sot.sample",
-            "--plain",
         ],
-        env={"CVW_DEV_ONCE": "1"},
     )
 
-    assert result.exit_code == 0
-    assert str(captured["url"]).endswith("dist/base/cv.pdf")
-
-
-def test_dev_serve_preview_app_opens_pdf(monkeypatch) -> None:
-    runner = CliRunner()
-    captured: dict[str, str | OpenMode | None] = {}
-
-    def _fake_open_pdf(path: Path) -> OpenResult:
-        captured["url"] = str(path)
-        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
-
-    app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "open_pdf_in_preview", _fake_open_pdf)
-
-    result = runner.invoke(
-        app,
-        [
-            "dev",
-            "serve",
-            "--viewer",
-            "preview-app",
-            "--variant",
-            "base",
-            "--sot-path",
-            "sot.sample",
-            "--plain",
-        ],
-        env={"CVW_DEV_ONCE": "1"},
-    )
-
-    assert result.exit_code == 0
-    assert str(captured["url"]).endswith("dist/base/cv.pdf")
-
-
-def test_dev_serve_preview_app_falls_back_to_browser(monkeypatch) -> None:
-    runner = CliRunner()
-    calls = {"preview": 0, "browser": 0}
-
-    def _fake_open_pdf(_path: Path) -> OpenResult:
-        calls["preview"] += 1
-        return OpenResult(opened=False, error="preview failed", mode=OpenMode.LAUNCHSERVICES)
-
-    def _fake_open_url(
-        _url: str,
-        *,
-        mode: OpenMode,
-        browser: str | None,
-    ) -> OpenResult:
-        calls["browser"] += 1
-        return OpenResult(opened=True, error=None, mode=mode)
-
-    app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "open_pdf_in_preview", _fake_open_pdf)
-    monkeypatch.setattr(app_module, "_open_url", _fake_open_url)
-
-    result = runner.invoke(
-        app,
-        [
-            "dev",
-            "serve",
-            "--viewer",
-            "preview-app",
-            "--variant",
-            "base",
-            "--sot-path",
-            "sot.sample",
-            "--plain",
-        ],
-        env={"CVW_DEV_ONCE": "1"},
-    )
-
-    assert result.exit_code == 0
-    assert calls["preview"] == 1
-    assert calls["browser"] == 1
-    assert "Preview failed; attempting browser fallback." in result.stderr
-
-
-def test_dev_serve_viewer_none_skips_open(monkeypatch) -> None:
-    runner = CliRunner()
-    called = {"count": 0}
-
-    def _fake_open(*_args, **_kwargs) -> OpenResult:
-        called["count"] += 1
-        return OpenResult(opened=True, error=None, mode=OpenMode.LAUNCHSERVICES)
-
-    app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "_open_url", _fake_open)
-    monkeypatch.setattr(app_module, "open_pdf", _fake_open)
-
-    result = runner.invoke(
-        app,
-        [
-            "dev",
-            "serve",
-            "--viewer",
-            "none",
-            "--variant",
-            "base",
-            "--sot-path",
-            "sot.sample",
-            "--plain",
-        ],
-        env={"CVW_DEV_ONCE": "1"},
-    )
-
-    assert result.exit_code == 0
-    assert called["count"] == 0
+    assert result.exit_code == 2
+    assert "--viewer" in result.stderr

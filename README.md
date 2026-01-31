@@ -44,31 +44,17 @@ uv run cvw preview --sot-path ./sot.sample --variant base
 ```
 
 Build output locations are printed after `cvw build` completes, and artifacts
-are written under `dist/<variant>/` (configurable via `config/workbench.yaml`).
+are written under `var/dist/<variant>/` (configurable via `config/workbench.yaml`).
 
 `cvw preview` starts a live preview server that auto-rebuilds on SoT, theme, and
-variant changes. On macOS, the default viewer opens the PDF in Preview for a
-reliable “just works” experience. To use the HTML preview UI (with sidebar
-controls and shortcuts `t`, `p`, `v`, `f`, `r`, `x`), pass `--viewer browser`.
-You can also run `cvw dev stop` if you closed the tab.
-
-If auto-open fails, the server stays up and prints a manual URL. On macOS, you
-can opt into AppleScript automation with `--open-mode applescript`.
-If your system does not have a default handler for `.html` files, pass
-`--browser "Google Chrome"` (or set `CVW_BROWSER`) to choose the app explicitly.
-When no default handler is available, cvw will also attempt to auto-detect an
-installed browser (Safari/Chrome/Edge/Brave/Firefox/Arc) and open it for you.
-If you want a browserless preview, use `--viewer preview-app` (default on macOS)
-or `--viewer quicklook-pdf` to open the generated PDF in a PDF viewer while the
-server continues watching for changes.
-When auto-open fails, cvw also prints a machine-readable
-`CVW_OPEN_REQUEST: {...}` line so external automation (e.g., Codex rules) can
-launch the preview outside the sandbox.
+variant changes. The command prints a local preview URL; use Playwright to open
+and interact with the preview UI (sidebar controls and shortcuts `t`, `p`, `v`,
+`f`, `r`, `x`). You can run `cvw dev stop` to stop the server.
 
 Tip: you can run `cvw` from any subdirectory in the repo. The CLI resolves the
 nearest `config/workbench.yaml` by walking up parent directories, so outputs
-still land under the configured `dist/`, `runs/`, `drafts/`, and `reviews/`
-paths.
+still land under the configured `var/dist/`, `var/runs/`, `var/drafts/`, and
+`var/reviews/` paths.
 
 See the full walkthrough at `docs/howto/quickstart.md`.
 
@@ -88,13 +74,14 @@ See the full walkthrough at `docs/howto/quickstart.md`.
 
 ## Repository layout
 
-- `config/`: global config and variants
-- `registry/`: local context registry for ingested URLs (ignored by git)
-- `reviews/`: review packs (DOCX/PDF + checklist, ignored by git)
 - `build/`: filters, themes, templates, styles, scripts
+- `config/`: global config and variants
 - `docs/`: concepts, how-to guides, reference, and plans
+- `local/`: private SoT data (ignored by git)
+- `var/`: generated artifacts (dist/runs/drafts/reviews/registry/projects; ignored by git)
 - `sot.sample/`: fake data for tests and examples
 - `src/`: CLI and core logic
+- `tests/`: test suite
 
 ## License
 
