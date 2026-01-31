@@ -34,6 +34,12 @@ uv run cvw init
 uv run cvw doctor
 ```
 
+Optional agent bootstrap snapshot:
+
+```bash
+uv run cvw context --json
+```
+
 Optional workspace status snapshot:
 
 ```bash

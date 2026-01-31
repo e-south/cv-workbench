@@ -8,6 +8,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - init
 - quickstart
 - doctor
+- context
 - status
 - build
 - render

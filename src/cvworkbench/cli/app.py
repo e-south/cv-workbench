@@ -33,6 +33,7 @@ from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, resolve_selection_path
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.config import (
+    load_config,
     resolve_config_path,
     resolve_default_theme,
     resolve_default_variant,
@@ -300,6 +301,194 @@ def _print_status_summary(summary: dict[str, Any]) -> None:
     if summary["sot"]["versions_summary"]:
         rows.append(("sot_versions", summary["sot"]["versions_summary"]))
     print_summary("status", rows)
+
+
+def _print_context_summary(summary: dict[str, Any]) -> None:
+    sot_path = summary["sot"]["path"] or summary["sot"]["configured_path"] or "none"
+    rows = [
+        ("config", summary["config"]["path"]),
+        ("sot_status", summary["sot"]["status"]),
+        ("sot_path", sot_path),
+        ("variants", summary["variants"]["summary"]),
+        ("runs_latest", summary["runs"]["latest_summary"]),
+        ("projects", summary["projects"]["summary"]),
+        ("recipes", ", ".join([recipe["id"] for recipe in summary["recipes"]])),
+    ]
+    if summary["issues"]:
+        rows.append(("issues", "; ".join(summary["issues"])))
+    print_summary("context", rows)
+
+
+def _configured_sot_path(sot_path: Path | None, config_path: Path) -> str | None:
+    if sot_path is not None:
+        return str(sot_path)
+    try:
+        config = load_config(config_path)
+    except (FileNotFoundError, ValueError):
+        return None
+    paths = config.get("paths", {})
+    if not isinstance(paths, dict):
+        return None
+    value = paths.get("sot")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return str((config_path.parent / value.strip()).resolve())
+
+
+def _build_sot_details(resolved_sot: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    files = _collect_sot_files(resolved_sot)
+    files_summary = _files_summary_line(files)
+    sections = _summarize_sot_sections(payload)
+    sections_summary = _summarize_sections_line(sections)
+    tags = extract_tags(payload)
+    counts = tag_counts(tags)
+    tags_top = _top_tags(counts)
+    tags_summary = _tags_summary_line(tags_top)
+    return {
+        "files": files,
+        "files_summary": files_summary,
+        "sections": sections,
+        "sections_summary": sections_summary,
+        "tags_top": tags_top,
+        "tags_summary": tags_summary,
+    }
+
+
+def _build_versions_info(resolved_sot: Path) -> tuple[dict[str, Any] | None, str, str | None]:
+    try:
+        version_root = resolve_versioned_root(resolved_sot)
+    except SotVersionError:
+        return None, "", None
+    try:
+        version_state = list_versions(version_root)
+    except SotPackError as exc:
+        return None, "", str(exc)
+    versions_info = {
+        "root": str(version_state.root),
+        "active": version_state.active,
+        "versions": version_state.versions,
+    }
+    versions_summary = (
+        f"root={version_state.root} active={version_state.active} "
+        f"count={len(version_state.versions)}"
+    )
+    return versions_info, versions_summary, None
+
+
+def _build_context_recipes(
+    *,
+    sot_path: Path | None,
+    default_variant: str | None,
+    projects: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    sot_label = str(sot_path) if sot_path else "<sot-path>"
+    variant_label = default_variant or "<variant-id>"
+    project_label = projects[0]["project_id"] if projects else "<project-id>"
+    return [
+        {
+            "id": "context.refresh",
+            "title": "Refresh context",
+            "steps": [
+                {
+                    "command": "cvw context --json",
+                    "description": "Re-scan workspace state for SoT, variants, runs, and projects.",
+                }
+            ],
+        },
+        {
+            "id": "sot.inspect",
+            "title": "Inspect SoT inventory",
+            "steps": [
+                {
+                    "command": f"cvw status --sot-path {sot_label}",
+                    "description": "Summarize SoT sections, tags, and configured variants.",
+                }
+            ],
+        },
+        {
+            "id": "build.default",
+            "title": "Build the default variant",
+            "steps": [
+                {
+                    "command": f"cvw build --sot-path {sot_label} --variant {variant_label} --format md,pdf",
+                    "description": "Generate markdown and PDF outputs for the default variant.",
+                }
+            ],
+        },
+        {
+            "id": "preview.default",
+            "title": "Preview the default variant",
+            "steps": [
+                {
+                    "command": f"cvw preview --sot-path {sot_label} --variant {variant_label}",
+                    "description": "Start the local preview server for the default variant.",
+                }
+            ],
+        },
+        {
+            "id": "project.guide",
+            "title": "Start a job-tailoring project",
+            "steps": [
+                {
+                    "command": f"cvw project guide --job-url <job-url> --sot-path {sot_label}",
+                    "description": "Ingest a job posting and get variant recommendations.",
+                }
+            ],
+        },
+        {
+            "id": "project.preview",
+            "title": "Preview a project",
+            "steps": [
+                {
+                    "command": f"cvw preview --project {project_label}",
+                    "description": "Preview with the project patch applied in-memory.",
+                },
+                {
+                    "command": f"cvw project apply {project_label}",
+                    "description": "Apply the project patch to the SoT on disk.",
+                },
+            ],
+        },
+        {
+            "id": "variant.manage",
+            "title": "Promote or discard variants",
+            "steps": [
+                {
+                    "command": "cvw variant inbox",
+                    "description": "List ephemeral variants awaiting a keep/discard decision.",
+                },
+                {
+                    "command": "cvw variant keep --path <variant.yaml> --id <variant-id>",
+                    "description": "Promote a draft/project variant into config/variants.",
+                },
+                {
+                    "command": "cvw variant discard --path <variant.yaml> --yes",
+                    "description": "Discard draft/project variant artifacts.",
+                },
+            ],
+        },
+        {
+            "id": "runs.gc",
+            "title": "Prune older runs",
+            "steps": [
+                {
+                    "command": "cvw runs gc --keep-latest 2",
+                    "description": "See which runs would be removed (dry run).",
+                },
+                {
+                    "command": "cvw runs gc --keep-latest 2 --yes",
+                    "description": "Delete runs older than the keep window.",
+                },
+            ],
+        },
+    ]
+
+
+def _record_context_issue(message: str, issues: list[str], strict: bool) -> None:
+    if strict:
+        typer.echo(f"ERROR: {message}", err=True)
+        raise typer.Exit(code=1)
+    issues.append(message)
 
 
 def _format_timestamp(value: float) -> str:
@@ -1139,36 +1328,18 @@ def status(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    files = _collect_sot_files(resolved_sot)
-    files_summary = _files_summary_line(files)
-    sections = _summarize_sot_sections(payload)
-    sections_summary = _summarize_sections_line(sections)
-    tags = extract_tags(payload)
-    counts = tag_counts(tags)
-    tags_top = _top_tags(counts)
-    tags_summary = _tags_summary_line(tags_top)
+    sot_details = _build_sot_details(resolved_sot, payload)
+    files = sot_details["files"]
+    files_summary = sot_details["files_summary"]
+    sections = sot_details["sections"]
+    sections_summary = sot_details["sections_summary"]
+    tags_top = sot_details["tags_top"]
+    tags_summary = sot_details["tags_summary"]
 
-    versions_summary = ""
-    versions_info: dict[str, Any] | None = None
-    try:
-        version_root = resolve_versioned_root(resolved_sot)
-    except SotVersionError:
-        version_root = None
-    if version_root is not None:
-        try:
-            version_state = list_versions(version_root)
-        except SotPackError as exc:
-            typer.echo(f"ERROR: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
-        versions_info = {
-            "root": str(version_state.root),
-            "active": version_state.active,
-            "versions": version_state.versions,
-        }
-        versions_summary = (
-            f"root={version_state.root} active={version_state.active} "
-            f"count={len(version_state.versions)}"
-        )
+    versions_info, versions_summary, versions_error = _build_versions_info(resolved_sot)
+    if versions_error:
+        typer.echo(f"ERROR: {versions_error}", err=True)
+        raise typer.Exit(code=1)
 
     try:
         variants = _load_variants_from_config(config_path)
@@ -1248,6 +1419,233 @@ def status(
         return
 
     _print_status_summary(summary)
+
+
+@app.command()
+def context(
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            help="Fail fast when required inputs are missing",
+        ),
+    ] = False,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        config_path = resolve_config_path(config)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    try:
+        config_payload = load_config(config_path)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    issues: list[str] = []
+    configured_sot = _configured_sot_path(sot_path, config_path)
+    resolved_sot: Path | None = None
+    sot_errors: list[str] = []
+    sot_details = {
+        "files": [],
+        "files_summary": "none",
+        "sections": {},
+        "sections_summary": "none",
+        "tags_top": [],
+        "tags_summary": "none",
+    }
+    versions_info: dict[str, Any] | None = None
+    versions_summary = ""
+
+    try:
+        resolved_sot = resolve_sot_path(sot_path, config_path)
+    except (FileNotFoundError, ValueError) as exc:
+        _record_context_issue(str(exc), issues, strict)
+        sot_errors.append(str(exc))
+
+    if resolved_sot is not None and not resolved_sot.exists():
+        message = f"SoT path not found: {resolved_sot}"
+        _record_context_issue(message, issues, strict)
+        sot_errors.append(message)
+        resolved_sot = None
+
+    sot_status = "missing"
+    if resolved_sot is not None:
+        errors = validate_sot(resolved_sot)
+        if errors:
+            for error in errors:
+                _record_context_issue(error, issues, strict)
+                sot_errors.append(error)
+            sot_status = "invalid"
+        else:
+            try:
+                payload = load_sot(resolved_sot)
+            except ValueError as exc:
+                _record_context_issue(str(exc), issues, strict)
+                sot_errors.append(str(exc))
+                sot_status = "invalid"
+            else:
+                sot_details = _build_sot_details(resolved_sot, payload)
+                versions_info, versions_summary, versions_error = _build_versions_info(resolved_sot)
+                if versions_error:
+                    _record_context_issue(versions_error, issues, strict)
+                sot_status = "ready"
+
+    default_variant: str | None = None
+    try:
+        default_variant = resolve_default_variant(config_path)
+    except ValueError as exc:
+        _record_context_issue(str(exc), issues, strict)
+
+    variants: list[dict[str, Any]] = []
+    try:
+        variants = _load_variants_from_config(config_path)
+    except ValueError as exc:
+        _record_context_issue(str(exc), issues, strict)
+    variants_summary = _variants_summary_line(variants) if variants else "none"
+
+    inbox_payload: list[dict[str, Any]] = []
+    try:
+        inbox_entries = list_variant_inbox(config_path)
+        inbox_payload = [_inbox_entry_payload(entry) for entry in inbox_entries]
+    except (VariantLifecycleError, ValueError) as exc:
+        _record_context_issue(str(exc), issues, strict)
+    inbox_summary = _inbox_summary_line(inbox_payload)
+
+    ttl_days: int | None = None
+    try:
+        ttl_days = resolve_variant_ttl_days(config_path)
+    except ValueError as exc:
+        _record_context_issue(str(exc), issues, strict)
+
+    recents_payload: dict[str, list[dict[str, Any]]] = {}
+    latest_payload: dict[str, list[dict[str, Any]]] = {}
+    invalid_runs: list[Path] = []
+    try:
+        recents_by_variant, invalid_runs = latest_runs_by_variant(config_path, limit=3)
+        variant_ids = [variant["id"] for variant in variants]
+        if not variant_ids:
+            variant_ids = sorted(recents_by_variant.keys())
+        for variant_id in variant_ids:
+            runs = recents_by_variant.get(variant_id, [])
+            recents_payload[variant_id] = [_run_payload(run) for run in runs]
+        latest_payload = {key: value[:1] for key, value in recents_payload.items()}
+    except (RunError, ValueError) as exc:
+        _record_context_issue(str(exc), issues, strict)
+
+    latest_summary = _runs_summary_line(latest_payload)
+    recents_summary = _runs_recents_line(recents_payload)
+    invalid_summary = _invalid_runs_line(invalid_runs)
+
+    projects: list[dict[str, Any]] = []
+    invalid_projects: list[Path] = []
+    try:
+        projects, invalid_projects = _load_project_summaries(config_path)
+    except (ValueError, FileNotFoundError) as exc:
+        _record_context_issue(str(exc), issues, strict)
+    projects_summary = _projects_summary_line(projects)
+    invalid_projects_summary = _invalid_runs_line(invalid_projects)
+
+    reviews: list[dict[str, Any]] = []
+    try:
+        reviews = _load_review_summaries(config_path)
+    except (ValueError, FileNotFoundError) as exc:
+        _record_context_issue(str(exc), issues, strict)
+    reviews_summary = _reviews_summary_line(reviews)
+
+    project_name: str | None = None
+    project_data = config_payload.get("project", {})
+    if isinstance(project_data, dict):
+        name_value = project_data.get("name")
+        if isinstance(name_value, str) and name_value.strip():
+            project_name = name_value.strip()
+
+    summary = {
+        "config": {
+            "path": str(config_path),
+            "project": {"name": project_name},
+        },
+        "sot": {
+            "configured_path": configured_sot,
+            "path": str(resolved_sot) if resolved_sot else None,
+            "status": sot_status,
+            "errors": sot_errors,
+            "versions": versions_info,
+            "versions_summary": versions_summary,
+            **sot_details,
+        },
+        "variants": {
+            "config": variants,
+            "config_count": len(variants),
+            "summary": variants_summary,
+            "inbox": inbox_payload,
+            "inbox_count": len(inbox_payload),
+            "inbox_summary": inbox_summary,
+            "ttl_days": ttl_days,
+            "default": default_variant,
+        },
+        "runs": {
+            "latest_by_variant": latest_payload,
+            "recents_by_variant": recents_payload,
+            "latest_summary": latest_summary,
+            "recents_summary": recents_summary,
+            "invalid": [str(path) for path in invalid_runs],
+            "invalid_summary": invalid_summary,
+        },
+        "projects": {
+            "items": projects,
+            "count": len(projects),
+            "summary": projects_summary,
+            "invalid": [str(path) for path in invalid_projects],
+            "invalid_summary": invalid_projects_summary,
+        },
+        "reviews": {
+            "items": reviews,
+            "count": len(reviews),
+            "summary": reviews_summary,
+        },
+        "recipes": _build_context_recipes(
+            sot_path=resolved_sot,
+            default_variant=default_variant,
+            projects=projects,
+        ),
+        "issues": issues,
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps({"command": "context", **summary}, indent=2, sort_keys=True))
+        return
+
+    _print_context_summary(summary)
 
 
 @app.command()

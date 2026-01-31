@@ -4,6 +4,16 @@ You are operating inside the cv-workbench repo.
 
 Primary rule: prefer deterministic CLI artifacts (manifest.json, selection.json, resume.json, canonical.md) over browser inspection for correctness.
 
+## Agent startup context
+
+On session start, run:
+- `cvw context --json`
+
+Use the `recipes` block in the context payload to choose commands for any
+user intent. Do not guess paths or commands before reading context. If context
+reports missing or invalid SoT, ask for the correct SoT path or config updates
+before proceeding.
+
 Strict policy:
 - Local preview only (localhost/127.0.0.1).
 - No public internet access.

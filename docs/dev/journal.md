@@ -21,3 +21,4 @@
 - Reviewpack now requires a valid run manifest; import-docx can resolve the latest run by variant.
 - Signals keyword extraction now filters common stop words for clearer job guidance.
 - Added `cvw runs gc` to prune older runs while keeping recent ones per variant.
+- Added `cvw context` as a bootstrap command with recipes for common workflows.
