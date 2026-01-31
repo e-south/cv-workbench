@@ -26,6 +26,7 @@ expiration metadata. The registry is local-only and gitignored.
 
 ## Commands
 
+- `cvw variant list`: show configured variants alongside pending lifecycle entries.
 - `cvw variant inbox`: list pending ephemeral variants.
 - `cvw variant keep --path <variant.yaml> --id <variant-id>`: promote a draft or
   project proposal into `config/variants/`.

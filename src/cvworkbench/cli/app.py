@@ -277,6 +277,7 @@ def _print_status_summary(summary: dict[str, Any]) -> None:
         ("sot_tags_top", summary["sot"]["tags_summary"]),
         ("variants", summary["variants"]["summary"]),
         ("variant_inbox", summary["variants"]["inbox_summary"]),
+        ("variant_ttl_days", summary["variants"]["ttl_days"]),
         ("runs_latest", summary["runs"]["latest_summary"]),
         ("runs_recent", summary["runs"]["recents_summary"]),
         ("projects", summary["projects"]["summary"]),
@@ -284,6 +285,8 @@ def _print_status_summary(summary: dict[str, Any]) -> None:
     ]
     if summary["runs"]["invalid_summary"]:
         rows.append(("runs_invalid", summary["runs"]["invalid_summary"]))
+    if summary["projects"]["invalid_summary"]:
+        rows.append(("projects_invalid", summary["projects"]["invalid_summary"]))
     if summary["sot"]["versions_summary"]:
         rows.append(("sot_versions", summary["sot"]["versions_summary"]))
     print_summary("status", rows)
@@ -316,6 +319,17 @@ def _collect_sot_files(sot_path: Path) -> list[dict[str, Any]]:
                 }
             )
     return files
+
+
+def _files_summary_line(files: list[dict[str, Any]]) -> str:
+    present = [item["name"] for item in files if item["status"] == "present"]
+    missing = [item["name"] for item in files if item["status"] == "missing"]
+    parts: list[str] = []
+    if present:
+        parts.append("present: " + ", ".join(present))
+    if missing:
+        parts.append("missing: " + ", ".join(missing))
+    return "; ".join(parts) if parts else "none"
 
 
 def _count_list_section(payload: dict[str, Any], section: str, key: str) -> int:
@@ -556,6 +570,94 @@ def _projects_summary_line(projects: list[dict[str, Any]]) -> str:
         return "count=0"
     lines = [f"{item['project_id']} ({item['base_variant']})" for item in projects]
     return f"count={len(projects)}\n" + "\n".join(lines)
+
+
+def _load_job_signals(signals_path: Path) -> dict[str, Any]:
+    if not signals_path.exists():
+        raise ValueError(f"Job signals not found: {signals_path}")
+    raw = json.loads(signals_path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError(f"Job signals are invalid: {signals_path}")
+    return raw
+
+
+def _normalize_keywords(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        keyword = normalize_tag(value)
+        if keyword and keyword not in seen:
+            normalized.append(keyword)
+            seen.add(keyword)
+    return normalized
+
+
+def _job_keyword_overlap(job_keywords: list[str], tag_counts: dict[str, int]) -> dict[str, list[str]]:
+    job_set = set(job_keywords)
+    tag_set = set(tag_counts.keys())
+    return {
+        "matched": sorted(job_set & tag_set),
+        "missing": sorted(job_set - tag_set),
+    }
+
+
+def _recommend_variants(
+    variants: list[dict[str, Any]],
+    job_keywords: list[str],
+    tag_counts: dict[str, int],
+    default_variant: str,
+) -> list[dict[str, Any]]:
+    job_set = set(job_keywords)
+    tag_set = set(tag_counts.keys())
+    recommendations: list[dict[str, Any]] = []
+    for variant in variants:
+        include = set(variant.get("include_tags") or [])
+        exclude = set(variant.get("exclude_tags") or [])
+        include_matches = sorted(include & job_set)
+        include_missing = sorted(include - job_set)
+        missing_in_sot = sorted(include - tag_set)
+        exclude_matches = sorted(exclude & job_set)
+        score = len(include_matches)
+        eligible = len(exclude_matches) == 0
+        recommendations.append(
+            {
+                "variant_id": variant["id"],
+                "document_type": variant["document_type"],
+                "score": score,
+                "eligible": eligible,
+                "default": variant["id"] == default_variant,
+                "include_matches": include_matches,
+                "include_missing": include_missing,
+                "exclude_matches": exclude_matches,
+                "missing_in_sot": missing_in_sot,
+            }
+        )
+    recommendations.sort(
+        key=lambda item: (not item["eligible"], -item["score"], item["variant_id"])
+    )
+    for idx, item in enumerate(recommendations, start=1):
+        item["rank"] = idx
+    return recommendations
+
+
+def _recommendations_summary_line(recommendations: list[dict[str, Any]], limit: int = 5) -> str:
+    if not recommendations:
+        return "none"
+    lines: list[str] = []
+    for item in recommendations[:limit]:
+        parts = [item["variant_id"], f"score={item['score']}"]
+        if item.get("default"):
+            parts.append("default")
+        if item.get("include_matches"):
+            parts.append("match=" + ",".join(item["include_matches"]))
+        if item.get("exclude_matches"):
+            parts.append("exclude=" + ",".join(item["exclude_matches"]))
+        if item.get("missing_in_sot"):
+            parts.append("missing_sot=" + ",".join(item["missing_in_sot"]))
+        lines.append(" | ".join(parts))
+    return "\n".join(lines)
 
 
 def _load_review_summaries(config_path: Path) -> list[dict[str, Any]]:
@@ -819,6 +921,21 @@ def _print_project_new_summary(
     )
 
 
+def _print_project_guide_summary(summary: dict[str, Any]) -> None:
+    rows = [
+        ("project_dir", summary["project"]["project_dir"]),
+        ("variant", summary["project"]["base_variant"]),
+        ("job_source", summary["project"]["job_source"]),
+        ("job_keywords", ", ".join(summary["job"]["keywords"]) or "none"),
+        ("job_keywords_in_sot", ", ".join(summary["job"]["keywords_in_sot"]) or "none"),
+        ("job_keywords_missing", ", ".join(summary["job"]["keywords_missing"]) or "none"),
+        ("sot_tags_top", summary["sot"]["tags_summary"]),
+        ("recommendations", _recommendations_summary_line(summary["recommendations"])),
+        ("next_step", f"cvw preview --project {summary['project']['project_id']}"),
+    ]
+    print_summary("project.guide", rows)
+
+
 def _print_project_apply_summary(project_dir: Path, sot_path: Path) -> None:
     print_summary(
         "project.apply",
@@ -990,7 +1107,7 @@ def status(
         raise typer.Exit(code=1) from exc
 
     files = _collect_sot_files(resolved_sot)
-    files_summary = ", ".join([item["name"] for item in files if item["status"] == "present"])
+    files_summary = _files_summary_line(files)
     sections = _summarize_sot_sections(payload)
     sections_summary = _summarize_sections_line(sections)
     tags = extract_tags(payload)
@@ -1045,6 +1162,7 @@ def status(
 
     projects, invalid_projects = _load_project_summaries(config_path)
     projects_summary = _projects_summary_line(projects)
+    invalid_projects_summary = _invalid_runs_line(invalid_projects)
 
     reviews = _load_review_summaries(config_path)
     reviews_summary = _reviews_summary_line(reviews)
@@ -1083,6 +1201,7 @@ def status(
             "count": len(projects),
             "summary": projects_summary,
             "invalid": [str(path) for path in invalid_projects],
+            "invalid_summary": invalid_projects_summary,
         },
         "reviews": {
             "items": reviews,
@@ -2234,6 +2353,204 @@ def project_new(
             plain=plain,
             json_output=json_output,
             project=result.project_dir.name,
+        )
+
+
+@project_app.command("guide")
+def project_guide(
+    job_url: Annotated[
+        str | None,
+        typer.Option(
+            "--job-url",
+            help="Job URL to ingest",
+        ),
+    ] = None,
+    job_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--job-file",
+            help="Job description file",
+        ),
+    ] = None,
+    slug: Annotated[
+        str | None,
+        typer.Option(
+            "--slug",
+            help="Project id override",
+        ),
+    ] = None,
+    variant: Annotated[
+        str | None,
+        typer.Option(
+            "--variant",
+            help="Base variant id",
+        ),
+    ] = None,
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to the private Source of Truth directory",
+        ),
+    ] = None,
+    store_raw: Annotated[
+        bool,
+        typer.Option(
+            "--store-raw",
+            help="Store raw HTML when ingesting a URL",
+        ),
+    ] = False,
+    open_after: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help="Open preview after creating the project",
+        ),
+    ] = False,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    if bool(job_url) == bool(job_file):
+        typer.echo("ERROR: Provide exactly one of --job-url or --job-file", err=True)
+        raise typer.Exit(code=2)
+    if json_output and open_after:
+        typer.echo("ERROR: --open cannot be combined with --json", err=True)
+        raise typer.Exit(code=2)
+
+    config_path = resolve_config_path(config)
+    try:
+        base_variant = variant or resolve_default_variant(config_path)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        resolved_sot = resolve_sot_path(sot_path, config_path)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    errors = validate_sot(resolved_sot)
+    if errors:
+        for error in errors:
+            typer.echo(f"ERROR: {error}", err=True)
+        raise typer.Exit(code=1)
+    try:
+        sot_payload = load_sot(resolved_sot)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    tags = extract_tags(sot_payload)
+    counts = tag_counts(tags)
+    tags_top = _top_tags(counts)
+    tags_summary = _tags_summary_line(tags_top)
+
+    try:
+        if job_url:
+            project_paths = create_project_from_url(
+                url=job_url,
+                slug=slug,
+                base_variant_id=base_variant,
+                config_path=config_path,
+                sot_path=resolved_sot,
+                store_raw=store_raw,
+            )
+            job_source = job_url
+        else:
+            project_paths = create_project_from_file(
+                job_path=job_file or Path(),
+                slug=slug,
+                base_variant_id=base_variant,
+                config_path=config_path,
+                sot_path=resolved_sot,
+                store_raw=store_raw,
+            )
+            job_source = str(job_file)
+    except (ProjectError, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        signals = _load_job_signals(project_paths.signals_path)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    raw_keywords: list[str] = []
+    keywords_value = signals.get("keywords")
+    if isinstance(keywords_value, list):
+        raw_keywords = [item for item in keywords_value if isinstance(item, str)]
+    job_keywords = _normalize_keywords(raw_keywords)
+    keyword_overlap = _job_keyword_overlap(job_keywords, counts)
+
+    try:
+        variants = _load_variants_from_config(config_path)
+    except ValueError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    recommendations = _recommend_variants(variants, job_keywords, counts, base_variant)
+
+    summary = {
+        "project": {
+            "project_id": project_paths.project_dir.name,
+            "project_dir": str(project_paths.project_dir),
+            "base_variant": base_variant,
+            "job_source": job_source,
+        },
+        "job": {
+            "keywords": job_keywords,
+            "keywords_in_sot": keyword_overlap["matched"],
+            "keywords_missing": keyword_overlap["missing"],
+        },
+        "sot": {
+            "path": str(resolved_sot),
+            "tags_top": tags_top,
+            "tags_summary": tags_summary,
+        },
+        "variants": {
+            "config": variants,
+            "count": len(variants),
+            "default": base_variant,
+        },
+        "recommendations": recommendations,
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps({"command": "project.guide", **summary}, indent=2, sort_keys=True))
+    else:
+        _print_project_guide_summary(summary)
+
+    if open_after:
+        dev_serve(
+            sot_path=resolved_sot,
+            config=config_path,
+            theme=None,
+            style_preset=None,
+            plain=plain,
+            json_output=json_output,
+            project=project_paths.project_dir.name,
         )
 
 

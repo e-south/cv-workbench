@@ -16,3 +16,6 @@
 - Preview UI now surfaces disconnected-state errors and marks the active format button for automation.
 - Sync fails fast if the site repo path is missing or not a directory.
 - Added `cvw preview --once` for one-shot preview builds without starting the server.
+- Added `cvw status` to summarize SoT, variants, runs, projects, and reviews.
+- Added `cvw variant list` and `cvw project guide` for variant and project discovery.
+- Reviewpack now requires a valid run manifest; import-docx can resolve the latest run by variant.

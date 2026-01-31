@@ -8,8 +8,10 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - init
 - quickstart
 - doctor
+- status
 - build
 - render
+- preview
 - dev serve
 - clean (var/runs, var/dist, var/drafts, var/reviews, var/registry, var/projects)
 - tailor
@@ -20,7 +22,8 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - import-docx
 - job add
 - theme (list/info)
-- variant (promote/keep/discard/gc/inbox)
+- variant (list/promote/keep/discard/gc/inbox)
+- project (new/guide/apply)
 - tags (list/lint/stats)
 - sot (list/new/activate/diff)
 

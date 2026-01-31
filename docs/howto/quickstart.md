@@ -34,6 +34,12 @@ uv run cvw init
 uv run cvw doctor
 ```
 
+Optional workspace status snapshot:
+
+```bash
+uv run cvw status --sot-path ./sot.sample
+```
+
 ## 4) Build a sample CV
 
 ```bash
@@ -148,12 +154,19 @@ List pending drafts with:
 uv run cvw variant inbox
 ```
 
+List configured variants and lifecycle inbox together with:
+
+```bash
+uv run cvw variant list
+```
+
 The retention window is controlled by `variant_lifecycle.ttl_days` in
 `config/workbench.yaml`.
 
 ## 9) Start a project (job tailoring)
 
 ```bash
+uv run cvw project guide --job-url "https://example.com/job"
 uv run cvw project new --job-url "https://example.com/job" --variant base
 uv run cvw preview --project <project-id>
 ```

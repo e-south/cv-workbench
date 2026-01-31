@@ -4,6 +4,15 @@ Projects are local, private workspaces for job tailoring. They keep job context,
 signals, and proposal drafts without mutating the Source of Truth unless you
 explicitly apply a patch.
 
+## Commands
+
+- `cvw project guide --job-url <url>` or `--job-file <path>`: create a project
+  and summarize SoT/job signals with variant recommendations.
+- `cvw project new --job-url <url>` or `--job-file <path>`: create a project
+  without generating guidance output.
+- `cvw preview --project <slug>`: preview with project patch applied in-memory.
+- `cvw project apply <slug>`: apply the patch to your SoT on disk.
+
 ## Default location
 
 Projects live under `var/projects/` by default (gitignored). Override the path in
