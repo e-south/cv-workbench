@@ -17,6 +17,11 @@ Fields:
 - `variant`, `theme`, `style_preset`
 - `started_at` (UTC ISO-8601)
 
+## One-shot preview
+
+`cvw preview --once` builds the preview outputs once and exits without starting
+the server. No session file is written in this mode.
+
 ## HTTP API
 
 `GET /api/state` returns the current preview state:

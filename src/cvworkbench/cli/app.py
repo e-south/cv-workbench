@@ -2373,6 +2373,13 @@ def dev_serve(
             help="Style preset to apply",
         ),
     ] = None,
+    once: Annotated[
+        bool,
+        typer.Option(
+            "--once",
+            help="Build once and exit without starting the preview server",
+        ),
+    ] = False,
     plain: Annotated[
         bool,
         typer.Option(
@@ -2442,7 +2449,7 @@ def dev_serve(
     except ValueError as exc:
         typer.echo("ERROR: CVW_DEV_PORT must be an integer", err=True)
         raise typer.Exit(code=1) from exc
-    if os.environ.get("CVW_DEV_ONCE") == "1":
+    if once or os.environ.get("CVW_DEV_ONCE") == "1":
         try:
             state = controller.build_once()
         except PreviewError as exc:
@@ -2593,6 +2600,13 @@ def preview(
             help="Style preset to apply",
         ),
     ] = None,
+    once: Annotated[
+        bool,
+        typer.Option(
+            "--once",
+            help="Build once and exit without starting the preview server",
+        ),
+    ] = False,
     plain: Annotated[
         bool,
         typer.Option(
@@ -2615,6 +2629,7 @@ def preview(
         project=project,
         theme=theme,
         style_preset=style_preset,
+        once=once,
         plain=plain,
         json_output=json_output,
     )
