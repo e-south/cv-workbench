@@ -65,6 +65,7 @@ See the full walkthrough at `docs/howto/quickstart.md`.
 - `docs/howto/quickstart.md`: step-by-step local setup
 - `docs/howto/ingestion.md`: URL ingestion + registry layout
 - `docs/reference/project-contract.md`: project workspace contract
+- `docs/reference/preview-contract.md`: preview UI/API contract
 - `docs/howto/styling.md`: theme packs and style presets
 - `docs/howto/sot-versions.md`: SoT version packs
 - `docs/howto/performance.md`: profiling guidance

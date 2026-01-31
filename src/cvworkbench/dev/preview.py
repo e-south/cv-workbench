@@ -739,11 +739,11 @@ def _preview_page_html() -> str:
           <div class="section-title">Workspace</div>
           <label>
             <span>Project</span>
-            <select id="project-select"></select>
+            <select id="project-select" data-cvw-control="project"></select>
           </label>
           <label>
             <span>Variant</span>
-            <select id="variant-select"></select>
+            <select id="variant-select" data-cvw-control="variant"></select>
           </label>
         </div>
 
@@ -751,38 +751,38 @@ def _preview_page_html() -> str:
           <div class="section-title">Styling</div>
           <label>
             <span>Theme</span>
-            <select id="theme-select"></select>
+            <select id="theme-select" data-cvw-control="theme"></select>
           </label>
           <label>
             <span>Preset</span>
-            <select id="preset-select"></select>
+            <select id="preset-select" data-cvw-control="preset"></select>
           </label>
         </div>
 
         <div class="section">
           <div class="section-title">Format</div>
-          <div id="format-tabs">
-            <button data-format="html" type="button">HTML</button>
-            <button data-format="pdf" type="button">PDF</button>
-            <button data-format="md" type="button">MD</button>
-            <button data-format="ats" type="button">ATS</button>
+          <div id="format-tabs" data-cvw-control="format-tabs">
+            <button data-format="html" data-cvw-format="html" type="button">HTML</button>
+            <button data-format="pdf" data-cvw-format="pdf" type="button">PDF</button>
+            <button data-format="md" data-cvw-format="md" type="button">MD</button>
+            <button data-format="ats" data-cvw-format="ats" type="button">ATS</button>
           </div>
           <label class="toggle">
             <span>Auto PDF</span>
-            <input id="auto-pdf-toggle" type="checkbox" />
+            <input id="auto-pdf-toggle" data-cvw-control="auto-pdf" type="checkbox" />
           </label>
         </div>
 
         <div class="section">
-          <button id="rebuild" type="button">Rebuild</button>
-          <button id="stop-preview" type="button">Stop</button>
-          <div id="status">Listening for changes…</div>
-          <div id="error"></div>
+          <button id="rebuild" data-cvw-action="rebuild" type="button">Rebuild</button>
+          <button id="stop-preview" data-cvw-action="stop" type="button">Stop</button>
+          <div id="status" data-cvw-status="status">Listening for changes…</div>
+          <div id="error" data-cvw-status="error"></div>
         </div>
 
         <div class="section">
           <div class="section-title">Runs</div>
-          <div id="run-list"></div>
+          <div id="run-list" data-cvw-status="run-list"></div>
         </div>
 
         <div id="shortcuts">
@@ -797,7 +797,7 @@ def _preview_page_html() -> str:
       </aside>
 
       <main id="preview-area">
-        <iframe id="preview" src="/cv.html"></iframe>
+        <iframe id="preview" data-cvw-view="preview-frame" src="/cv.html"></iframe>
       </main>
     </div>
     <script>

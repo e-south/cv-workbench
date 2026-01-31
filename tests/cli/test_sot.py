@@ -138,9 +138,9 @@ def test_sot_new_and_diff(tmp_path: Path) -> None:
     )
 
     assert created.exit_code == 0
-    assert (tmp_path / "sot" / "versions" / "experiment").exists()
+    assert (tmp_path / "local" / "sot" / "versions" / "experiment").exists()
 
-    (tmp_path / "sot" / "versions" / "experiment" / "person.yaml").write_text(
+    (tmp_path / "local" / "sot" / "versions" / "experiment" / "person.yaml").write_text(
         "id: experiment\nname: Experiment\n"
     )
 

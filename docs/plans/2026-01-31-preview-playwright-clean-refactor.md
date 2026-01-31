@@ -47,6 +47,9 @@ cv-workbench/
   - click/drive UI controls
   - listen for UI changes and reloads
   - capture artifacts (snapshot/screenshot/console warnings) as needed
+- Preview UI exposes stable `data-cvw-*` selectors (documented in
+  `docs/reference/preview-contract.md`).
+- HTTP API is limited to `/api/state`, `/api/render`, and `/api/stop`.
 - No auto-open, no viewer selection, no OS-level automation.
 - Any legacy preview flags/vars fail fast with a clear error.
 

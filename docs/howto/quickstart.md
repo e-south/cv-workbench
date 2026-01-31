@@ -128,11 +128,11 @@ uv run cvw build --sot-path ./sot.sample --variant base --format pdf --style-pre
 
 ## 8) Save variants intentionally
 
-`cvw tailor` writes draft variants to `drafts/`. Promote only the ones you want
+`cvw tailor` writes draft variants to `var/drafts/`. Promote only the ones you want
 to keep:
 
 ```bash
-uv run cvw variant promote --draft ./drafts/<name>
+uv run cvw variant promote --draft ./var/drafts/<name>
 ```
 
 ## 9) Start a project (job tailoring)
