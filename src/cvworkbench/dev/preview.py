@@ -510,6 +510,10 @@ def _make_handler(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, directory=str(dist_dir), **kwargs)
 
+        def translate_path(self, path: str) -> str:
+            self.directory = str(controller.state().dist_dir)
+            return super().translate_path(path)
+
         def do_GET(self) -> None:
             if self.path in {"/", "/preview"}:
                 self._serve_preview_page()

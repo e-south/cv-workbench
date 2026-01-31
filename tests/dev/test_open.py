@@ -336,7 +336,7 @@ def test_open_pdf_in_preview_fallbacks_to_exec(monkeypatch: pytest.MonkeyPatch) 
     ]
 
 
-def test_resolve_preview_viewer_defaults_to_preview_app_on_macos(
+def test_resolve_preview_viewer_defaults_to_browser_on_macos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("cvworkbench.dev.open.sys.platform", "darwin")
@@ -344,7 +344,7 @@ def test_resolve_preview_viewer_defaults_to_preview_app_on_macos(
 
     result = resolve_preview_viewer(None)
 
-    assert result == PreviewViewer.PREVIEW_APP
+    assert result == PreviewViewer.BROWSER
 
 
 def test_resolve_preview_viewer_defaults_to_browser_elsewhere(

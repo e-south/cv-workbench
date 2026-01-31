@@ -52,8 +52,6 @@ def resolve_preview_viewer(requested: PreviewViewer | None) -> PreviewViewer:
             return PreviewViewer(env_value)
         except ValueError as exc:
             raise ValueError(f"Invalid preview viewer: {env_value}") from exc
-    if sys.platform == "darwin":
-        return PreviewViewer.PREVIEW_APP
     return PreviewViewer.BROWSER
 
 

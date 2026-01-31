@@ -89,11 +89,10 @@ uv run cvw preview --sot-path ./sot.sample --variant base --style-preset compact
 ```
 
 `cvw preview` starts a live preview server and auto-rebuilds when you edit SoT
-files, theme templates, or style presets. On macOS, the default viewer opens
-the PDF in Preview for a reliable “just works” experience. To use the HTML
-preview UI (with sidebar controls and shortcuts), pass `--viewer browser`. The
-sidebar controls (or shortcuts) let you cycle themes, presets, variants, and
-formats:
+files, theme templates, or style presets. The default viewer opens the HTML
+preview UI in your browser (with sidebar controls and shortcuts). To open the
+PDF in Preview, pass `--viewer preview-app`. The sidebar controls (or shortcuts)
+let you cycle themes, presets, variants, and formats:
 
 - `t`: cycle theme
 - `p`: cycle style preset
