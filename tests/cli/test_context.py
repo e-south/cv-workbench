@@ -72,8 +72,15 @@ def test_context_reports_missing_sot_and_recipes(tmp_path: Path) -> None:
     assert payload["sot"]["status"] == "missing"
     assert payload["variants"]["config_count"] == 1
     assert payload["recipes"]
-    recipe_ids = {recipe["id"] for recipe in payload["recipes"]}
-    assert "context.refresh" in recipe_ids
+    recipe_ids = [recipe["id"] for recipe in payload["recipes"]]
+    assert recipe_ids[:3] == ["baseline.build_preview", "review.import", "project.guide"]
+    for recipe in payload["recipes"][:3]:
+        assert "preconditions" in recipe
+        assert "steps" in recipe
+        assert "outputs" in recipe
+        assert "stop_conditions" in recipe
+        assert recipe["steps"]
+        assert "command" in recipe["steps"][0]
 
 
 def test_context_strict_requires_sot(tmp_path: Path) -> None:

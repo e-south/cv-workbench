@@ -24,6 +24,21 @@ Top-level keys:
 - `recipes`: ordered command sequences for common workflows.
 - `issues`: any non-fatal problems detected during inspection.
 
+## Recipe fields
+
+Each recipe includes:
+
+- `id` and `title`
+- `preconditions`
+- `steps` (each with `command` + `description`)
+- `outputs`
+- `stop_conditions`
+
+Recipe ordering prioritizes:
+1) Baseline build/preview
+2) Review/import
+3) Job tailoring project
+
 ## Strict mode
 
 `cvw context --strict` fails fast if required inputs are missing or invalid.

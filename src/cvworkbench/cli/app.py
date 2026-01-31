@@ -386,72 +386,122 @@ def _build_context_recipes(
     project_label = projects[0]["project_id"] if projects else "<project-id>"
     return [
         {
-            "id": "context.refresh",
-            "title": "Refresh context",
-            "steps": [
-                {
-                    "command": "cvw context --json",
-                    "description": "Re-scan workspace state for SoT, variants, runs, and projects.",
-                }
+            "id": "baseline.build_preview",
+            "title": "Baseline build and preview",
+            "preconditions": [
+                "sot.status == 'ready'",
+                "variants.default is available",
             ],
-        },
-        {
-            "id": "sot.inspect",
-            "title": "Inspect SoT inventory",
             "steps": [
                 {
                     "command": f"cvw status --sot-path {sot_label}",
                     "description": "Summarize SoT sections, tags, and configured variants.",
-                }
-            ],
-        },
-        {
-            "id": "build.default",
-            "title": "Build the default variant",
-            "steps": [
+                },
                 {
-                    "command": f"cvw build --sot-path {sot_label} --variant {variant_label} --format md,pdf",
+                    "command": (
+                        f"cvw build --sot-path {sot_label} --variant {variant_label} --format md,pdf"
+                    ),
                     "description": "Generate markdown and PDF outputs for the default variant.",
-                }
-            ],
-        },
-        {
-            "id": "preview.default",
-            "title": "Preview the default variant",
-            "steps": [
+                },
                 {
                     "command": f"cvw preview --sot-path {sot_label} --variant {variant_label}",
                     "description": "Start the local preview server for the default variant.",
-                }
+                },
+            ],
+            "outputs": [
+                "var/dist/<variant>/cv.md",
+                "var/dist/<variant>/cv.pdf",
+                "var/runs/<run-id>/manifest.json",
+                "var/runs/<run-id>/canonical.md",
+            ],
+            "stop_conditions": [
+                "If SoT is missing or invalid, ask for the correct --sot-path or config update.",
+            ],
+        },
+        {
+            "id": "review.import",
+            "title": "Review and import DOCX edits",
+            "preconditions": [
+                "runs.latest_by_variant includes the target variant",
+            ],
+            "steps": [
+                {
+                    "command": f"cvw reviewpack --variant {variant_label}",
+                    "description": "Create a review pack with DOCX/PDF plus checklist.",
+                },
+                {
+                    "command": "edit var/reviews/<variant>/cv.docx",
+                    "description": "Apply manual edits to the DOCX review file.",
+                },
+                {
+                    "command": (
+                        f"cvw import-docx --docx var/reviews/{variant_label}/cv.docx "
+                        f"--variant {variant_label}"
+                    ),
+                    "description": "Generate a patch diff from the edited DOCX.",
+                },
+                {
+                    "command": f"cvw apply --draft <draft-dir> --sot-path {sot_label}",
+                    "description": "Apply the patch after explicit approval.",
+                },
+            ],
+            "outputs": [
+                "var/reviews/<variant>/cv.docx",
+                "var/drafts/import-*/patch.diff",
+            ],
+            "stop_conditions": [
+                "If no runs exist, run the baseline build recipe first.",
+                "Only apply patches after explicit approval.",
             ],
         },
         {
             "id": "project.guide",
-            "title": "Start a job-tailoring project",
+            "title": "Job tailoring project",
+            "preconditions": [
+                "sot.status == 'ready'",
+                "job input (URL or file) provided",
+            ],
             "steps": [
                 {
                     "command": f"cvw project guide --job-url <job-url> --sot-path {sot_label}",
                     "description": "Ingest a job posting and get variant recommendations.",
-                }
-            ],
-        },
-        {
-            "id": "project.preview",
-            "title": "Preview a project",
-            "steps": [
+                },
                 {
                     "command": f"cvw preview --project {project_label}",
                     "description": "Preview with the project patch applied in-memory.",
                 },
                 {
                     "command": f"cvw project apply {project_label}",
-                    "description": "Apply the project patch to the SoT on disk.",
+                    "description": "Apply the project patch after explicit approval.",
                 },
             ],
+            "outputs": [
+                "var/projects/<slug>/project.yaml",
+                "var/projects/<slug>/proposals/variant.yaml",
+                "var/projects/<slug>/proposals/patch.yaml",
+            ],
+            "stop_conditions": [
+                "If job input is missing, ask for a job URL or file.",
+                "Only apply project patches after explicit approval.",
+            ],
+        },
+        {
+            "id": "context.refresh",
+            "title": "Refresh context",
+            "preconditions": [],
+            "steps": [
+                {
+                    "command": "cvw context --json",
+                    "description": "Re-scan workspace state for SoT, variants, runs, and projects.",
+                }
+            ],
+            "outputs": ["context payload (JSON)"],
+            "stop_conditions": [],
         },
         {
             "id": "variant.manage",
             "title": "Promote or discard variants",
+            "preconditions": [],
             "steps": [
                 {
                     "command": "cvw variant inbox",
@@ -463,13 +513,18 @@ def _build_context_recipes(
                 },
                 {
                     "command": "cvw variant discard --path <variant.yaml> --yes",
-                    "description": "Discard draft/project variant artifacts.",
+                    "description": "Discard draft/project variant artifacts after explicit approval.",
                 },
+            ],
+            "outputs": ["config/variants/<variant-id>.yaml", "var/variants/registry.json"],
+            "stop_conditions": [
+                "Never discard without explicit approval.",
             ],
         },
         {
             "id": "runs.gc",
             "title": "Prune older runs",
+            "preconditions": [],
             "steps": [
                 {
                     "command": "cvw runs gc --keep-latest 2",
@@ -477,8 +532,12 @@ def _build_context_recipes(
                 },
                 {
                     "command": "cvw runs gc --keep-latest 2 --yes",
-                    "description": "Delete runs older than the keep window.",
+                    "description": "Delete runs older than the keep window after approval.",
                 },
+            ],
+            "outputs": ["var/runs/"],
+            "stop_conditions": [
+                "Never delete runs without explicit approval.",
             ],
         },
     ]
