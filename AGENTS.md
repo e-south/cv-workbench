@@ -4,6 +4,11 @@ You are operating inside the cv-workbench repo.
 
 Primary rule: prefer deterministic CLI artifacts (manifest.json, selection.json, resume.json, canonical.md) over browser inspection for correctness.
 
+Strict policy:
+- Local preview only (localhost/127.0.0.1).
+- No public internet access.
+- Minimal tools by default; use Playwright only when visual verification is required.
+
 When you must visually verify output (HTML/PDF):
 1) Start the preview server:
    - run: uv run cvw preview --sot-path ./sot.sample --variant base

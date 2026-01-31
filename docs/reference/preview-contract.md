@@ -50,6 +50,7 @@ Playwright should target the `data-cvw-*` hooks:
 - `data-cvw-format="html|pdf|md|ats"` on each format button
 - `data-cvw-action="rebuild|stop"`
 - `data-cvw-status="status|error|run-list"`
+- `data-cvw-build-id` on `<body>` (updated on successful rebuild)
 - `data-cvw-view="preview-frame"`
 
 The project selector is read-only unless the preview was started with
@@ -62,3 +63,15 @@ The project selector is read-only unless the preview was started with
 - UI controls call `/api/render`; state updates are visible via `/api/state`.
 - The Stop button (or `POST /api/stop`) shuts down the server and disables UI
   controls.
+
+## Playwright interaction recipe
+
+1. Navigate to the preview URL (local-only).
+2. Click the PDF tab if you need the PDF view (`[data-cvw-format="pdf"]`).
+3. Focus the preview frame (`[data-cvw-view="preview-frame"]`).
+4. Scroll with PageDown or mouse wheel.
+5. Detect build completion by watching `body[data-cvw-build-id]` or
+   `[data-cvw-status="run-list"]`.
+6. Capture artifacts (snapshot/screenshot/console) after interactions or
+   build-id changes.
+7. Do not spam snapshots; capture only after actions or rebuilds.

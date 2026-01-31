@@ -25,7 +25,20 @@ def test_preview_contract_selectors_present() -> None:
         'data-cvw-control="auto-pdf"',
         'data-cvw-action="rebuild"',
         'data-cvw-action="stop"',
+        'data-cvw-build-id',
         'data-cvw-view="preview-frame"',
     ]
     for marker in markers:
         assert marker in html
+
+
+def test_preview_page_html_guards_control_render() -> None:
+    html = _preview_page_html()
+    assert "lastControlsKey" in html
+    assert "nextControlsKey !== lastControlsKey" in html
+
+
+def test_preview_page_html_guards_preview_src_updates() -> None:
+    html = _preview_page_html()
+    assert "currentPreviewSrc" in html
+    assert "nextPreviewSrc !== currentPreviewSrc" in html

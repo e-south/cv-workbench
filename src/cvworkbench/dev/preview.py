@@ -730,7 +730,7 @@ def _preview_page_html() -> str:
       }
     </style>
   </head>
-  <body tabindex="0">
+  <body tabindex="0" data-cvw-build-id="">
     <div id="layout">
       <aside id="sidebar">
         <div id="brand">cv-workbench</div>
@@ -818,11 +818,47 @@ def _preview_page_html() -> str:
       const errorEl = document.getElementById('error');
       const runList = document.getElementById('run-list');
       const formats = ['html', 'pdf', 'md', 'ats'];
+      let lastSeenBuildId = document.body.dataset.cvwBuildId || '';
+      let lastControlsKey = null;
+      let lastOverlayKey = null;
+      let currentPreviewSrc = iframe.getAttribute('src') || '';
 
       async function fetchState() {
         const res = await fetch('/api/state');
         if (!res.ok) return null;
         return res.json();
+      }
+
+      function listSignature(list) {
+        if (!list || list.length === 0) return '';
+        return list.join('|');
+      }
+
+      function presetsSignature(presets) {
+        if (!presets) return '';
+        const themes = Object.keys(presets).sort();
+        return themes
+          .map((theme) => theme + ':' + listSignature(presets[theme] || []))
+          .join('||');
+      }
+
+      function controlsSignature(data) {
+        return [
+          listSignature(data.projects),
+          data.project || '',
+          listSignature(data.variants),
+          data.variant || '',
+          listSignature(data.themes),
+          data.theme || '',
+          presetsSignature(data.presets || {}),
+          data.style_preset || '',
+          data.format || '',
+          data.auto_pdf ? '1' : '0',
+        ].join('::');
+      }
+
+      function overlaySignature(data) {
+        return [stopped ? 'stopped' : 'live', data.last_error || ''].join('::');
       }
 
       function renderOverlay(data) {
@@ -870,9 +906,7 @@ def _preview_page_html() -> str:
         const presets = (data.presets && data.presets[themeSelect.value]) || [];
         syncSelect(presetSelect, presets, data.style_preset);
         autoPdfToggle.checked = !!data.auto_pdf;
-        currentFormat = data.format || currentFormat;
         updateFormatButtons();
-        updatePreviewSrc();
       }
 
       function setControlsEnabled(enabled) {
@@ -885,12 +919,16 @@ def _preview_page_html() -> str:
         stopButton.disabled = !enabled;
       }
 
-      function updatePreviewSrc() {
+      function syncPreviewSrc() {
         if (!state.data || !state.data.outputs) return;
         const output = state.data.outputs[currentFormat] || state.data.outputs['html'];
         if (!output) return;
         const bust = state.data.build_id ? ('?v=' + state.data.build_id) : '';
-        iframe.src = '/' + output + bust;
+        const nextPreviewSrc = '/' + output + bust;
+        if (nextPreviewSrc !== currentPreviewSrc) {
+          currentPreviewSrc = nextPreviewSrc;
+          iframe.src = nextPreviewSrc;
+        }
       }
 
       function updateFormatButtons() {
@@ -917,6 +955,30 @@ def _preview_page_html() -> str:
         });
       }
 
+      function applyState(data) {
+        if (!data) return;
+        state.data = data;
+        currentFormat = data.format || currentFormat;
+        const nextBuildId = data.build_id ? String(data.build_id) : '';
+        const buildChanged = nextBuildId !== lastSeenBuildId;
+        if (buildChanged) {
+          lastSeenBuildId = nextBuildId;
+          document.body.dataset.cvwBuildId = nextBuildId;
+          recordRun(data);
+        }
+        const nextControlsKey = controlsSignature(data);
+        if (nextControlsKey !== lastControlsKey) {
+          lastControlsKey = nextControlsKey;
+          renderControls(data);
+        }
+        const nextOverlayKey = overlaySignature(data);
+        if (nextOverlayKey !== lastOverlayKey) {
+          lastOverlayKey = nextOverlayKey;
+          renderOverlay(data);
+        }
+        syncPreviewSrc();
+      }
+
       async function requestRender(theme, preset, variant, format, autoPdf) {
         const res = await fetch('/api/render', {
           method: 'POST',
@@ -935,10 +997,7 @@ def _preview_page_html() -> str:
           errorEl.style.display = 'block';
           return;
         }
-        state.data = payload;
-        renderControls(payload);
-        renderOverlay(payload);
-        recordRun(payload);
+        applyState(payload);
       }
 
       async function requestStop() {
@@ -950,24 +1009,16 @@ def _preview_page_html() -> str:
         }
         stopped = true;
         setControlsEnabled(false);
-        renderOverlay(state.data || {});
+        const data = state.data || {};
+        renderOverlay(data);
+        lastOverlayKey = overlaySignature(data);
       }
 
       async function refresh() {
         if (stopped) return;
         const data = await fetchState();
         if (!data) return;
-        if (!state.data || state.data.build_id !== data.build_id) {
-          state.data = data;
-          renderControls(data);
-          renderOverlay(data);
-          recordRun(data);
-          return;
-        }
-        state.data = data;
-        renderControls(data);
-        renderOverlay(data);
-        recordRun(data);
+        applyState(data);
       }
 
       async function handleKey(event) {
