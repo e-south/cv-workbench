@@ -14,7 +14,8 @@ from __future__ import annotations
 import json
 import os
 import threading
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -40,6 +41,9 @@ from cvworkbench.variants import load_variant
 
 class PreviewError(RuntimeError):
     pass
+
+
+_CLIENT_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)
 
 
 @dataclass
@@ -73,6 +77,22 @@ class PreviewSession:
     theme_id: str
     style_preset: str | None
     started_at: str
+
+
+@dataclass
+class ClientActivity:
+    last_seen_monotonic: float | None = None
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def touch(self) -> None:
+        with self._lock:
+            self.last_seen_monotonic = time.monotonic()
+
+    def idle_for_seconds(self) -> float | None:
+        with self._lock:
+            if self.last_seen_monotonic is None:
+                return None
+            return time.monotonic() - self.last_seen_monotonic
 
 
 class PreviewController:
@@ -454,6 +474,34 @@ class PreviewWatcher(threading.Thread):
                 self._snapshot = FileSnapshot(self._controller.resolve_watch_paths())
 
 
+class PreviewIdleWatchdog(threading.Thread):
+    def __init__(
+        self,
+        *,
+        activity: ClientActivity,
+        stop_event: threading.Event,
+        server: ThreadingHTTPServer,
+        idle_timeout_seconds: float,
+    ) -> None:
+        super().__init__(daemon=True)
+        self._activity = activity
+        self._stop_event = stop_event
+        self._server = server
+        self._idle_timeout_seconds = idle_timeout_seconds
+
+    def run(self) -> None:
+        wait_interval = min(1.0, max(0.01, self._idle_timeout_seconds / 4))
+        while not self._stop_event.wait(wait_interval):
+            idle_for_seconds = self._activity.idle_for_seconds()
+            if idle_for_seconds is None:
+                continue
+            if idle_for_seconds < self._idle_timeout_seconds:
+                continue
+            self._stop_event.set()
+            threading.Thread(target=self._server.shutdown, daemon=True).start()
+            return
+
+
 class FileSnapshot:
     def __init__(self, paths: list[Path]) -> None:
         self._entries = _scan_paths(paths)
@@ -495,13 +543,16 @@ def serve_preview(
     controller: PreviewController,
     host: str,
     port: int,
+    idle_timeout_seconds: float,
     on_start: Callable[[str, Path], None],
 ) -> None:
     controller.build_once()
     state = controller.state()
     stop_event = threading.Event()
+    client_activity = ClientActivity()
     server = ThreadingHTTPServer(
-        (host, port), _make_handler(controller, state.dist_dir, stop_event)
+        (host, port),
+        _make_handler(controller, state.dist_dir, stop_event, client_activity=client_activity),
     )
     preview_url = f"http://{host}:{port}/"
     try:
@@ -512,6 +563,15 @@ def serve_preview(
         raise
     watcher = PreviewWatcher(controller, stop_event)
     watcher.start()
+    idle_watchdog: PreviewIdleWatchdog | None = None
+    if idle_timeout_seconds > 0:
+        idle_watchdog = PreviewIdleWatchdog(
+            activity=client_activity,
+            stop_event=stop_event,
+            server=server,
+            idle_timeout_seconds=idle_timeout_seconds,
+        )
+        idle_watchdog.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -526,6 +586,8 @@ def _make_handler(
     controller: PreviewController,
     dist_dir: Path,
     stop_event: threading.Event,
+    *,
+    client_activity: ClientActivity,
 ) -> type[SimpleHTTPRequestHandler]:
     class PreviewHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -536,15 +598,17 @@ def _make_handler(
             return super().translate_path(path)
 
         def do_GET(self) -> None:
+            client_activity.touch()
             if self.path in {"/", "/preview"}:
                 self._serve_preview_page()
                 return
             if self.path.startswith("/api/state"):
                 self._send_json(controller.state_payload())
                 return
-            super().do_GET()
+            self._serve_static()
 
         def do_POST(self) -> None:
+            client_activity.touch()
             if not self.path.startswith("/api/render"):
                 if self.path.startswith("/api/stop"):
                     self._send_json({"status": "stopping"})
@@ -586,23 +650,31 @@ def _make_handler(
         def _serve_preview_page(self) -> None:
             content = _preview_page_html()
             data = content.encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self._write_response(200, "text/html; charset=utf-8", data)
 
         def _send_json(self, payload: dict[str, Any], status: int = 200) -> None:
             data = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self._write_response(status, "application/json", data)
 
         def _stop_server(self) -> None:
             stop_event.set()
             threading.Thread(target=self.server.shutdown, daemon=True).start()
+
+        def _serve_static(self) -> None:
+            try:
+                super().do_GET()
+            except _CLIENT_DISCONNECT_ERRORS:
+                return
+
+        def _write_response(self, status: int, content_type: str, data: bytes) -> None:
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except _CLIENT_DISCONNECT_ERRORS:
+                return
 
     return PreviewHandler
 
@@ -614,6 +686,7 @@ def _preview_page_html() -> str:
   <head>
     <meta charset="utf-8" />
     <title>cv-workbench preview</title>
+    <link rel="icon" href="data:," />
     <style>
       html, body {
         margin: 0;
@@ -714,6 +787,16 @@ def _preview_page_html() -> str:
         font-size: 12px;
         display: none;
       }
+      #summary {
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+        color: #cbd5e1;
+      }
+      #summary strong {
+        color: #f8fafc;
+        font-weight: 600;
+      }
       #run-list {
         display: grid;
         gap: 6px;
@@ -797,13 +880,14 @@ def _preview_page_html() -> str:
         <div class="section">
           <button id="rebuild" data-cvw-action="rebuild" type="button">Rebuild</button>
           <button id="stop-preview" data-cvw-action="stop" type="button">Stop</button>
-          <div id="status" data-cvw-status="status">Listening for changes…</div>
-          <div id="error" data-cvw-status="error"></div>
+          <div id="status" data-cvw-status="status" aria-live="polite">Listening for changes...</div>
+          <div id="error" data-cvw-status="error" aria-live="polite"></div>
+          <div id="summary" data-cvw-status="summary" aria-live="polite"></div>
         </div>
 
         <div class="section">
           <div class="section-title">Runs</div>
-          <div id="run-list" data-cvw-status="run-list"></div>
+          <div id="run-list" data-cvw-status="run-list" aria-live="polite"></div>
         </div>
 
         <div id="shortcuts">
@@ -818,7 +902,7 @@ def _preview_page_html() -> str:
       </aside>
 
       <main id="preview-area">
-        <iframe id="preview" data-cvw-view="preview-frame" src="/cv.html"></iframe>
+        <iframe id="preview" data-cvw-view="preview-frame" src="about:blank"></iframe>
       </main>
     </div>
     <script>
@@ -839,12 +923,14 @@ def _preview_page_html() -> str:
       const stopButton = document.getElementById('stop-preview');
       const statusEl = document.getElementById('status');
       const errorEl = document.getElementById('error');
+      const summaryEl = document.getElementById('summary');
       const runList = document.getElementById('run-list');
       const formats = ['html', 'pdf', 'md', 'ats'];
       let lastSeenBuildId = document.body.dataset.cvwBuildId || '';
       let lastControlsKey = null;
       let lastOverlayKey = null;
       let currentPreviewSrc = iframe.getAttribute('src') || '';
+      let pendingAction = null;
 
       async function fetchState() {
         const res = await fetch('/api/state');
@@ -884,7 +970,7 @@ def _preview_page_html() -> str:
 
       function overlaySignature(data) {
         const lastError = data && data.last_error ? data.last_error : '';
-        return [stopped ? 'stopped' : 'live', lastError, connectionError || ''].join('::');
+        return [stopped ? 'stopped' : 'live', pendingAction || '', lastError, connectionError || ''].join('::');
       }
 
       function renderOverlay(data) {
@@ -893,15 +979,62 @@ def _preview_page_html() -> str:
           statusEl.textContent = DISCONNECTED_MESSAGE + '.';
           errorEl.textContent = connectionError;
           errorEl.style.display = 'block';
+          setControlsEnabled(false);
           return;
         }
-        statusEl.textContent = stopped ? 'Preview stopped.' : 'Listening for changes…';
+        if (stopped) {
+          statusEl.textContent = 'Preview stopped.';
+        } else if (pendingAction === 'render') {
+          statusEl.textContent = 'Rebuilding preview...';
+        } else if (pendingAction === 'stop') {
+          statusEl.textContent = 'Stopping preview...';
+        } else {
+          statusEl.textContent = 'Listening for changes...';
+        }
         if (lastError) {
           errorEl.textContent = lastError;
           errorEl.style.display = 'block';
         } else {
           errorEl.style.display = 'none';
         }
+        setControlsEnabled(!stopped && !pendingAction);
+      }
+
+      function syncOverlay(data, force = false) {
+        const nextOverlayKey = overlaySignature(data);
+        if (!force && nextOverlayKey === lastOverlayKey) {
+          return;
+        }
+        renderOverlay(data);
+        lastOverlayKey = nextOverlayKey;
+      }
+
+      function appendSummaryField(line, label, value) {
+        line.appendChild(document.createTextNode(label));
+        const strong = document.createElement('strong');
+        strong.textContent = value;
+        line.appendChild(strong);
+      }
+
+      function renderSummary(data) {
+        summaryEl.replaceChildren();
+        if (!data) {
+          return;
+        }
+        const projectLabel = data.project || 'none';
+        const presetLabel = data.style_preset || 'default';
+        const buildLabel = data.build_id ? ('#' + data.build_id) : 'pending';
+        const lines = [
+          ['project: ', projectLabel, ' | variant: ', data.variant || 'n/a'],
+          ['theme: ', data.theme || 'n/a', ' | preset: ', presetLabel],
+          ['format: ', currentFormat || 'html', ' | build: ', buildLabel],
+        ];
+        lines.forEach(([labelA, valueA, labelB, valueB]) => {
+          const line = document.createElement('div');
+          appendSummaryField(line, labelA, valueA);
+          appendSummaryField(line, labelB, valueB);
+          summaryEl.appendChild(line);
+        });
       }
 
       function nextOption(list, current) {
@@ -910,7 +1043,7 @@ def _preview_page_html() -> str:
         return list[(idx + 1) % list.length];
       }
 
-      function syncSelect(selectEl, options, current) {
+      function syncSelect(selectEl, options, current, allowUnset = false) {
         selectEl.innerHTML = '';
         if (!options || options.length === 0) {
           const opt = document.createElement('option');
@@ -928,11 +1061,18 @@ def _preview_page_html() -> str:
           opt.textContent = item;
           selectEl.appendChild(opt);
         });
-        selectEl.value = current && options.includes(current) ? current : options[0];
+        if (allowUnset && (!current || !options.includes(current))) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'none';
+          selectEl.insertBefore(opt, selectEl.firstChild);
+        }
+        selectEl.value = current && options.includes(current) ? current : (allowUnset ? '' : options[0]);
       }
 
       function renderControls(data) {
-        syncSelect(projectSelect, data.projects || [], data.project);
+        const projectOptions = data.project ? [data.project] : [];
+        syncSelect(projectSelect, projectOptions, data.project, true);
         projectSelect.disabled = true;
         syncSelect(variantSelect, data.variants || [], data.variant);
         syncSelect(themeSelect, data.themes || [], data.theme);
@@ -1009,46 +1149,60 @@ def _preview_page_html() -> str:
         }
         const nextOverlayKey = overlaySignature(data);
         if (nextOverlayKey !== lastOverlayKey) {
-          lastOverlayKey = nextOverlayKey;
-          renderOverlay(data);
+          syncOverlay(data);
         }
+        renderSummary(data);
         syncPreviewSrc();
       }
 
       async function requestRender(theme, preset, variant, format, autoPdf) {
-        const res = await fetch('/api/render', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            theme,
-            style_preset: preset || null,
-            variant: variant || null,
-            format: format || null,
-            auto_pdf: autoPdf,
-          }),
-        });
-        const payload = await res.json();
-        if (!res.ok) {
-          errorEl.textContent = payload.error || 'Build failed';
-          errorEl.style.display = 'block';
-          return;
+        pendingAction = 'render';
+        syncOverlay(state.data || {}, true);
+        try {
+          const res = await fetch('/api/render', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              theme,
+              style_preset: preset || null,
+              variant: variant || null,
+              format: format || null,
+              auto_pdf: autoPdf,
+            }),
+          });
+          const payload = await res.json();
+          if (!res.ok) {
+            errorEl.textContent = payload.error || 'Build failed';
+            errorEl.style.display = 'block';
+            return;
+          }
+          applyState(payload);
+        } finally {
+          pendingAction = null;
+          const data = state.data || {};
+          syncOverlay(data, true);
         }
-        applyState(payload);
       }
 
       async function requestStop() {
-        const res = await fetch('/api/stop', { method: 'POST' });
-        if (!res.ok) {
-          errorEl.textContent = 'Failed to stop preview';
-          errorEl.style.display = 'block';
-          return;
+        pendingAction = 'stop';
+        syncOverlay(state.data || {}, true);
+        try {
+          const res = await fetch('/api/stop', { method: 'POST' });
+          if (!res.ok) {
+            errorEl.textContent = 'Failed to stop preview';
+            errorEl.style.display = 'block';
+            return;
+          }
+          stopped = true;
+          connectionError = null;
+          setControlsEnabled(false);
+          const data = state.data || {};
+          syncOverlay(data, true);
+        } finally {
+          pendingAction = null;
+          syncOverlay(state.data || {}, true);
         }
-        stopped = true;
-        connectionError = null;
-        setControlsEnabled(false);
-        const data = state.data || {};
-        renderOverlay(data);
-        lastOverlayKey = overlaySignature(data);
       }
 
       async function refresh() {
@@ -1060,40 +1214,45 @@ def _preview_page_html() -> str:
         } catch (_) {
           connectionError = DISCONNECTED_MESSAGE;
           const data = state.data || {};
-          const nextOverlayKey = overlaySignature(data);
-          if (nextOverlayKey !== lastOverlayKey) {
-            lastOverlayKey = nextOverlayKey;
-            renderOverlay(data);
-          }
+          syncOverlay(data);
         }
       }
 
       async function handleKey(event) {
         if (stopped) return;
         if (!state.data) return;
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
         const active = document.activeElement;
-        if (active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName)) return;
-        if (event.key === 't') {
+        const target = event.target;
+        const isInteractive = (element) => {
+          if (!element || typeof element.closest !== 'function') return false;
+          if (element.isContentEditable) return true;
+          if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(element.tagName)) return true;
+          return Boolean(element.closest('button,select,input,textarea,a,[role="button"],[role="tab"]'));
+        };
+        if (isInteractive(active) || isInteractive(target)) return;
+        const key = event.key.toLowerCase();
+        if (key === 't') {
           const nextTheme = nextOption(state.data.themes, state.data.theme);
           const presets = state.data.presets[nextTheme] || [];
           const nextPreset = presets.includes(state.data.style_preset)
             ? state.data.style_preset
             : (presets[0] || null);
           await requestRender(nextTheme, nextPreset, state.data.variant, currentFormat, autoPdfToggle.checked);
-        } else if (event.key === 'p') {
+        } else if (key === 'p') {
           const presets = state.data.presets[state.data.theme] || [];
           const nextPreset = nextOption(presets, state.data.style_preset);
           await requestRender(state.data.theme, nextPreset, state.data.variant, currentFormat, autoPdfToggle.checked);
-        } else if (event.key === 'v') {
+        } else if (key === 'v') {
           const nextVariant = nextOption(state.data.variants, state.data.variant);
           await requestRender(state.data.theme, state.data.style_preset, nextVariant, currentFormat, autoPdfToggle.checked);
-        } else if (event.key === 'f') {
+        } else if (key === 'f') {
           const nextFormat = nextOption(formats, currentFormat);
           currentFormat = nextFormat || currentFormat;
           await requestRender(state.data.theme, state.data.style_preset, state.data.variant, currentFormat, autoPdfToggle.checked);
-        } else if (event.key === 'r') {
+        } else if (key === 'r') {
           await requestRender(state.data.theme, state.data.style_preset, state.data.variant, currentFormat, autoPdfToggle.checked);
-        } else if (event.key === 'x') {
+        } else if (key === 'x') {
           await requestStop();
         }
       }

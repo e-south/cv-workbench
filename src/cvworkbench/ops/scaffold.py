@@ -13,8 +13,12 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+import yaml
 
 
 class ScaffoldError(RuntimeError):
@@ -31,12 +35,16 @@ class InitResult:
     statuses: dict[str, str]
 
 
-def init_project(root: Path) -> InitResult:
+def init_project(root: Path, *, sample_default: bool = False) -> InitResult:
     template_root = resolve_template_root()
     statuses: dict[str, str] = {}
 
-    sot_target = root / "local" / "sot"
+    if sample_default:
+        sot_target = root / "sot.sample"
+    else:
+        sot_target = root / "local" / "sot"
     _ensure_dir_from_template(template_root / "sot.sample", sot_target, statuses, "sot")
+    statuses["sot_profile"] = "sample-default" if sample_default else "local-copy"
 
     config_target = root / "config"
     config_target.mkdir(parents=True, exist_ok=True)
@@ -48,6 +56,8 @@ def init_project(root: Path) -> InitResult:
         statuses,
         "workbench_config",
     )
+    if sample_default:
+        _set_workbench_sot_path(workbench_target, sot_target)
 
     variants_target = config_target / "variants"
     variants_target.mkdir(parents=True, exist_ok=True)
@@ -112,6 +122,8 @@ def init_project(root: Path) -> InitResult:
     else:
         statuses["projects"] = "exists"
 
+    _ensure_precommit_hooks(root, statuses)
+
     return InitResult(
         root=root,
         sot_path=sot_target,
@@ -131,6 +143,97 @@ def _resolve_template_root() -> Path:
 
 def resolve_template_root() -> Path:
     return _resolve_template_root()
+
+
+def _ensure_precommit_hooks(root: Path, statuses: dict[str, str]) -> None:
+    config_path = root / ".pre-commit-config.yaml"
+    if not config_path.exists():
+        statuses["pre_commit_hooks"] = "missing"
+        return
+
+    hooks_dir = _resolve_git_hooks_dir(root)
+    if hooks_dir is None:
+        statuses["pre_commit_hooks"] = "no_git"
+        return
+
+    hook_path = hooks_dir / "pre-commit"
+    if hook_path.exists():
+        statuses["pre_commit_hooks"] = "exists"
+        return
+
+    returncode, output = _run_precommit_install(root)
+    if returncode != 0:
+        statuses["pre_commit_hooks"] = "error"
+        if output:
+            statuses["pre_commit_hooks_detail"] = output
+        return
+
+    if hook_path.exists():
+        statuses["pre_commit_hooks"] = "installed"
+        return
+
+    statuses["pre_commit_hooks"] = "error"
+    statuses["pre_commit_hooks_detail"] = "pre-commit install exited successfully but did not create .git/hooks/pre-commit"
+
+
+def _resolve_git_hooks_dir(root: Path) -> Path | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-path", "hooks"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    value = result.stdout.strip()
+    if not value:
+        return None
+
+    hooks_path = Path(value)
+    if hooks_path.is_absolute():
+        return hooks_path
+    return (root / hooks_path).resolve()
+
+
+def _run_precommit_install(root: Path) -> tuple[int, str]:
+    result = subprocess.run(
+        [sys.executable, "-m", "pre_commit", "install"],
+        check=False,
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    output = (result.stdout or "").strip()
+    return result.returncode, output
+
+
+def _set_workbench_sot_path(config_path: Path, sot_target: Path) -> None:
+    if not config_path.exists():
+        raise ScaffoldError(f"Workbench config not found: {config_path}")
+
+    raw = yaml.safe_load(config_path.read_text())
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ScaffoldError(f"Workbench config must be a YAML mapping: {config_path}")
+
+    paths = raw.get("paths")
+    if paths is None:
+        paths = {}
+    if not isinstance(paths, dict):
+        raise ScaffoldError(f"Workbench config field paths must be a mapping: {config_path}")
+
+    relative = Path(os.path.relpath(sot_target, start=config_path.parent)).as_posix()
+    paths["sot"] = relative
+    raw["paths"] = paths
+    config_path.write_text(yaml.safe_dump(raw, sort_keys=False))
 
 
 def _ensure_dir_from_template(

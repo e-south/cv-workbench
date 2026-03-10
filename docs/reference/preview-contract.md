@@ -1,12 +1,13 @@
 # Preview Contract
 
 The preview server is a local-only HTTP surface that exposes a minimal UI and
-API for Playwright-driven interaction. The CLI is responsible for starting and
-stopping the server; Playwright (or a human) drives the UI.
+API for browser automation or manual inspection. The CLI is responsible for
+starting and stopping the server; Chrome DevTools MCP is the preferred
+interactive controller.
 
 ## Session record
 
-`cvw preview` writes a session record to:
+`uv run cvw preview` writes a session record to:
 
 ```
 var/runs/preview/session.json
@@ -19,7 +20,7 @@ Fields:
 
 ## One-shot preview
 
-`cvw preview --once` builds the preview outputs once and exits without starting
+`uv run cvw preview --once` builds the preview outputs once and exits without starting
 the server. No session file is written in this mode.
 
 ## HTTP API
@@ -49,7 +50,7 @@ Returns the same payload as `/api/state` on success; on failure returns
 
 ## UI control selectors (stable)
 
-Playwright should target the `data-cvw-*` hooks:
+Browser automation should target the stable `data-cvw-*` hooks:
 
 - `data-cvw-control="project|variant|theme|preset|format-tabs|auto-pdf"`
 - `data-cvw-format="html|pdf|md|ats"` on each format button
@@ -60,7 +61,8 @@ Playwright should target the `data-cvw-*` hooks:
 - `data-cvw-view="preview-frame"`
 
 The project selector is read-only and displays the active project (if the
-preview was started with `--project`).
+preview was started with `--project`); otherwise it shows `none` instead of a
+disabled list of unrelated projects.
 
 ## Interaction semantics
 
@@ -69,17 +71,23 @@ preview was started with `--project`).
 - UI controls call `/api/render`; state updates are visible via `/api/state`.
 - The Stop button (or `POST /api/stop`) shuts down the server and disables UI
   controls.
+- Keyboard shortcuts are ignored while focus is inside interactive controls so
+  agents/operators do not accidentally rebuild or switch variants while
+  navigating the sidebar.
+- Browser inactivity auto-stops the preview server after 30 seconds by default.
+  Set `CVW_DEV_IDLE_TIMEOUT_SECONDS=0` to disable the idle timeout.
 - If the preview API becomes unreachable, the error status shows a
   "Preview disconnected" message.
 
-## Playwright interaction recipe
+## Browser automation recipe
 
 1. Navigate to the preview URL (local-only).
-2. Click the PDF tab if you need the PDF view (`[data-cvw-format="pdf"]`).
-3. Focus the preview frame (`[data-cvw-view="preview-frame"]`).
-4. Scroll with PageDown or mouse wheel.
-5. Detect build completion by watching `body[data-cvw-build-id]` or
+2. Use Chrome DevTools MCP to capture a text snapshot, screenshot, and console
+   warnings after actions or build-id changes.
+3. Click the PDF tab if you need the PDF view (`[data-cvw-format="pdf"]`).
+4. Focus the preview frame (`[data-cvw-view="preview-frame"]`).
+5. Scroll with PageDown or mouse wheel.
+6. Detect build completion by watching `body[data-cvw-build-id]` or
    `[data-cvw-status="run-list"]`.
-6. Capture artifacts (snapshot/screenshot/console) after interactions or
-   build-id changes.
-7. Do not spam snapshots; capture only after actions or rebuilds.
+7. Save artifacts as `ui.snapshot.md`, `ui.png`, and `console.txt`.
+8. Do not spam snapshots; capture only after actions or rebuilds.

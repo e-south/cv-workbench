@@ -17,6 +17,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import (
@@ -27,8 +28,15 @@ from cvworkbench.config import (
     resolve_runs_path,
     resolve_variant_path,
 )
-from cvworkbench.ops.runs import RunError, resolve_latest_run
-from cvworkbench.variants import load_variant
+from cvworkbench.ops.projects import ProjectError, load_project, resolve_project_dir
+from cvworkbench.ops.runs import (
+    RunError,
+    RunInfo,
+    resolve_latest_project_run,
+    resolve_latest_run,
+    resolve_run,
+)
+from cvworkbench.variants import Variant, load_variant
 
 
 class ReviewError(RuntimeError):
@@ -55,22 +63,22 @@ class ImportResult:
 
 def build_review_pack(
     *,
-    variant_id: str,
+    variant_id: str | None,
     config_path: Path,
+    run: str | None = None,
+    project_dir: Path | None = None,
     out_dir: Path | None = None,
 ) -> ReviewPack:
-    try:
-        latest_run = resolve_latest_run(config_path, variant_id=variant_id)
-    except RunError as exc:
-        raise ReviewError(str(exc)) from exc
-    variant_path = resolve_variant_path(variant_id, config_path)
-    if not variant_path.exists():
-        raise ReviewError(f"Variant not found: {variant_id}")
-    variant = load_variant(variant_path)
+    resolution = _resolve_review_target(
+        config_path=config_path,
+        run=run,
+        variant_id=variant_id,
+        project_dir=project_dir,
+    )
 
-    dist_dir = resolve_dist_path(config_path) / variant.id
-    docx_source = output_path(dist_dir, variant, "docx")
-    pdf_source = output_path(dist_dir, variant, "pdf")
+    dist_dir = resolve_dist_path(config_path) / resolution.variant.id
+    docx_source = output_path(dist_dir, resolution.variant, "docx")
+    pdf_source = output_path(dist_dir, resolution.variant, "pdf")
     selection_path = dist_dir / "selection.json"
     if not docx_source.exists():
         raise ReviewError(f"Missing DOCX output: {docx_source}")
@@ -81,7 +89,7 @@ def build_review_pack(
 
     reviews_root = resolve_reviews_path(config_path)
     if out_dir is None:
-        target_dir = reviews_root / variant.id
+        target_dir = reviews_root / resolution.review_dir
     else:
         target_dir = resolve_project_path(out_dir, config_path)
     if target_dir.exists():
@@ -101,7 +109,7 @@ def build_review_pack(
         docx_path=docx_target,
         pdf_path=pdf_target,
         review_path=review_path,
-        run_id=latest_run.run_id,
+        run_id=resolution.run_id,
     )
 
 
@@ -111,11 +119,12 @@ def import_docx_review(
     config_path: Path,
     run: str | None,
     variant_id: str | None,
+    project_dir: Path | None,
 ) -> ImportResult:
     if not docx_path.exists():
         raise ReviewError(f"DOCX file not found: {docx_path}")
 
-    run_id, run_dir = _resolve_run_dir(config_path, run, variant_id)
+    run_id, run_dir = _resolve_run_dir(config_path, run, variant_id, project_dir)
     canonical_path = run_dir / "canonical.md"
     if not canonical_path.exists():
         raise ReviewError(f"Canonical markdown not found: {canonical_path}")
@@ -200,22 +209,127 @@ def _resolve_run_dir(
     config_path: Path,
     run: str | None,
     variant_id: str | None,
+    project_dir: Path | None,
 ) -> tuple[str, Path]:
-    runs_root = resolve_runs_path(config_path)
+    if project_dir is not None and variant_id is not None:
+        raise ReviewError("--project cannot be combined with --variant")
+
+    if project_dir is not None:
+        try:
+            project = load_project(project_dir)
+        except ProjectError as exc:
+            raise ReviewError(str(exc)) from exc
+        try:
+            if run:
+                resolved_run = _resolve_project_run(config_path, project.project_id, run)
+            else:
+                resolved_run = resolve_latest_project_run(config_path, project.project_id)
+        except RunError as exc:
+            raise ReviewError(str(exc)) from exc
+        return resolved_run.run_id, resolved_run.path
+
     if run:
-        candidate = Path(run)
-        if candidate.exists():
-            return candidate.name, candidate
-        candidate = runs_root / run
-        if candidate.exists():
-            return candidate.name, candidate
-        raise ReviewError(f"Run not found: {run}")
+        try:
+            resolved_run = resolve_run(config_path, run)
+        except RunError as exc:
+            raise ReviewError(str(exc)) from exc
+        return resolved_run.run_id, resolved_run.path
 
     try:
         latest = resolve_latest_run(config_path, variant_id=variant_id)
     except RunError as exc:
         raise ReviewError(str(exc)) from exc
     return latest.run_id, latest.path
+
+
+@dataclass(frozen=True)
+class _ReviewTarget:
+    run_id: str
+    variant: Variant
+    review_dir: Path
+
+
+def _resolve_review_target(
+    *,
+    config_path: Path,
+    run: str | None,
+    variant_id: str | None,
+    project_dir: Path | None,
+) -> _ReviewTarget:
+    if project_dir is not None and variant_id is not None:
+        raise ReviewError("--project cannot be combined with --variant")
+
+    project = None
+    if project_dir is not None:
+        try:
+            project = load_project(project_dir)
+        except ProjectError as exc:
+            raise ReviewError(str(exc)) from exc
+        try:
+            run_info = (
+                _resolve_project_run(config_path, project.project_id, run)
+                if run
+                else resolve_latest_project_run(config_path, project.project_id)
+            )
+        except RunError as exc:
+            raise ReviewError(str(exc)) from exc
+    elif run:
+        try:
+            run_info = resolve_run(config_path, run)
+        except RunError as exc:
+            raise ReviewError(str(exc)) from exc
+        project = _load_project_for_run(config_path, run_info.run_id)
+    else:
+        try:
+            run_info = resolve_latest_run(config_path, variant_id=variant_id)
+        except RunError as exc:
+            raise ReviewError(str(exc)) from exc
+
+    if project is not None:
+        variant = load_variant(project.variant_path)
+        review_dir = Path("projects") / project.project_id
+    else:
+        variant_path = resolve_variant_path(run_info.variant_id, config_path)
+        if not variant_path.exists():
+            raise ReviewError(f"Variant not found: {run_info.variant_id}")
+        variant = load_variant(variant_path)
+        review_dir = Path(variant.id)
+
+    return _ReviewTarget(
+        run_id=run_info.run_id,
+        variant=variant,
+        review_dir=review_dir,
+    )
+
+
+def _resolve_project_run(config_path: Path, project_id: str, run: str) -> RunInfo:
+    runs_root = resolve_runs_path(config_path)
+    project_runs_root = runs_root / "projects" / project_id
+    candidate = Path(run)
+    try:
+        if candidate.exists():
+            resolved = resolve_run(config_path, candidate)
+        elif (project_runs_root / run).exists():
+            resolved = resolve_run(config_path, project_runs_root / run)
+        else:
+            resolved = resolve_run(config_path, run)
+    except RunError as exc:
+        raise ReviewError(str(exc)) from exc
+    if not resolved.run_id.startswith(f"projects/{project_id}/"):
+        raise ReviewError(f"Run does not belong to project: {project_id}")
+    return resolved
+
+
+def _load_project_for_run(config_path: Path, run_id: str) -> Any | None:
+    parts = Path(run_id).parts
+    if len(parts) < 3 or parts[0] != "projects":
+        return None
+    project_id = parts[1]
+    project_dir = resolve_project_dir(project_id, config_path)
+    try:
+        return load_project(project_dir)
+    except ProjectError:
+        return None
 
 
 def _diff_text(canonical_path: Path, imported_markdown: str) -> str:

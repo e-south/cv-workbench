@@ -9,6 +9,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - quickstart
 - doctor
 - context
+- workflow
 - status
 - build
 - render
@@ -31,7 +32,14 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 
 Each command is single-purpose and composable.
 
-`cvw build` prints the dist/run output paths so you can immediately locate the
+`uv run cvw workflow` renders the same recipe contract exposed by
+`uv run cvw context --json`, but in a smaller human-readable form that is more
+useful for operator logs and agent handoff.
+
+`uv run cvw context --json --compact` provides the same bootstrap state in a
+summary-only machine-readable form with recommended follow-up workflows.
+
+`uv run cvw build` prints the dist/run output paths so you can immediately locate the
 generated CV artifacts and manifests.
 
 Selection metadata is written to `selection.json` for explainable filtering.

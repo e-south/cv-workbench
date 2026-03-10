@@ -1,0 +1,43 @@
+:root {
+  --cv-font: "Helvetica", "Arial", sans-serif;
+  --cv-text: #111111;
+  --cv-muted: #3f3f3f;
+  --cv-accent: #0f4c81;
+}
+
+body {
+  font-family: var(--cv-font);
+  color: var(--cv-text);
+  margin: 1.1rem;
+  line-height: 1.3;
+  font-size: 0.95rem;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--cv-accent);
+  margin-bottom: 0.25rem;
+}
+
+h2 {
+  border-bottom: 1px solid #e2e2e2;
+  padding-bottom: 0.15rem;
+}
+
+p {
+  margin: 0.15rem 0;
+}
+
+ul {
+  margin: 0.15rem 0 0.4rem 1rem;
+}
+
+li {
+  margin-bottom: 0.15rem;
+}
+
+small,
+.cv-muted {
+  color: var(--cv-muted);
+}

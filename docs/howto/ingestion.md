@@ -57,8 +57,8 @@ Project proposals are ephemeral. Promote or discard them explicitly:
 
 ```bash
 uv run cvw variant inbox
-uv run cvw variant keep --path ./var/projects/<slug>/proposals/variant.yaml --id <variant-id>
-uv run cvw variant discard --path ./var/projects/<slug>/proposals/variant.yaml --yes
+uv run cvw variant keep --project <slug> --id <variant-id>
+uv run cvw variant discard --project <slug> --yes
 ```
 
 ## Configuration

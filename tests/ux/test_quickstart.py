@@ -11,11 +11,17 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+
+
+def _cvw_prefix() -> str:
+    repo_root = Path(__file__).resolve().parents[2]
+    return f"uv run --project {repo_root} cvw"
 
 
 def _write_minimal_sot_sample(root: Path) -> None:
@@ -161,6 +167,89 @@ def test_quickstart_builds_sample(tmp_path: Path, monkeypatch) -> None:
         result = runner.invoke(app, ["quickstart", "--plain"])
 
     assert result.exit_code == 0
-    assert "next_step: cvw preview --sot-path ./sot.sample --variant base" in result.stdout
+    expected_next_step = (
+        f"next_step: {_cvw_prefix()} preview --sot-path {template_root / 'sot.sample'} --variant base"
+    )
+    assert expected_next_step in result.stdout
     dist_dir = Path(cwd) / "var" / "dist" / "base"
     assert (dist_dir / "cv.md").exists()
+
+
+def test_quickstart_sample_default_updates_config(tmp_path: Path, monkeypatch) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+        result = runner.invoke(app, ["quickstart", "--sample-default", "--plain"])
+
+    assert result.exit_code == 0
+    root = Path(cwd)
+    assert (root / "sot.sample").exists()
+    assert "sot: ../sot.sample" in (root / "config" / "workbench.yaml").read_text()
+    assert f"sample_sot: {root / 'sot.sample'}" in result.stdout
+    assert f"next_step: {_cvw_prefix()} preview --variant base" in result.stdout
+
+
+def test_quickstart_sample_default_uses_workspace_sample(tmp_path: Path, monkeypatch) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+        root = Path(cwd)
+        result = runner.invoke(app, ["init", "--sample-default", "--plain"])
+        assert result.exit_code == 0
+
+        workspace_sot = root / "sot.sample" / "person.yaml"
+        workspace_sot.write_text("id: sample\nname: Workspace Sample\n")
+
+        result = runner.invoke(app, ["quickstart", "--sample-default", "--plain"])
+
+    assert result.exit_code == 0
+    assert "Workspace Sample" in (root / "var" / "dist" / "base" / "cv.md").read_text()
+    assert f"sample_sot: {root / 'sot.sample'}" in result.stdout
+
+
+def test_quickstart_reuses_existing_workspace_root_from_subdir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+        root = Path(cwd)
+        result = runner.invoke(app, ["init", "--plain"])
+        assert result.exit_code == 0
+        docs_dir = root / "docs"
+        docs_dir.mkdir()
+        previous_cwd = Path.cwd()
+        os.chdir(docs_dir)
+        try:
+            result = runner.invoke(app, ["quickstart", "--plain"])
+        finally:
+            os.chdir(previous_cwd)
+
+    assert result.exit_code == 0
+    expected_next_step = (
+        f"next_step: {_cvw_prefix()} preview --sot-path {template_root / 'sot.sample'} --variant base"
+    )
+    assert expected_next_step in result.stdout
+    assert (root / "var" / "dist" / "base" / "cv.md").exists()
+    assert not (root / "docs" / "var").exists()

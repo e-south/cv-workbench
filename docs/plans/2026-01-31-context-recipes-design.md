@@ -64,7 +64,7 @@ placeholders and instruct the agent to ask the user.
 - Steps:
   - `cvw reviewpack --variant <variant>`
   - Human edits `cv.docx`
-  - `cvw import-docx --docx <path> --variant <variant>`
+  - `cvw import-docx --from <path> --variant <variant>`
   - Optional (explicit approval): `cvw apply --draft <draft-dir> --sot-path <sot>`
 - Outputs: `var/reviews/<variant>/`, `var/drafts/import-*/`.
 - Stop: if no runs, run the baseline build recipe first.
@@ -74,7 +74,7 @@ placeholders and instruct the agent to ask the user.
 - Preconditions: SoT ready + job input (URL or file).
 - Steps:
   - `cvw project guide --job-url <url> --sot-path <sot>` (or `--job-file`)
-  - `cvw preview --project <project-id>`
+  - `cvw preview --project <project-id> --sot-path <sot>`
   - Optional (explicit approval): `cvw project apply <project-id>`
 - Outputs: `var/projects/<slug>/` (signals, variant draft, patch).
 - Stop: if job input is missing, ask for a URL or file.

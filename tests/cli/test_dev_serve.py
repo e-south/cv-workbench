@@ -71,7 +71,7 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
 
     assert result.exit_code == 1
     assert "Address already in use" in result.stderr
-    assert "cvw dev stop" in result.stderr
+    assert "uv run cvw dev stop" in result.stderr
 
 
 def test_dev_serve_rejects_legacy_preview_env() -> None:

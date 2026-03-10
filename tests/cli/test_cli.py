@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import importlib
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,7 @@ def test_cli_help_lists_commands() -> None:
     assert "init" in output
     assert "quickstart" in output
     assert "doctor" in output
+    assert "workflow" in output
     assert "build" in output
     assert "render" in output
     assert "dev" in output
@@ -208,3 +210,167 @@ def test_job_add_reports_missing_config(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "Config file not found" in result.stderr
+
+
+def test_reviewpack_help_mentions_required_artifacts() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["reviewpack", "--help"])
+
+    assert result.exit_code == 0
+    output = strip_ansi(result.stdout)
+    assert "existing run" in output
+    assert "cv.docx" in output
+    assert "selection.json" in output
+    assert "--run" in output
+    assert "--project" in output
+
+
+def test_import_docx_help_mentions_run_resolution() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["import-docx", "--help"])
+
+    assert result.exit_code == 0
+    output = strip_ansi(result.stdout)
+    assert "--from" in output
+    assert "canonical.md" in output
+    assert "--run" in output
+    assert "--variant" in output
+    assert "--project" in output
+
+
+def test_variant_keep_and_discard_help_expose_project_selector() -> None:
+    runner = CliRunner()
+
+    keep_result = runner.invoke(app, ["variant", "keep", "--help"])
+    discard_result = runner.invoke(app, ["variant", "discard", "--help"])
+
+    assert keep_result.exit_code == 0
+    assert discard_result.exit_code == 0
+    assert "--project" in strip_ansi(keep_result.stdout)
+    assert "--project" in strip_ansi(discard_result.stdout)
+
+
+def test_variant_keep_resolves_project_variant_path(tmp_path: Path, monkeypatch) -> None:
+    config_dir = tmp_path / "config" / "variants"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = tmp_path / "config" / "workbench.yaml"
+    config_path.write_text("paths:\n  projects: ../var/projects\n")
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    variant_path = proposals_dir / "variant.yaml"
+    variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  base_variant: base",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+            ]
+        )
+        + "\n"
+    )
+
+    captured: dict[str, object] = {}
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    def _fake_keep_variant(*, variant_path: Path, config_path: Path, variant_id, label):
+        captured["variant_path"] = variant_path
+        captured["config_path"] = config_path
+        return type(
+            "_KeepResult",
+            (),
+            {"variant_id": variant_id or "base", "variant_path": variant_path, "status": "kept"},
+        )()
+
+    monkeypatch.setattr(app_module, "keep_variant", _fake_keep_variant)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "variant",
+            "keep",
+            "--project",
+            "job",
+            "--id",
+            "base-keep",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["variant_path"] == variant_path
+    assert captured["config_path"] == config_path
+
+
+def test_variant_discard_resolves_project_variant_path(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "config" / "workbench.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("paths:\n  projects: ../var/projects\n")
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    variant_path = proposals_dir / "variant.yaml"
+    variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  base_variant: base",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+            ]
+        )
+        + "\n"
+    )
+
+    captured: dict[str, object] = {}
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    def _fake_discard_variant(*, variant_path: Path, config_path: Path, confirm: bool):
+        captured["variant_path"] = variant_path
+        captured["config_path"] = config_path
+        return type("_DiscardResult", (), {"variant_path": variant_path, "status": "dry_run"})()
+
+    monkeypatch.setattr(app_module, "discard_variant", _fake_discard_variant)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "variant",
+            "discard",
+            "--project",
+            "job",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert captured["variant_path"] == variant_path
+    assert captured["config_path"] == config_path
+
+
+def test_project_help_distinguishes_guide_and_new() -> None:
+    runner = CliRunner()
+
+    new_result = runner.invoke(app, ["project", "new", "--help"])
+    guide_result = runner.invoke(app, ["project", "guide", "--help"])
+
+    assert new_result.exit_code == 0
+    assert guide_result.exit_code == 0
+    new_output = " ".join(strip_ansi(new_result.stdout).split())
+    guide_output = " ".join(strip_ansi(guide_result.stdout).split())
+    assert "Create a project workspace directly" in new_output
+    assert "Use `project guide`" in new_output
+    assert "rank candidate variants" in guide_output

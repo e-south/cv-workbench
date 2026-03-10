@@ -1,0 +1,8 @@
+site:
+  repo_path: ../personal-site
+  publish_variant: base
+  cv_markdown: src/content/cv/cv.md
+  cv_pdf_dir: public/cv
+  cv_pdf_name: cv.pdf
+  cv_page: src/content/page-cv/cv.md
+  cv_page_frontmatter_key: cvPdf

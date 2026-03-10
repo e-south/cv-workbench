@@ -11,10 +11,13 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 from typer.testing import CliRunner
 
+import cvworkbench.ops.scaffold as scaffold_module
 from cvworkbench.cli import app
 from cvworkbench.ops.scaffold import resolve_template_root
 
@@ -175,6 +178,164 @@ def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
     assert (root / "var/registry/contexts").exists()
     assert (root / "var/projects").exists()
     assert (root / "build/themes/default/theme.yaml").exists()
+
+
+def test_init_sample_default_points_config_to_workspace_sample(
+    tmp_path: Path, monkeypatch
+) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+        result = runner.invoke(app, ["init", "--sample-default", "--plain"])
+
+    assert result.exit_code == 0
+    root = Path(cwd)
+    assert (root / "sot.sample").exists()
+    assert not (root / "local" / "sot").exists()
+    workbench_config = root / "config" / "workbench.yaml"
+    assert "sot: ../sot.sample" in workbench_config.read_text()
+    assert f"sot_path: {root / 'sot.sample'}" in result.stdout
+    assert "sot_profile: sample-default" in result.stdout
+
+
+def test_init_installs_precommit_hooks(tmp_path: Path, monkeypatch) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+        root = Path(cwd)
+        subprocess.run(
+            ["git", "init"],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        (root / ".pre-commit-config.yaml").write_text(
+            "\n".join(
+                [
+                    "repos:",
+                    "  - repo: https://github.com/pre-commit/pre-commit-hooks",
+                    "    rev: v4.6.0",
+                    "    hooks:",
+                    "      - id: check-yaml",
+                ]
+            )
+            + "\n"
+        )
+
+        result = runner.invoke(app, ["init", "--plain"])
+
+    assert result.exit_code == 0
+    assert (root / ".git" / "hooks" / "pre-commit").exists()
+
+
+def test_init_reuses_existing_workspace_root_from_subdir(tmp_path: Path, monkeypatch) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+        root = Path(cwd)
+        result = runner.invoke(app, ["init", "--plain"])
+        assert result.exit_code == 0
+
+        docs_dir = root / "docs"
+        docs_dir.mkdir()
+        previous_cwd = Path.cwd()
+        os.chdir(docs_dir)
+        try:
+            result = runner.invoke(app, ["init", "--plain"])
+        finally:
+            os.chdir(previous_cwd)
+
+    assert result.exit_code == 0
+    assert f"root: {root}" in result.stdout
+    assert not (root / "docs" / "config").exists()
+    assert not (root / "docs" / "local").exists()
+
+
+def test_init_supports_explicit_workspace_root(tmp_path: Path, monkeypatch) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+
+    runner = CliRunner()
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+
+    result = runner.invoke(
+        app,
+        [
+            "init",
+            "--sample-default",
+            "--workspace",
+            str(workspace_root),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (workspace_root / "config" / "workbench.yaml").exists()
+    assert (workspace_root / "sot.sample").exists()
+    assert f"root: {workspace_root.resolve()}" in result.stdout
+
+
+def test_init_reports_precommit_install_error_detail(tmp_path: Path, monkeypatch) -> None:
+    template_root = tmp_path / "template"
+    template_root.mkdir()
+    _write_minimal_sot_sample(template_root)
+    _write_minimal_theme(template_root)
+    _write_minimal_config(template_root)
+
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
+    monkeypatch.setattr(
+        scaffold_module,
+        "_run_precommit_install",
+        lambda *_args, **_kwargs: (1, "Permission denied: .git/hooks/pre-commit"),
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+        root = Path(cwd)
+        subprocess.run(
+            ["git", "init"],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        (root / ".pre-commit-config.yaml").write_text("repos: []\n")
+
+        result = runner.invoke(app, ["init", "--plain"])
+
+    assert result.exit_code == 0
+    assert "pre_commit_hooks: error" in result.stdout
+    assert "pre_commit_hooks_detail: Permission denied: .git/hooks/pre-commit" in result.stdout
 
 
 def test_default_template_root_contains_scaffold() -> None:

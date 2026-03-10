@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,11 +22,21 @@ from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES
 from cvworkbench.inputs.sot_schema import SotData
 
 
+@dataclass(frozen=True)
+class SotInspection:
+    payload: dict[str, Any] | None
+    errors: list[str]
+
+
 def validate_sot(sot_path: Path) -> list[str]:
+    return inspect_sot(sot_path).errors
+
+
+def inspect_sot(sot_path: Path) -> SotInspection:
     errors: list[str] = []
 
     if not sot_path.exists():
-        return [f"SoT path does not exist: {sot_path}"]
+        return SotInspection(payload=None, errors=[f"SoT path does not exist: {sot_path}"])
 
     payload: dict[str, Any] = {}
     for filename, key in REQUIRED_FILES.items():
@@ -46,17 +57,20 @@ def validate_sot(sot_path: Path) -> list[str]:
             payload[key] = data
 
     if errors:
-        return errors
+        return SotInspection(payload=None, errors=errors)
 
     try:
         SotData.model_validate(payload)
     except ValidationError as exc:
         errors.extend(_format_errors(exc))
-        return errors
+        return SotInspection(payload=None, errors=errors)
 
     _validate_snippet_paths(payload, sot_path, errors)
 
-    return errors
+    if errors:
+        return SotInspection(payload=None, errors=errors)
+
+    return SotInspection(payload=payload, errors=[])
 
 
 def _load_yaml_mapping(path: Path, errors: list[str]) -> dict[str, Any] | None:

@@ -1,0 +1,23 @@
+project:
+  name: cv-workbench
+paths:
+  sot: ../local/sot
+  dist: ../var/dist
+  runs: ../var/runs
+  drafts: ../var/drafts
+  reviews: ../var/reviews
+  registry: ../var/registry
+  projects: ../var/projects
+variants:
+  default: base
+variant_lifecycle:
+  ttl_days: 7
+render:
+  themes_dir: ../build/themes
+  theme: default
+  style_preset: modern
+  pdf_engine: xelatex
+site:
+  sync_mode: local
+registry:
+  user_agent: cv-workbench/0.1

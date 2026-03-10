@@ -66,17 +66,13 @@ def scan_runs(config_path: Path, *, strict: bool = False) -> RunCatalog:
 
     runs: list[RunInfo] = []
     invalid: list[Path] = []
-    for path in sorted(runs_root.iterdir()):
-        if not path.is_dir():
-            continue
-        if path.name == "preview":
-            continue
+    for path in _iter_run_dirs(runs_root):
         manifest_path = path / "manifest.json"
         if not manifest_path.exists():
             invalid.append(path)
             continue
         try:
-            run = _parse_manifest(manifest_path, run_id=path.name)
+            run = _parse_manifest(manifest_path, run_id=_run_id(runs_root, path))
         except RunError:
             invalid.append(path)
             continue
@@ -87,6 +83,29 @@ def scan_runs(config_path: Path, *, strict: bool = False) -> RunCatalog:
         raise RunError(f"Run manifests missing or invalid: {names}")
 
     return RunCatalog(runs=runs, invalid=invalid)
+
+
+def _iter_run_dirs(runs_root: Path) -> list[Path]:
+    run_dirs: list[Path] = []
+    for path in sorted(runs_root.iterdir()):
+        if not path.is_dir():
+            continue
+        if path.name == "preview":
+            continue
+        if path.name == "projects":
+            for project_dir in sorted(path.iterdir()):
+                if not project_dir.is_dir():
+                    continue
+                for run_dir in sorted(project_dir.iterdir()):
+                    if run_dir.is_dir():
+                        run_dirs.append(run_dir)
+            continue
+        run_dirs.append(path)
+    return run_dirs
+
+
+def _run_id(runs_root: Path, run_dir: Path) -> str:
+    return run_dir.relative_to(runs_root).as_posix()
 
 
 def group_runs_by_variant(runs: list[RunInfo]) -> dict[str, list[RunInfo]]:
@@ -109,8 +128,11 @@ def latest_runs_by_variant(
 
 
 def resolve_latest_run(config_path: Path, variant_id: str | None = None) -> RunInfo:
-    catalog = scan_runs(config_path, strict=True)
+    catalog = scan_runs(config_path, strict=False)
     if not catalog.runs:
+        if catalog.invalid:
+            names = ", ".join(path.name for path in catalog.invalid)
+            raise RunError(f"No valid runs available; run manifests missing or invalid: {names}")
         raise RunError("No runs available")
 
     runs = catalog.runs
@@ -120,6 +142,50 @@ def resolve_latest_run(config_path: Path, variant_id: str | None = None) -> RunI
             raise RunError(f"No runs available for variant: {variant_id}")
 
     return sorted(runs, key=lambda run: run.created_at, reverse=True)[0]
+
+
+def resolve_latest_project_run(
+    config_path: Path,
+    project_id: str,
+    *,
+    variant_id: str | None = None,
+) -> RunInfo:
+    catalog = scan_runs(config_path, strict=False)
+    prefix = f"projects/{project_id}/"
+    runs = [run for run in catalog.runs if run.run_id.startswith(prefix)]
+    if not runs:
+        raise RunError(f"No runs available for project: {project_id}")
+    if variant_id:
+        runs = [run for run in runs if run.variant_id == variant_id]
+        if not runs:
+            raise RunError(f"No runs available for project {project_id} and variant: {variant_id}")
+    return sorted(runs, key=lambda run: run.created_at, reverse=True)[0]
+
+
+def resolve_run(config_path: Path, run: str | Path) -> RunInfo:
+    runs_root = resolve_runs_path(config_path)
+    candidate = Path(run)
+    run_dir: Path | None = None
+
+    if candidate.exists():
+        run_dir = candidate if candidate.is_dir() else candidate.parent
+    else:
+        repo_relative = runs_root / str(run)
+        if repo_relative.exists():
+            run_dir = repo_relative if repo_relative.is_dir() else repo_relative.parent
+
+    if run_dir is None:
+        raise RunError(f"Run not found: {run}")
+
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise RunError(f"Run manifest not found: {manifest_path}")
+
+    try:
+        run_id = _run_id(runs_root, run_dir)
+    except ValueError:
+        run_id = run_dir.name
+    return _parse_manifest(manifest_path, run_id=run_id)
 
 
 def _parse_manifest(manifest_path: Path, run_id: str) -> RunInfo:

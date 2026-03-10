@@ -48,7 +48,7 @@ uv run cvw dev stop
 ```
 
 The HTML output is written to `var/dist/<variant>/cv.html`. The command prints
-the local preview URL; use Playwright to open and interact with it.
+the local preview URL; use Chrome DevTools MCP to open and interact with it.
 
 ## Theme layout
 

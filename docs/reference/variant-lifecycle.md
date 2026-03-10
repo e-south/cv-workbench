@@ -26,13 +26,17 @@ expiration metadata. The registry is local-only and gitignored.
 
 ## Commands
 
-- `cvw variant list`: show configured variants alongside pending lifecycle entries.
-- `cvw variant inbox`: list pending ephemeral variants.
-- `cvw variant keep --path <variant.yaml> --id <variant-id>`: promote a draft or
+- `uv run cvw variant list`: show configured variants alongside pending lifecycle entries.
+- `uv run cvw variant inbox`: list pending ephemeral variants.
+- `uv run cvw variant keep --path <variant.yaml> --id <variant-id>`: promote a draft or
   project proposal into `config/variants/`.
-- `cvw variant discard --path <variant.yaml> --yes`: discard a draft/proposal
+- `uv run cvw variant keep --project <project-id> --id <variant-id>`: promote a project
+  proposal without reconstructing the raw `variant.yaml` path.
+- `uv run cvw variant discard --path <variant.yaml> --yes`: discard a draft/proposal
   and delete its artifacts.
-- `cvw variant gc --yes`: remove expired draft/proposal artifacts.
+- `uv run cvw variant discard --project <project-id> --yes`: discard a project proposal by
+  project selector instead of a raw path.
+- `uv run cvw variant gc --yes`: remove expired draft/proposal artifacts.
 
-Use `cvw variant promote` only for legacy scripts; `variant keep` is the
+Use `uv run cvw variant promote` only for legacy scripts; `uv run cvw variant keep` is the
 preferred path because it updates lifecycle state.
