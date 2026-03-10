@@ -13,6 +13,8 @@ explicitly apply a patch.
 - `uv run cvw preview --project <slug> [--sot-path <path>]`: preview with project patch
   applied in-memory, optionally against an explicit SoT override.
 - `uv run cvw reviewpack --project <slug>`: package the latest project-scoped run for review.
+- `uv run cvw reviewpack --run projects/<slug>/<run-id> [--force]`: package a specific
+  immutable project-scoped run, optionally replacing an existing review pack directory.
 - `uv run cvw import-docx --from <docx> --project <slug>`: import a reviewed DOCX against
   the latest project-scoped canonical output.
 - `uv run cvw project apply <slug>`: apply the patch to your SoT on disk.
@@ -60,7 +62,8 @@ Use:
 - `uv run cvw build --project <slug>` and `uv run cvw preview --project <slug>` apply proposal
   patches in-memory.
 - `uv run cvw reviewpack --run projects/<slug>/<run-id>` packages a specific project build
-  deterministically when multiple runs exist.
+  deterministically when multiple runs exist. Review packs now source DOCX/PDF/selection
+  metadata from the selected run directory, not the shared `var/dist/<variant>/` directory.
 - `uv run cvw project apply <slug>` applies the patch to your SoT on disk.
 
 ## Patch format

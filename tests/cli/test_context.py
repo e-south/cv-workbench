@@ -555,6 +555,16 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         sot_path=sot_path,
     )
 
+    variant_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "variant.manage")
+    assert variant_recipe["steps"][1]["command"] == _recipe_command(
+        "variant keep --project <project-id> --id <variant-id>",
+        config_path=config_path,
+    )
+    assert variant_recipe["steps"][2]["command"] == _recipe_command(
+        "variant discard --project <project-id> --yes",
+        config_path=config_path,
+    )
+
 
 def test_context_project_recipe_keeps_placeholder_project_id(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)

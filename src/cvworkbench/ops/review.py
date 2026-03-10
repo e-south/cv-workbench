@@ -19,9 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.build.paths import output_path
 from cvworkbench.config import (
-    resolve_dist_path,
     resolve_drafts_path,
     resolve_project_path,
     resolve_reviews_path,
@@ -68,6 +66,7 @@ def build_review_pack(
     run: str | None = None,
     project_dir: Path | None = None,
     out_dir: Path | None = None,
+    force: bool = False,
 ) -> ReviewPack:
     resolution = _resolve_review_target(
         config_path=config_path,
@@ -76,10 +75,9 @@ def build_review_pack(
         project_dir=project_dir,
     )
 
-    dist_dir = resolve_dist_path(config_path) / resolution.variant.id
-    docx_source = output_path(dist_dir, resolution.variant, "docx")
-    pdf_source = output_path(dist_dir, resolution.variant, "pdf")
-    selection_path = dist_dir / "selection.json"
+    docx_source = _require_run_output(resolution.run, "docx")
+    pdf_source = _require_run_output(resolution.run, "pdf")
+    selection_path = resolution.run.path / "selection.json"
     if not docx_source.exists():
         raise ReviewError(f"Missing DOCX output: {docx_source}")
     if not pdf_source.exists():
@@ -93,7 +91,9 @@ def build_review_pack(
     else:
         target_dir = resolve_project_path(out_dir, config_path)
     if target_dir.exists():
-        raise ReviewError(f"Review pack already exists: {target_dir}")
+        if not force:
+            raise ReviewError(f"Review pack already exists: {target_dir}")
+        shutil.rmtree(target_dir)
     target_dir.mkdir(parents=True, exist_ok=False)
 
     docx_target = target_dir / docx_source.name
@@ -245,6 +245,7 @@ def _resolve_run_dir(
 @dataclass(frozen=True)
 class _ReviewTarget:
     run_id: str
+    run: RunInfo
     variant: Variant
     review_dir: Path
 
@@ -297,9 +298,23 @@ def _resolve_review_target(
 
     return _ReviewTarget(
         run_id=run_info.run_id,
+        run=run_info,
         variant=variant,
         review_dir=review_dir,
     )
+
+
+def _require_run_output(run: RunInfo, fmt: str) -> Path:
+    output_name = run.outputs.get(fmt)
+    if not output_name:
+        raise ReviewError(f"Selected run does not include {fmt} output: {run.run_id}")
+    path = run.path / output_name
+    if not path.exists():
+        raise ReviewError(
+            f"Selected run is missing immutable {fmt} output: {path}. "
+            "Rebuild the target run with the current cv-workbench version."
+        )
+    return path
 
 
 def _resolve_project_run(config_path: Path, project_id: str, run: str) -> RunInfo:

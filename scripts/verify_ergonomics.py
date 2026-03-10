@@ -24,6 +24,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 ITERATIONS = 3
 RUN_ID_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z")
+ISO_DATETIME_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\+\d{2}:\d{2}|Z)"
+)
 REPO_CVW_PREFIX = ["uv", "run", "--project", str(REPO_ROOT), "cvw"]
 
 
@@ -99,7 +102,8 @@ def _normalize_text(text: str, workspace: Path) -> str:
     normalized = text
     for alias in sorted(aliases, key=len, reverse=True):
         normalized = normalized.replace(alias, "<workspace>")
-    return RUN_ID_PATTERN.sub("<run-id>", normalized)
+    normalized = RUN_ID_PATTERN.sub("<run-id>", normalized)
+    return ISO_DATETIME_PATTERN.sub("<iso-datetime>", normalized)
 
 
 def _normalized_sha256(text: str, workspace: Path) -> str:
@@ -357,9 +361,11 @@ def main() -> int:
         "build": [],
         "preview_once": [],
         "project_guide": [],
+        "variant_inbox": [],
         "project_build": [],
         "project_preview_once": [],
         "project_reviewpack": [],
+        "project_reviewpack_force": [],
         "project_import": [],
     }
     full_context_lines_all: list[int] = []
@@ -604,10 +610,24 @@ def main() -> int:
                 "automation.verify must start with the status command",
             )
             review_recipe = _recipe_by_id(recipes, "review.import")
+            variant_manage_recipe = _recipe_by_id(recipes, "variant.manage")
             review_steps = [step["command"] for step in review_recipe["steps"]]
             _require(
                 any("import-docx --from " in command for command in review_steps),
                 "review.import recipe must use import-docx --from",
+            )
+            _require(
+                "variant keep --project" in variant_manage_recipe["steps"][1]["command"]
+                and "<project-id>" in variant_manage_recipe["steps"][1]["command"]
+                and "--id" in variant_manage_recipe["steps"][1]["command"]
+                and "<variant-id>" in variant_manage_recipe["steps"][1]["command"],
+                "variant.manage must teach selector-first keep commands for project proposals",
+            )
+            _require(
+                "variant discard --project" in variant_manage_recipe["steps"][2]["command"]
+                and "<project-id>" in variant_manage_recipe["steps"][2]["command"]
+                and "--yes" in variant_manage_recipe["steps"][2]["command"],
+                "variant.manage must teach selector-first discard commands for project proposals",
             )
             _require_recipe_step_contract(
                 automation_recipe["steps"][0],
@@ -782,6 +802,29 @@ def main() -> int:
             project_guide_payload = json.loads(project_guide_step.stdout)
             project_id = project_guide_payload["project"]["project_id"]
 
+            variant_inbox_step = _run_step(
+                "variant_inbox",
+                workspace,
+                ["variant", "inbox", "--json"],
+            )
+            steps.append(variant_inbox_step)
+            variant_inbox_payload = json.loads(variant_inbox_step.stdout)
+            project_entry = next(
+                entry for entry in variant_inbox_payload["entries"] if entry.get("project_id") == project_id
+            )
+            _require(
+                project_entry["selector_kind"] == "project",
+                "variant.inbox must expose project selector metadata for project proposals",
+            )
+            _require(
+                f"variant keep --project {project_id}" in project_entry["keep_command"],
+                "variant.inbox must emit a ready-to-run keep command for project proposals",
+            )
+            _require(
+                f"preview --project {project_id}" in project_entry["preview_command"],
+                "variant.inbox must emit a ready-to-run preview command for project proposals",
+            )
+
             project_build_step = _run_step(
                 "project_build",
                 workspace,
@@ -809,6 +852,12 @@ def main() -> int:
             )
 
             project_run_dir = Path(_summary_value(project_build_step.stdout, "run_dir"))
+            _require((project_run_dir / "cv.docx").exists(), "Project build must persist DOCX output under the run directory")
+            _require((project_run_dir / "cv.pdf").exists(), "Project build must persist PDF output under the run directory")
+            _require(
+                (project_run_dir / "selection.json").exists(),
+                "Project build must persist selection metadata under the run directory",
+            )
             project_reviewpack_step = _run_step(
                 "project_reviewpack",
                 workspace,
@@ -823,6 +872,17 @@ def main() -> int:
             _require(
                 f"out_dir: {workspace / 'var' / 'reviews' / 'projects' / project_id}" in project_reviewpack_step.stdout,
                 "reviewpack --run must isolate project review packs under var/reviews/projects/<project-id>",
+            )
+
+            project_reviewpack_force_step = _run_step(
+                "project_reviewpack_force",
+                workspace,
+                ["reviewpack", "--run", str(project_run_dir), "--force", "--plain"],
+            )
+            steps.append(project_reviewpack_force_step)
+            _require(
+                f"run_id: {expected_project_run}" in project_reviewpack_force_step.stdout,
+                "reviewpack --force must refresh the same deterministic project-scoped run",
             )
 
             project_import_step = _run_step(

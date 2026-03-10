@@ -230,6 +230,36 @@ def test_workflow_json_keeps_external_config_for_review_import_recipe(tmp_path: 
     )
 
 
+def test_workflow_json_uses_project_selector_for_variant_manage_recipe(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "workflow",
+            "--json",
+            "--id",
+            "variant.manage",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    steps = payload["recipes"][0]["steps"]
+    assert steps[1]["command"] == _recipe_command(
+        "variant keep --project <project-id> --id <variant-id>",
+        config_path=config_path,
+    )
+    assert steps[2]["command"] == _recipe_command(
+        "variant discard --project <project-id> --yes",
+        config_path=config_path,
+    )
+
+
 def test_workflow_json_supports_local_bootstrap_recipe(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     config_path.write_text(

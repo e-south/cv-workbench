@@ -174,10 +174,17 @@ ephemeral. Promote only the ones you want to keep:
 uv run cvw variant keep --path ./var/drafts/<name>/variant.yaml --id <variant-id>
 ```
 
+Project proposals use project selectors instead of raw proposal paths:
+
+```bash
+uv run cvw variant keep --project <project-id> --id <variant-id>
+```
+
 To discard or clean up drafts:
 
 ```bash
 uv run cvw variant discard --path ./var/drafts/<name>/variant.yaml --yes
+uv run cvw variant discard --project <project-id> --yes
 uv run cvw variant gc --yes
 ```
 
@@ -220,6 +227,13 @@ To package a specific project build deterministically, use the run path emitted 
 uv run cvw build --project <project-id> --format md,pdf,docx
 uv run cvw reviewpack --run projects/<project-id>/<run-id>
 uv run cvw import-docx --from ./var/reviews/projects/<project-id>/cv.docx --project <project-id>
+```
+
+If you need to refresh an existing review pack for the same run, rerun
+`reviewpack` explicitly with `--force`:
+
+```bash
+uv run cvw reviewpack --run projects/<project-id>/<run-id> --force
 ```
 
 If you re-run either command for the same job, provide a unique `--slug` to

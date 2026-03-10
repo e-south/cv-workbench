@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -100,20 +101,48 @@ def _write_project_manifest(root: Path, project_id: str, variant_id: str = "base
     return project_dir
 
 
-def _write_run_manifest_at(run_dir: Path, *, variant_id: str, canonical: str) -> None:
+def _write_run_manifest_at(
+    run_dir: Path,
+    *,
+    variant_id: str,
+    canonical: str,
+    review_ready: bool = False,
+    bullet_text: str = "x",
+) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "canonical.md").write_text(canonical)
+    outputs = {"md": "cv.md"}
+    (run_dir / "cv.md").write_text(canonical)
+    if review_ready:
+        outputs["pdf"] = "cv.pdf"
+        outputs["docx"] = "cv.docx"
+        (run_dir / "cv.pdf").write_bytes(b"pdf")
+        (run_dir / "cv.docx").write_bytes(b"docx")
+        (run_dir / "selection.json").write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "id": "b1",
+                            "type": "bullet",
+                            "included": True,
+                            "text": bullet_text,
+                            "role_id": "r1",
+                        }
+                    ]
+                }
+            )
+        )
     (run_dir / "manifest.json").write_text(
-        "\n".join(
-            [
-                "{",
-                '  "created_at": "2026-01-01T00:00:00+00:00",',
-                '  "formats": ["md"],',
-                '  "outputs": {"md": "cv.md"},',
-                f'  "variant": {{"id": "{variant_id}"}},',
-                '  "resume": {"path": "resume.json", "hash": "hash"}',
-                "}",
-            ]
+        json.dumps(
+            {
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "formats": list(outputs),
+                "outputs": outputs,
+                "variant": {"id": variant_id},
+                "resume": {"path": "resume.json", "hash": "hash"},
+            },
+            indent=2,
         )
         + "\n"
     )
@@ -121,14 +150,12 @@ def _write_run_manifest_at(run_dir: Path, *, variant_id: str, canonical: str) ->
 
 def test_reviewpack_creates_bundle(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
-    dist_dir = tmp_path / "var" / "dist" / "base"
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    (dist_dir / "cv.docx").write_bytes(b"docx")
-    (dist_dir / "cv.pdf").write_bytes(b"pdf")
-    (dist_dir / "selection.json").write_text(
-        '{"items":[{"id":"b1","type":"bullet","included":true,"text":"x","role_id":"r1"}]}'
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "2026-01-01T00-00-00Z",
+        variant_id="base",
+        canonical="before\n",
+        review_ready=True,
     )
-    _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", "before\n")
 
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
@@ -146,13 +173,6 @@ def test_reviewpack_creates_bundle(tmp_path: Path) -> None:
 
 def test_reviewpack_requires_runs(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
-    dist_dir = tmp_path / "var" / "dist" / "base"
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    (dist_dir / "cv.docx").write_bytes(b"docx")
-    (dist_dir / "cv.pdf").write_bytes(b"pdf")
-    (dist_dir / "selection.json").write_text(
-        '{"items":[{"id":"b1","type":"bullet","included":true,"text":"x","role_id":"r1"}]}'
-    )
 
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
@@ -168,14 +188,12 @@ def test_reviewpack_requires_runs(tmp_path: Path) -> None:
 
 def test_reviewpack_ignores_invalid_run_dirs_when_valid_run_exists(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
-    dist_dir = tmp_path / "var" / "dist" / "base"
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    (dist_dir / "cv.docx").write_bytes(b"docx")
-    (dist_dir / "cv.pdf").write_bytes(b"pdf")
-    (dist_dir / "selection.json").write_text(
-        '{"items":[{"id":"b1","type":"bullet","included":true,"text":"x","role_id":"r1"}]}'
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "2026-01-02T00-00-00Z",
+        variant_id="base",
+        canonical="before\n",
+        review_ready=True,
     )
-    _write_run_manifest(tmp_path, "2026-01-02T00-00-00Z", "base", "before\n")
     invalid_dir = tmp_path / "var" / "runs" / "2026-01-01T00-00-00Z"
     invalid_dir.mkdir(parents=True, exist_ok=True)
 
@@ -332,19 +350,11 @@ def test_import_docx_ignores_invalid_run_dirs_when_variant_resolves_latest_run(
 
 def test_reviewpack_uses_latest_project_run_for_variant(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
-    dist_dir = tmp_path / "var" / "dist" / "base"
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    (dist_dir / "cv.docx").write_bytes(b"docx")
-    (dist_dir / "cv.pdf").write_bytes(b"pdf")
-    (dist_dir / "selection.json").write_text(
-        '{"items":[{"id":"b1","type":"bullet","included":true,"text":"x","role_id":"r1"}]}'
-    )
-    _write_project_run_manifest(
-        tmp_path,
-        "job",
-        "2026-01-03T00-00-00Z",
-        "base",
-        "project-before\n",
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "projects" / "job" / "2026-01-03T00-00-00Z",
+        variant_id="base",
+        canonical="project-before\n",
+        review_ready=True,
     )
 
     runner = CliRunner()
@@ -361,20 +371,13 @@ def test_reviewpack_uses_latest_project_run_for_variant(tmp_path: Path) -> None:
 def test_reviewpack_uses_explicit_run_and_isolates_project_review_dir(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_project_manifest(tmp_path, "job")
-    dist_dir = tmp_path / "var" / "dist" / "base"
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    (dist_dir / "cv.docx").write_bytes(b"docx")
-    (dist_dir / "cv.pdf").write_bytes(b"pdf")
-    (dist_dir / "selection.json").write_text(
-        '{"items":[{"id":"b1","type":"bullet","included":true,"text":"x","role_id":"r1"}]}'
-    )
     _write_run_manifest(tmp_path, "2026-01-04T00-00-00Z", "base", "base-before\n")
-    _write_project_run_manifest(
-        tmp_path,
-        "job",
-        "2026-01-03T00-00-00Z",
-        "base",
-        "project-before\n",
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "projects" / "job" / "2026-01-03T00-00-00Z",
+        variant_id="base",
+        canonical="project-before\n",
+        review_ready=True,
+        bullet_text="project bullet",
     )
 
     runner = CliRunner()
@@ -395,24 +398,50 @@ def test_reviewpack_uses_explicit_run_and_isolates_project_review_dir(tmp_path: 
     out_dir = resolve_reviews_path(config_path) / "projects" / "job"
     assert out_dir.exists()
     assert "run_id: projects/job/2026-01-03T00-00-00Z" in result.stdout
+    assert (out_dir / "cv.docx").read_bytes() == b"docx"
+    assert "project bullet" in (out_dir / "review.md").read_text()
+
+
+def test_reviewpack_force_replaces_existing_pack(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "2026-01-04T00-00-00Z",
+        variant_id="base",
+        canonical="base-before\n",
+        review_ready=True,
+    )
+    review_dir = resolve_reviews_path(config_path) / "base"
+    review_dir.mkdir(parents=True, exist_ok=True)
+    (review_dir / "stale.txt").write_text("stale")
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "reviewpack",
+                "--variant",
+                "base",
+                "--force",
+                "--config",
+                str(config_path),
+                "--plain",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert not (review_dir / "stale.txt").exists()
+    assert (review_dir / "cv.docx").exists()
 
 
 def test_reviewpack_uses_project_selector_for_latest_project_run(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_project_manifest(tmp_path, "job")
-    dist_dir = tmp_path / "var" / "dist" / "base"
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    (dist_dir / "cv.docx").write_bytes(b"docx")
-    (dist_dir / "cv.pdf").write_bytes(b"pdf")
-    (dist_dir / "selection.json").write_text(
-        '{"items":[{"id":"b1","type":"bullet","included":true,"text":"x","role_id":"r1"}]}'
-    )
-    _write_project_run_manifest(
-        tmp_path,
-        "job",
-        "2026-01-03T00-00-00Z",
-        "base",
-        "project-before\n",
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "projects" / "job" / "2026-01-03T00-00-00Z",
+        variant_id="base",
+        canonical="project-before\n",
+        review_ready=True,
     )
 
     runner = CliRunner()

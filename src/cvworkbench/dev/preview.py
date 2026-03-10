@@ -303,7 +303,10 @@ class PreviewController:
                 project_spec = load_project(self._project_dir)
             except ProjectError as exc:
                 raise PreviewError(str(exc)) from exc
-            variants = [project_spec.base_variant_id]
+            try:
+                variants = [load_variant(project_spec.variant_path).id]
+            except ValueError as exc:
+                raise PreviewError(str(exc)) from exc
         preset_map: dict[str, list[str]] = {}
         for theme in themes:
             styles_dir = theme.root / "styles" / "html"

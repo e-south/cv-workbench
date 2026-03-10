@@ -870,7 +870,7 @@ def _build_context_recipes(
             "title": "Review and import DOCX edits",
             "preconditions": [
                 "runs.latest_by_variant includes the target variant",
-                "dist output for the variant includes cv.docx, cv.pdf, and selection.json",
+                "the selected run includes immutable cv.docx, cv.pdf, and selection.json artifacts",
             ],
                 "steps": [
                     {
@@ -1000,26 +1000,26 @@ def _build_context_recipes(
                 },
                 {
                         "command": _cvw_recipe_command(
-                            "variant keep --path <variant.yaml> --id <variant-id>",
+                            "variant keep --project <project-id> --id <variant-id>",
                             config_path=config_path,
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
                     "description": (
-                        "Promote a draft/project variant into config/variants. "
-                        "Use --project <project-id> instead of --path for project proposals."
+                        "Promote a project proposal into config/variants. "
+                        "Use --path <variant.yaml> for manual or draft variants."
                     ),
                 },
                 {
                         "command": _cvw_recipe_command(
-                            "variant discard --path <variant.yaml> --yes",
+                            "variant discard --project <project-id> --yes",
                             config_path=config_path,
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
                     "description": (
-                        "Discard draft/project variant artifacts after explicit approval. "
-                        "Use --project <project-id> instead of --path for project proposals."
+                        "Discard a project proposal after explicit approval. "
+                        "Use --path <variant.yaml> for manual or draft variants."
                     ),
                 },
             ],
@@ -1410,15 +1410,77 @@ def _variants_summary_line(variants: list[dict[str, Any]]) -> str:
     )
 
 
-def _inbox_entry_payload(entry: Any) -> dict[str, Any]:
-    return {
+def _inbox_entry_payload(entry: Any, config_path: Path) -> dict[str, Any]:
+    project_id = _project_id_from_variant_entry_path(entry.variant_path)
+    selector_kind = "project" if entry.source == "project" and project_id else "path"
+    selector = project_id if selector_kind == "project" else str(entry.variant_path)
+    payload = {
         "variant_id": entry.variant_id,
         "variant_path": str(entry.variant_path),
+        "cleanup_path": str(entry.cleanup_path),
         "source": entry.source,
         "status": entry.status,
         "expires_at": entry.expires_at,
         "label": entry.label,
+        "selector_kind": selector_kind,
+        "selector": selector,
+        "project_id": project_id,
     }
+    if selector_kind == "project" and project_id is not None:
+        payload["patch_path"] = str(entry.cleanup_path / "proposals" / "patch.yaml")
+        payload["keep_command"] = _cvw_recipe_command(
+            f"variant keep --project {shlex.quote(project_id)} --id {shlex.quote(entry.variant_id)}",
+            config_path=config_path,
+            sot_path=None,
+        )
+        payload["discard_command"] = _cvw_recipe_command(
+            f"variant discard --project {shlex.quote(project_id)} --yes",
+            config_path=config_path,
+            sot_path=None,
+        )
+        payload["preview_command"] = _cvw_recipe_command(
+            f"preview --project {shlex.quote(project_id)}",
+            config_path=config_path,
+            sot_path=None,
+        )
+        return payload
+
+    payload["keep_command"] = _cvw_recipe_command(
+        shlex.join(
+            [
+                "variant",
+                "keep",
+                "--path",
+                str(entry.variant_path),
+                "--id",
+                entry.variant_id,
+            ]
+        ),
+        config_path=config_path,
+        sot_path=None,
+    )
+    payload["discard_command"] = _cvw_recipe_command(
+        shlex.join(
+            [
+                "variant",
+                "discard",
+                "--path",
+                str(entry.variant_path),
+                "--yes",
+            ]
+        ),
+        config_path=config_path,
+        sot_path=None,
+    )
+    return payload
+
+
+def _project_id_from_variant_entry_path(path: Path) -> str | None:
+    parts = path.parts
+    for index in range(len(parts) - 2):
+        if parts[index] == "var" and parts[index + 1] == "projects":
+            return parts[index + 2]
+    return None
 
 
 def _inbox_summary_line(entries: list[dict[str, Any]]) -> str:
@@ -1697,20 +1759,11 @@ def _print_variant_gc_summary(expired: int, kept_pruned: int, status: str) -> No
     )
 
 
-def _print_variant_inbox(entries: list[Any]) -> None:
+def _print_variant_inbox(entries: list[Any], config_path: Path) -> None:
     if get_output_mode() == OutputMode.JSON:
         payload = {
             "command": "variant.inbox",
-            "entries": [
-                {
-                    "variant_id": entry.variant_id,
-                    "variant_path": str(entry.variant_path),
-                    "expires_at": entry.expires_at,
-                    "source": entry.source,
-                    "label": entry.label,
-                }
-                for entry in entries
-            ],
+            "entries": [_inbox_entry_payload(entry, config_path) for entry in entries],
         }
         print(json.dumps(payload, indent=2, sort_keys=True))
         return
@@ -1937,7 +1990,7 @@ def _build_context_shared_state(
     inbox_payload: list[dict[str, Any]] = []
     try:
         inbox_entries = list_variant_inbox(config_path)
-        inbox_payload = [_inbox_entry_payload(entry) for entry in inbox_entries]
+        inbox_payload = [_inbox_entry_payload(entry, config_path) for entry in inbox_entries]
     except (VariantLifecycleError, ValueError) as exc:
         _record_context_issue(str(exc), issues, strict)
     inbox_summary = _inbox_summary_line(inbox_payload)
@@ -2415,7 +2468,7 @@ def status(
     variants_summary = _variants_summary_line(variants)
 
     inbox_entries = list_variant_inbox(config_path)
-    inbox_payload = [_inbox_entry_payload(entry) for entry in inbox_entries]
+    inbox_payload = [_inbox_entry_payload(entry, config_path) for entry in inbox_entries]
     inbox_summary = _inbox_summary_line(inbox_payload)
     ttl_days = resolve_variant_ttl_days(config_path)
 
@@ -2940,7 +2993,7 @@ def variant_list(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     inbox_entries = list_variant_inbox(config_path)
-    inbox_payload = [_inbox_entry_payload(entry) for entry in inbox_entries]
+    inbox_payload = [_inbox_entry_payload(entry, config_path) for entry in inbox_entries]
     ttl_days = resolve_variant_ttl_days(config_path)
 
     payload = {
@@ -2989,12 +3042,13 @@ def variant_inbox(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
     try:
-        entries = list_variant_inbox(config)
+        entries = list_variant_inbox(config_path)
     except (VariantLifecycleError, FileNotFoundError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    _print_variant_inbox(entries)
+    _print_variant_inbox(entries, config_path)
 
 
 @variant_app.command("keep")
@@ -4434,8 +4488,9 @@ def explain(
 @app.command(
     help=(
         "Package a built run for human review. Requires an existing run plus "
-        "built cv.docx, cv.pdf, and selection.json artifacts for the selected run, "
-        "project, or variant."
+        "immutable cv.docx, cv.pdf, and selection.json artifacts for the selected run, "
+        "project, or variant. `--run` may be combined with `--project` to pin a "
+        "specific project-scoped run."
     )
 )
 def reviewpack(
@@ -4460,6 +4515,13 @@ def reviewpack(
             help="Project id or path to package from its latest run",
         ),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Replace an existing review pack directory explicitly",
+        ),
+    ] = False,
     config: Annotated[
         Path,
         typer.Option(
@@ -4504,6 +4566,7 @@ def reviewpack(
             config_path=config_path,
             run=run,
             project_dir=project_dir,
+            force=force,
         )
     except ReviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -4517,7 +4580,8 @@ def reviewpack(
                 "HINT: build the target variant with review artifacts first, for example "
                 f"`{_cvw_shell_command(build_hint)}`, "
                 f"inspect `{_cvw_shell_command('workflow --id review.import')}`, "
-                "or pass `--run <run-id>` to package a specific build deterministically."
+                "pass `--run <run-id>` to package a specific build deterministically, "
+                "or use `--force` to replace an existing review pack."
             ),
             err=True,
         )
@@ -4536,8 +4600,10 @@ def reviewpack(
 @app.command(
     "import-docx",
     help=(
-        "Convert a reviewed DOCX into a patch draft. Requires `--from` and one of "
-        "`--run`, `--variant`, or `--project` so canonical.md can be resolved from an existing run."
+        "Convert a reviewed DOCX into a patch draft. Requires `--from` plus "
+        "`--variant`, `--project`, or `--run`; `--run` may be combined with "
+        "`--project` to pin a specific project-scoped run so canonical.md can "
+        "be resolved from the selected run."
     ),
 )
 def import_docx(
@@ -4552,7 +4618,7 @@ def import_docx(
         str | None,
         typer.Option(
             "--run",
-            help="Run id or path to locate canonical markdown",
+            help="Run id or path to locate canonical markdown; combine with --project to pin a project run",
         ),
     ] = None,
     variant: Annotated[

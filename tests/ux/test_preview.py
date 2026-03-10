@@ -61,6 +61,88 @@ def test_preview_watch_paths_include_variants_and_themes_root() -> None:
     assert themes_root in paths
 
 
+def test_preview_catalog_uses_project_proposal_variant_id(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md, pdf, html]",
+            ]
+        )
+        + "\n"
+    )
+    themes_dir = Path(__file__).resolve().parents[2] / "build" / "themes"
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "  projects: ../var/projects",
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {themes_dir}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+    sot_path = tmp_path / "sot.sample"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "person.yaml").write_text("id: sample\nname: Sample\n")
+    (sot_path / "experience.yaml").write_text(
+        "roles:\n  - id: role\n    company: Co\n    title: Title\n    start: 2020\n    bullets:\n      - id: b1\n        text: Did work\n        tags: [core]\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "projects:\n  - id: p1\n    name: Project\n    summary: Summary\n    tags: [core]\n"
+    )
+    (sot_path / "skills.yaml").write_text(
+        "skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n"
+    )
+    (sot_path / "education.yaml").write_text(
+        "education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [core]\n"
+    )
+    (sot_path / "letters.yaml").write_text(
+        "letters:\n  - id: base\n    title: Base\n    salutation: Hello\n    closing: Thanks\n    sections:\n      - id: intro\n        text: Text\n        tags: [core]\n"
+    )
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  base_variant: base",
+                f"  sot_path: {sot_path}",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text(
+        "variant:\n  id: project-focus\n  output_name: cv\n  outputs: [md, pdf, html]\n"
+    )
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+
+    controller = PreviewController(
+        sot_base=sot_path,
+        config_path=config_path,
+        variant_id="base",
+        theme_id="default",
+        style_preset="modern",
+        project_dir=project_dir,
+    )
+
+    assert controller.catalog().variants == ["project-focus"]
+
+
 def test_preview_page_html_contains_controls() -> None:
     html = _preview_page_html()
 

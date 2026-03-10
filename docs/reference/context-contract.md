@@ -26,6 +26,8 @@ Missing inputs are surfaced explicitly in the payload.
   directory.
 - Recipe steps are machine-actionable: each step includes `kind`
   (`command|manual`), `runnable` (`true|false`), and `placeholders`.
+- Project proposal recipe steps are selector-first (`--project <project-id>`)
+  instead of teaching raw `proposals/variant.yaml` paths.
 
 ## Payload (JSON)
 
@@ -34,6 +36,8 @@ Top-level keys:
 - `config`: config path and project metadata.
 - `sot`: configured/resolved paths, status, errors, files, sections, tags.
 - `variants`: configured variants, inbox, default, TTL.
+  Project inbox entries include selector metadata plus ready-to-run
+  `keep_command`, `discard_command`, and `preview_command` strings.
 - `runs`: latest/recents per variant plus invalid directories.
 - `projects`: local projects list and invalid entries.
 - `reviews`: review packs inventory.

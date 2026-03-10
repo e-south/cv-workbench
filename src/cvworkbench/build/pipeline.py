@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -120,6 +121,8 @@ def build_documents(
             pdf_engine,
             plan,
         )
+        run_output = run_dir / output_file.name
+        shutil.copy2(output_file, run_output)
         output_paths[fmt] = output_file
         render_details[fmt] = {
             "to": plan.to,

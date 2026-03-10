@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import importlib
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -224,6 +225,7 @@ def test_reviewpack_help_mentions_required_artifacts() -> None:
     assert "selection.json" in output
     assert "--run" in output
     assert "--project" in output
+    assert "--force" in output
 
 
 def test_import_docx_help_mentions_run_resolution() -> None:
@@ -359,6 +361,51 @@ def test_variant_discard_resolves_project_variant_path(tmp_path: Path, monkeypat
     assert result.exit_code == 2
     assert captured["variant_path"] == variant_path
     assert captured["config_path"] == config_path
+
+
+def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "config" / "workbench.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("paths:\n  projects: ../var/projects\n")
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    variant_path = proposals_dir / "variant.yaml"
+    patch_path = proposals_dir / "patch.yaml"
+    variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
+    patch_path.write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+
+    entry = type(
+        "_Entry",
+        (),
+        {
+            "variant_id": "base",
+            "variant_path": variant_path,
+            "cleanup_path": project_dir,
+            "source": "project",
+            "status": "ephemeral",
+            "expires_at": "2026-03-17T00:00:00+00:00",
+            "label": "job",
+        },
+    )()
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    monkeypatch.setattr(app_module, "list_variant_inbox", lambda _config: [entry])
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["variant", "inbox", "--json", "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    inbox_entry = payload["entries"][0]
+    assert inbox_entry["selector_kind"] == "project"
+    assert inbox_entry["project_id"] == "job"
+    assert inbox_entry["patch_path"] == str(patch_path)
+    assert "variant keep --project job --id base" in inbox_entry["keep_command"]
+    assert "variant discard --project job --yes" in inbox_entry["discard_command"]
+    assert "preview --project job" in inbox_entry["preview_command"]
 
 
 def test_project_help_distinguishes_guide_and_new() -> None:
