@@ -77,6 +77,8 @@ class PreviewSession:
     theme_id: str
     style_preset: str | None
     started_at: str
+    session_id: str | None = None
+    project_id: str | None = None
 
 
 @dataclass
@@ -108,6 +110,7 @@ class PreviewController:
         auto_pdf: bool = True,
         project_dir: Path | None = None,
         project_sot_override: Path | None = None,
+        session_id: str | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._sot_base = sot_base
@@ -120,6 +123,7 @@ class PreviewController:
         self._project_dir = project_dir
         self._project_sot_override = project_sot_override
         self._project_id: str | None = None
+        self._session_id = session_id
         self._catalog = self._load_catalog()
         self._state: PreviewState | None = None
 
@@ -130,6 +134,9 @@ class PreviewController:
 
     def catalog(self) -> PreviewCatalog:
         return self._catalog
+
+    def project_id(self) -> str | None:
+        return self._project_id
 
     def rebuild(
         self,
@@ -280,6 +287,7 @@ class PreviewController:
     def state_payload(self) -> dict[str, Any]:
         state = self.state()
         return {
+            "session_id": self._session_id,
             "variant": state.variant_id,
             "theme": state.theme_id,
             "style_preset": state.style_preset,
@@ -399,6 +407,8 @@ def write_preview_session(session: PreviewSession, config_path: Path) -> Path:
         "theme": session.theme_id,
         "style_preset": session.style_preset,
         "started_at": session.started_at,
+        "session_id": session.session_id,
+        "project": session.project_id,
     }
     path.write_text(json.dumps(payload, indent=2))
     return path
@@ -420,6 +430,8 @@ def load_preview_session(config_path: Path) -> PreviewSession:
         theme_id = raw["theme"]
         style_preset = raw["style_preset"]
         started_at = raw["started_at"]
+        session_id = raw.get("session_id")
+        project_id = raw.get("project")
     except (KeyError, ValueError, TypeError) as exc:
         raise PreviewError("Preview session file is invalid") from exc
     if not isinstance(host, str) or not host.strip():
@@ -436,6 +448,14 @@ def load_preview_session(config_path: Path) -> PreviewSession:
         style_preset = style_preset.strip()
     if not isinstance(started_at, str) or not started_at.strip():
         raise PreviewError("Preview session file is invalid")
+    if session_id is not None:
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise PreviewError("Preview session file is invalid")
+        session_id = session_id.strip()
+    if project_id is not None:
+        if not isinstance(project_id, str) or not project_id.strip():
+            raise PreviewError("Preview session file is invalid")
+        project_id = project_id.strip()
     return PreviewSession(
         pid=pid,
         host=host.strip(),
@@ -445,6 +465,8 @@ def load_preview_session(config_path: Path) -> PreviewSession:
         theme_id=theme_id.strip(),
         style_preset=style_preset,
         started_at=started_at.strip(),
+        session_id=session_id,
+        project_id=project_id,
     )
 
 
@@ -460,6 +482,8 @@ def new_preview_session(
     port: int,
     url: str,
     state: PreviewState,
+    session_id: str | None = None,
+    project_id: str | None = None,
 ) -> PreviewSession:
     return PreviewSession(
         pid=os.getpid(),
@@ -470,6 +494,8 @@ def new_preview_session(
         theme_id=state.theme_id,
         style_preset=state.style_preset,
         started_at=datetime.now(timezone.utc).isoformat(),
+        session_id=session_id,
+        project_id=project_id,
     )
 
 
@@ -703,12 +729,23 @@ def _preview_page_html() -> str:
     <title>cv-workbench preview</title>
     <link rel="icon" href="data:," />
     <style>
+      :root {
+        color-scheme: dark;
+        --cvw-panel-border: rgba(148, 163, 184, 0.18);
+        --cvw-text: #e2e8f0;
+        --cvw-text-muted: #8ea2c4;
+        --cvw-accent: #7dd3fc;
+        --cvw-danger: #fda4af;
+        --cvw-shadow: 0 24px 80px rgba(2, 8, 23, 0.34);
+      }
       html, body {
         margin: 0;
         padding: 0;
         height: 100%;
-        background: #e8edf3;
-        font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 32%),
+          linear-gradient(180deg, #d9e4f2 0%, #edf3f9 100%);
+        font: 14px/1.5 "Avenir Next", "Segoe UI", sans-serif;
         color: #0f172a;
       }
       #layout {
@@ -720,29 +757,83 @@ def _preview_page_html() -> str:
         left: 0;
         top: 0;
         bottom: 0;
-        width: 280px;
-        background: #0f172a;
-        color: #e2e8f0;
-        padding: 18px;
+        width: 320px;
+        background: linear-gradient(180deg, rgba(5, 10, 19, 0.97) 0%, rgba(10, 18, 32, 0.95) 100%);
+        color: var(--cvw-text);
+        padding: 20px;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 14px;
+        box-shadow: var(--cvw-shadow);
+        overflow-y: auto;
+      }
+      #hero {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 18px;
+        background: linear-gradient(160deg, rgba(19, 35, 63, 0.96), rgba(8, 47, 73, 0.8));
+        border: 1px solid rgba(125, 211, 252, 0.18);
+      }
+      #eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(186, 230, 253, 0.78);
       }
       #brand {
-        font-weight: 600;
-        font-size: 16px;
-        letter-spacing: 0.3px;
+        font-weight: 700;
+        font-size: 20px;
+        letter-spacing: 0.02em;
+      }
+      #status-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: rgba(148, 163, 184, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #f8fafc;
+      }
+      #controller-pill[data-cvw-state="active"] {
+        background: rgba(14, 165, 233, 0.18);
+        border-color: rgba(56, 189, 248, 0.38);
+        color: #bae6fd;
+      }
+      #controller-pill[data-cvw-state="passive"] {
+        background: rgba(250, 204, 21, 0.16);
+        border-color: rgba(250, 204, 21, 0.35);
+        color: #fde68a;
+      }
+      #controller-pill[data-cvw-state="stopped"],
+      #controller-pill[data-cvw-state="disconnected"] {
+        background: rgba(251, 113, 133, 0.16);
+        border-color: rgba(251, 113, 133, 0.34);
+        color: #fecdd3;
       }
       .section {
         display: grid;
         gap: 10px;
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.66);
+        border: 1px solid var(--cvw-panel-border);
+        backdrop-filter: blur(10px);
       }
       .section-title {
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 0.12em;
-        color: #94a3b8;
+        color: var(--cvw-text-muted);
       }
       label {
         display: flex;
@@ -750,25 +841,47 @@ def _preview_page_html() -> str:
         justify-content: space-between;
         gap: 8px;
       }
+      label span {
+        color: #cbd5e1;
+      }
       select, button {
-        background: #1e293b;
-        color: #e2e8f0;
-        border: 1px solid #334155;
+        background: rgba(15, 23, 42, 0.82);
+        color: var(--cvw-text);
+        border: 1px solid rgba(71, 85, 105, 0.86);
         border-radius: 10px;
-        padding: 6px 8px;
-        font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        padding: 7px 10px;
+        font: 13px/1.4 "Avenir Next", "Segoe UI", sans-serif;
+        transition:
+          border-color 160ms ease,
+          background 160ms ease,
+          transform 160ms ease,
+          box-shadow 160ms ease;
       }
       button {
         cursor: pointer;
+      }
+      button:hover:not(:disabled),
+      select:hover:not(:disabled) {
+        border-color: rgba(125, 211, 252, 0.58);
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible {
+        outline: 2px solid rgba(125, 211, 252, 0.72);
+        outline-offset: 2px;
       }
       button:disabled, select:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
+      #rebuild {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(8, 47, 73, 0.88));
+        border-color: rgba(56, 189, 248, 0.45);
+      }
       #stop-preview {
-        background: #3f1f2a;
-        border-color: #5a2535;
-        color: #fda4af;
+        background: rgba(127, 29, 29, 0.28);
+        border-color: rgba(251, 113, 133, 0.3);
+        color: var(--cvw-danger);
       }
       #format-tabs {
         display: grid;
@@ -780,10 +893,11 @@ def _preview_page_html() -> str:
         font-size: 12px;
       }
       #format-tabs button.active {
-        background: #0ea5e9;
+        background: linear-gradient(135deg, #7dd3fc, #38bdf8);
         border-color: #38bdf8;
-        color: #0f172a;
+        color: #082f49;
         font-weight: 600;
+        box-shadow: 0 10px 24px rgba(14, 165, 233, 0.24);
       }
       .toggle {
         display: flex;
@@ -794,11 +908,12 @@ def _preview_page_html() -> str:
         accent-color: #38bdf8;
       }
       #status {
-        color: #7dd3fc;
+        color: var(--cvw-accent);
         font-size: 12px;
+        min-height: 18px;
       }
       #error {
-        color: #fda4af;
+        color: var(--cvw-danger);
         font-size: 12px;
         display: none;
       }
@@ -821,38 +936,89 @@ def _preview_page_html() -> str:
       #shortcuts {
         margin-top: auto;
         font-size: 11px;
-        color: #94a3b8;
+        color: var(--cvw-text-muted);
       }
       #shortcuts kbd {
-        background: #1e293b;
+        background: rgba(15, 23, 42, 0.82);
         border-radius: 6px;
         padding: 2px 6px;
         margin-left: 6px;
         font: 11px/1.4 "SFMono-Regular", Menlo, monospace;
       }
       #preview-area {
-        margin-left: 280px;
-        width: calc(100% - 280px);
+        margin-left: 320px;
+        width: calc(100% - 320px);
         display: flex;
         justify-content: center;
         align-items: stretch;
-        padding: 24px;
+        padding: 28px;
         box-sizing: border-box;
+        min-height: 100vh;
       }
       #preview {
         width: min(900px, 100%);
         height: 100%;
         border: none;
         background: #ffffff;
-        border-radius: 10px;
-        box-shadow: 0 18px 60px rgba(15, 23, 42, 0.18);
+        border-radius: 14px;
+        box-shadow: 0 28px 70px rgba(15, 23, 42, 0.18);
+      }
+      @media (max-width: 1024px) {
+        #layout {
+          flex-direction: column;
+        }
+        #sidebar {
+          position: relative;
+          width: 100%;
+          bottom: auto;
+          max-height: none;
+        }
+        #preview-area {
+          margin-left: 0;
+          width: 100%;
+          padding: 18px;
+          min-height: auto;
+        }
+        #preview {
+          min-height: 72vh;
+        }
+      }
+      @media (max-width: 640px) {
+        #sidebar {
+          padding: 14px;
+        }
+        .section,
+        #hero {
+          padding: 12px;
+        }
+        #format-tabs {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        label {
+          flex-direction: column;
+          align-items: stretch;
+        }
       }
     </style>
   </head>
-  <body tabindex="0" data-cvw-build-id="">
+  <body tabindex="0" data-cvw-build-id="" data-cvw-session-id="" data-cvw-controller-state="active">
     <div id="layout">
       <aside id="sidebar">
-        <div id="brand">cv-workbench</div>
+        <div id="hero">
+          <div>
+            <div id="eyebrow">local preview control plane</div>
+            <div id="brand">cv-workbench</div>
+          </div>
+          <div id="status-pills">
+            <span
+              id="controller-pill"
+              class="status-pill"
+              data-cvw-status="controller-pill"
+              data-cvw-state="active"
+            >active controller</span>
+            <span id="build-pill" class="status-pill" data-cvw-status="build-pill">build pending</span>
+          </div>
+        </div>
 
         <div class="section">
           <div class="section-title">Workspace</div>
@@ -922,13 +1088,13 @@ def _preview_page_html() -> str:
     </div>
     <script>
       const DISCONNECTED_MESSAGE = 'Preview disconnected';
+      const PASSIVE_CONTROLLER_MESSAGE = 'Controller active in another tab';
+      const CONTROLLER_AVAILABLE_MESSAGE = 'Controller available; focus this tab to claim';
+      const RENDER_SETTLE_MS = 180;
       const VISIBLE_REFRESH_MS = 1000;
       const HIDDEN_REFRESH_MS = 4000;
       const state = { data: null };
       const history = [];
-      let stopped = false;
-      let connectionError = null;
-      let currentFormat = 'html';
       const iframe = document.getElementById('preview');
       const projectSelect = document.getElementById('project-select');
       const variantSelect = document.getElementById('variant-select');
@@ -942,13 +1108,28 @@ def _preview_page_html() -> str:
       const errorEl = document.getElementById('error');
       const summaryEl = document.getElementById('summary');
       const runList = document.getElementById('run-list');
+      const controllerPill = document.getElementById('controller-pill');
+      const buildPill = document.getElementById('build-pill');
       const formats = ['html', 'pdf', 'md', 'ats'];
+      const controllerTabId = 'tab-' + Math.random().toString(36).slice(2);
+      let stopped = false;
+      let connectionError = null;
+      let currentFormat = 'html';
       let lastSeenBuildId = document.body.dataset.cvwBuildId || '';
       let lastControlsKey = null;
       let lastOverlayKey = null;
+      let lastSummaryKey = null;
       let currentPreviewSrc = iframe.getAttribute('src') || '';
       let pendingAction = null;
       let refreshTimer = null;
+      let renderInFlight = false;
+      let scheduledRenderTimer = null;
+      let scheduledRenderRequest = null;
+      let queuedRenderRequest = null;
+      let currentSessionId = document.body.dataset.cvwSessionId || '';
+      let sessionChannel = null;
+      let passiveController = false;
+      let controllerClaimAvailable = false;
 
       async function fetchState() {
         const res = await fetch('/api/state');
@@ -971,8 +1152,108 @@ def _preview_page_html() -> str:
           .join('||');
       }
 
+      function setControllerState(status) {
+        document.body.dataset.cvwControllerState = status;
+      }
+
+      function setControllerPill(stateValue, label) {
+        controllerPill.dataset.cvwState = stateValue;
+        controllerPill.textContent = label;
+      }
+
+      function clearScheduledRender() {
+        if (scheduledRenderTimer) {
+          clearTimeout(scheduledRenderTimer);
+          scheduledRenderTimer = null;
+        }
+        scheduledRenderRequest = null;
+      }
+
+      function hasQueuedRender() {
+        return Boolean(scheduledRenderRequest || queuedRenderRequest);
+      }
+
+      function closeSessionChannel() {
+        if (!sessionChannel) return;
+        sessionChannel.close();
+        sessionChannel = null;
+      }
+
+      function postControllerMessage(message) {
+        if (!sessionChannel) return;
+        sessionChannel.postMessage(message);
+      }
+
+      function claimController(reason) {
+        if (!currentSessionId || typeof window.BroadcastChannel !== 'function') {
+          passiveController = false;
+          controllerClaimAvailable = false;
+          return;
+        }
+        passiveController = false;
+        controllerClaimAvailable = false;
+        postControllerMessage({
+          type: 'claim',
+          reason,
+          session_id: currentSessionId,
+          tab_id: controllerTabId,
+        });
+      }
+
+      function bindSessionChannel(sessionId) {
+        const nextSessionId = sessionId || '';
+        if (nextSessionId === currentSessionId) {
+          document.body.dataset.cvwSessionId = nextSessionId;
+          return;
+        }
+        closeSessionChannel();
+        currentSessionId = nextSessionId;
+        document.body.dataset.cvwSessionId = nextSessionId;
+        passiveController = false;
+        controllerClaimAvailable = false;
+        if (!nextSessionId || typeof window.BroadcastChannel !== 'function') {
+          return;
+        }
+        sessionChannel = new BroadcastChannel('cvw-preview:' + nextSessionId);
+        sessionChannel.addEventListener('message', (event) => {
+          const message = event.data || {};
+          if (message.session_id !== currentSessionId || message.tab_id === controllerTabId) {
+            return;
+          }
+          if (message.type === 'claim') {
+            passiveController = true;
+            controllerClaimAvailable = false;
+            clearScheduledRender();
+            queuedRenderRequest = null;
+            if (refreshTimer) {
+              clearTimeout(refreshTimer);
+              refreshTimer = null;
+            }
+            syncOverlay(state.data || {}, true);
+            return;
+          }
+          if (message.type === 'release' && passiveController) {
+            if (document.visibilityState === 'visible' && document.hasFocus()) {
+              claimController('release');
+              syncOverlay(state.data || {}, true);
+              scheduleRefresh(true);
+              return;
+            }
+            controllerClaimAvailable = true;
+            syncOverlay(state.data || {}, true);
+            return;
+          }
+          if (message.type === 'stopped') {
+            handleRemoteStop();
+            syncOverlay(state.data || {}, true);
+          }
+        });
+        claimController('connect');
+      }
+
       function controlsSignature(data) {
         return [
+          data.session_id || '',
           listSignature(data.projects),
           data.project || '',
           listSignature(data.variants),
@@ -988,12 +1269,22 @@ def _preview_page_html() -> str:
 
       function overlaySignature(data) {
         const lastError = data && data.last_error ? data.last_error : '';
-        return [stopped ? 'stopped' : 'live', pendingAction || '', lastError, connectionError || ''].join('::');
+        return [
+          stopped ? 'stopped' : 'live',
+          pendingAction || '',
+          lastError,
+          connectionError || '',
+          passiveController ? 'passive' : 'active',
+          controllerClaimAvailable ? 'claimable' : 'claimed',
+          hasQueuedRender() ? 'queued' : 'clear',
+        ].join('::');
       }
 
       function renderOverlay(data) {
         const lastError = data && data.last_error ? data.last_error : '';
         if (connectionError) {
+          setControllerState('disconnected');
+          setControllerPill('disconnected', 'disconnected');
           statusEl.textContent = DISCONNECTED_MESSAGE + '.';
           errorEl.textContent = connectionError;
           errorEl.style.display = 'block';
@@ -1001,12 +1292,37 @@ def _preview_page_html() -> str:
           return;
         }
         if (stopped) {
+          setControllerState('stopped');
+          setControllerPill('stopped', 'stopped');
           statusEl.textContent = 'Preview stopped.';
+        } else if (passiveController) {
+          setControllerState('passive');
+          setControllerPill('passive', 'passive tab');
+          statusEl.textContent = (
+            controllerClaimAvailable ? CONTROLLER_AVAILABLE_MESSAGE : PASSIVE_CONTROLLER_MESSAGE
+          ) + '.';
+          errorEl.style.display = 'none';
+          setControlsEnabled(false);
+          return;
+        } else if (pendingAction === 'render' && hasQueuedRender()) {
+          setControllerState('active');
+          setControllerPill('active', 'active controller');
+          statusEl.textContent = 'Finishing current rebuild; next change queued...';
         } else if (pendingAction === 'render') {
+          setControllerState('active');
+          setControllerPill('active', 'active controller');
           statusEl.textContent = 'Rebuilding preview...';
         } else if (pendingAction === 'stop') {
+          setControllerState('active');
+          setControllerPill('active', 'active controller');
           statusEl.textContent = 'Stopping preview...';
+        } else if (hasQueuedRender()) {
+          setControllerState('active');
+          setControllerPill('active', 'active controller');
+          statusEl.textContent = 'Queued rebuild...';
         } else {
+          setControllerState('active');
+          setControllerPill('active', 'active controller');
           statusEl.textContent = 'Listening for changes...';
         }
         if (lastError) {
@@ -1015,7 +1331,7 @@ def _preview_page_html() -> str:
         } else {
           errorEl.style.display = 'none';
         }
-        setControlsEnabled(!stopped && !pendingAction);
+        setControlsEnabled(!stopped && pendingAction !== 'render' && pendingAction !== 'stop' && !passiveController);
       }
 
       function syncOverlay(data, force = false) {
@@ -1034,14 +1350,32 @@ def _preview_page_html() -> str:
         line.appendChild(strong);
       }
 
+      function summarySignature(data) {
+        if (!data) {
+          return 'none::' + currentFormat;
+        }
+        return [
+          data.project || '',
+          data.variant || '',
+          data.theme || '',
+          data.style_preset || '',
+          currentFormat || 'html',
+          data.build_id || '',
+        ].join('::');
+      }
+
       function renderSummary(data) {
         summaryEl.replaceChildren();
         if (!data) {
+          buildPill.textContent = 'build pending';
+          buildPill.dataset.cvwBuild = 'pending';
           return;
         }
         const projectLabel = data.project || 'none';
         const presetLabel = data.style_preset || 'default';
         const buildLabel = data.build_id ? ('#' + data.build_id) : 'pending';
+        buildPill.textContent = buildLabel === 'pending' ? 'build pending' : ('build ' + buildLabel);
+        buildPill.dataset.cvwBuild = data.build_id ? String(data.build_id) : 'pending';
         const lines = [
           ['project: ', projectLabel, ' | variant: ', data.variant || 'n/a'],
           ['theme: ', data.theme || 'n/a', ' | preset: ', presetLabel],
@@ -1055,10 +1389,58 @@ def _preview_page_html() -> str:
         });
       }
 
+      function syncSummary(data, force = false) {
+        const nextSummaryKey = summarySignature(data);
+        if (!force && nextSummaryKey === lastSummaryKey) {
+          return;
+        }
+        renderSummary(data);
+        lastSummaryKey = nextSummaryKey;
+      }
+
       function nextOption(list, current) {
         if (!list || list.length === 0) return null;
         const idx = list.indexOf(current);
         return list[(idx + 1) % list.length];
+      }
+
+      function currentRenderState() {
+        if (!state.data) return null;
+        return {
+          theme: state.data.theme || null,
+          style_preset: state.data.style_preset || null,
+          variant: state.data.variant || null,
+          format: state.data.format || 'html',
+          auto_pdf: !!state.data.auto_pdf,
+        };
+      }
+
+      function normalizeRequestedState(theme, preset, variant, format, autoPdf) {
+        const current = currentRenderState() || {
+          theme: themeSelect.value || null,
+          style_preset: presetSelect.value || null,
+          variant: variantSelect.value || null,
+          format: currentFormat || 'html',
+          auto_pdf: !!autoPdfToggle.checked,
+        };
+        return {
+          theme: theme || current.theme,
+          style_preset: preset || null,
+          variant: variant || current.variant,
+          format: format || currentFormat || current.format || 'html',
+          auto_pdf: typeof autoPdf === 'boolean' ? autoPdf : current.auto_pdf,
+        };
+      }
+
+      function sameRenderState(left, right) {
+        if (!left || !right) return false;
+        return (
+          left.theme === right.theme &&
+          left.style_preset === right.style_preset &&
+          left.variant === right.variant &&
+          left.format === right.format &&
+          left.auto_pdf === right.auto_pdf
+        );
       }
 
       function syncSelect(selectEl, options, current, allowUnset = false) {
@@ -1149,10 +1531,38 @@ def _preview_page_html() -> str:
         });
       }
 
+      function canApplyLocalFormatChange(nextState) {
+        const current = currentRenderState();
+        if (!state.data || !current || !state.data.outputs) {
+          return false;
+        }
+        return (
+          nextState.theme === current.theme &&
+          nextState.style_preset === current.style_preset &&
+          nextState.variant === current.variant &&
+          nextState.auto_pdf === current.auto_pdf &&
+          !!state.data.outputs[nextState.format]
+        );
+      }
+
+      function applyLocalFormatChange(nextFormat) {
+        if (!state.data || !state.data.outputs || !state.data.outputs[nextFormat]) {
+          return;
+        }
+        currentFormat = nextFormat;
+        updateFormatButtons();
+        syncSummary(state.data, true);
+        syncPreviewSrc();
+      }
+
       function applyState(data) {
         if (!data) return;
         state.data = data;
-        currentFormat = data.format || currentFormat;
+        bindSessionChannel(data.session_id || '');
+        const outputs = data.outputs || {};
+        if (!currentFormat || !outputs[currentFormat]) {
+          currentFormat = data.format || currentFormat || 'html';
+        }
         const nextBuildId = data.build_id ? String(data.build_id) : '';
         const buildChanged = nextBuildId !== lastSeenBuildId;
         if (buildChanged) {
@@ -1169,11 +1579,44 @@ def _preview_page_html() -> str:
         if (nextOverlayKey !== lastOverlayKey) {
           syncOverlay(data);
         }
-        renderSummary(data);
+        syncSummary(data);
         syncPreviewSrc();
       }
 
-      async function requestRender(theme, preset, variant, format, autoPdf) {
+      function scheduleRenderRequest(nextState) {
+        scheduledRenderRequest = { ...nextState };
+        queuedRenderRequest = null;
+        if (scheduledRenderTimer) {
+          clearTimeout(scheduledRenderTimer);
+        }
+        scheduledRenderTimer = window.setTimeout(() => {
+          const queued = scheduledRenderRequest;
+          scheduledRenderRequest = null;
+          scheduledRenderTimer = null;
+          if (!queued || stopped || passiveController) {
+            syncOverlay(state.data || {}, true);
+            return;
+          }
+          if (renderInFlight) {
+            queuedRenderRequest = queued;
+            syncOverlay(state.data || {}, true);
+            return;
+          }
+          void performRenderRequest(queued);
+        }, RENDER_SETTLE_MS);
+        syncOverlay(state.data || {}, true);
+      }
+
+      async function performRenderRequest(nextState) {
+        if (!state.data || passiveController) {
+          return state.data;
+        }
+        if (renderInFlight) {
+          queuedRenderRequest = { ...nextState };
+          syncOverlay(state.data || {}, true);
+          return state.data;
+        }
+        renderInFlight = true;
         pendingAction = 'render';
         syncOverlay(state.data || {}, true);
         try {
@@ -1181,28 +1624,66 @@ def _preview_page_html() -> str:
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              theme,
-              style_preset: preset || null,
-              variant: variant || null,
-              format: format || null,
-              auto_pdf: autoPdf,
+              theme: nextState.theme,
+              style_preset: nextState.style_preset,
+              variant: nextState.variant,
+              format: nextState.format,
+              auto_pdf: nextState.auto_pdf,
             }),
           });
           const payload = await res.json();
           if (!res.ok) {
             errorEl.textContent = payload.error || 'Build failed';
             errorEl.style.display = 'block';
-            return;
+            return state.data;
           }
           applyState(payload);
+          return payload;
         } finally {
           pendingAction = null;
+          renderInFlight = false;
           const data = state.data || {};
           syncOverlay(data, true);
+          if (!stopped && !passiveController) {
+            scheduleRefresh();
+          }
+          if (queuedRenderRequest) {
+            const queued = queuedRenderRequest;
+            queuedRenderRequest = null;
+            window.setTimeout(() => {
+              void performRenderRequest(queued);
+            }, 0);
+          }
         }
       }
 
+      async function requestRender(theme, preset, variant, format, autoPdf, force = false) {
+        if (!state.data || passiveController) {
+          return state.data;
+        }
+        const nextState = normalizeRequestedState(theme, preset, variant, format, autoPdf);
+        const currentState = currentRenderState();
+        if (!force && canApplyLocalFormatChange(nextState)) {
+          applyLocalFormatChange(nextState.format);
+          return state.data;
+        }
+        if (!force && sameRenderState(nextState, currentState)) {
+          clearScheduledRender();
+          queuedRenderRequest = null;
+          syncOverlay(state.data || {}, true);
+          return state.data;
+        }
+        if (force) {
+          clearScheduledRender();
+          return performRenderRequest(nextState);
+        }
+        scheduleRenderRequest(nextState);
+        return state.data;
+      }
+
       async function requestStop() {
+        clearScheduledRender();
+        queuedRenderRequest = null;
         pendingAction = 'stop';
         syncOverlay(state.data || {}, true);
         try {
@@ -1212,19 +1693,43 @@ def _preview_page_html() -> str:
             errorEl.style.display = 'block';
             return;
           }
+          postControllerMessage({
+            type: 'stopped',
+            session_id: currentSessionId,
+            tab_id: controllerTabId,
+          });
           if (refreshTimer) {
             clearTimeout(refreshTimer);
             refreshTimer = null;
           }
           stopped = true;
+          passiveController = false;
+          controllerClaimAvailable = false;
           connectionError = null;
           setControlsEnabled(false);
           const data = state.data || {};
           syncOverlay(data, true);
+          closeSessionChannel();
         } finally {
           pendingAction = null;
           syncOverlay(state.data || {}, true);
         }
+      }
+
+      function handleRemoteStop() {
+        clearScheduledRender();
+        queuedRenderRequest = null;
+        if (refreshTimer) {
+          clearTimeout(refreshTimer);
+          refreshTimer = null;
+        }
+        stopped = true;
+        pendingAction = null;
+        passiveController = false;
+        controllerClaimAvailable = false;
+        connectionError = null;
+        setControlsEnabled(false);
+        closeSessionChannel();
       }
 
       function refreshDelayMs() {
@@ -1232,6 +1737,9 @@ def _preview_page_html() -> str:
       }
 
       function scheduleRefresh(immediate = false) {
+        if (stopped || passiveController || pendingAction === 'render') {
+          return;
+        }
         if (refreshTimer) {
           clearTimeout(refreshTimer);
         }
@@ -1239,7 +1747,7 @@ def _preview_page_html() -> str:
       }
 
       async function refresh() {
-        if (stopped) return;
+        if (stopped || passiveController || pendingAction === 'render') return;
         try {
           const data = await fetchState();
           connectionError = null;
@@ -1249,14 +1757,14 @@ def _preview_page_html() -> str:
           const data = state.data || {};
           syncOverlay(data);
         } finally {
-          if (!stopped) {
+          if (!stopped && !passiveController) {
             scheduleRefresh();
           }
         }
       }
 
       async function handleKey(event) {
-        if (stopped) return;
+        if (stopped || passiveController) return;
         if (!state.data) return;
         if (event.metaKey || event.ctrlKey || event.altKey) return;
         const active = document.activeElement;
@@ -1285,10 +1793,22 @@ def _preview_page_html() -> str:
           await requestRender(state.data.theme, state.data.style_preset, nextVariant, currentFormat, autoPdfToggle.checked);
         } else if (key === 'f') {
           const nextFormat = nextOption(formats, currentFormat);
-          currentFormat = nextFormat || currentFormat;
-          await requestRender(state.data.theme, state.data.style_preset, state.data.variant, currentFormat, autoPdfToggle.checked);
+          await requestRender(
+            state.data.theme,
+            state.data.style_preset,
+            state.data.variant,
+            nextFormat || currentFormat,
+            autoPdfToggle.checked
+          );
         } else if (key === 'r') {
-          await requestRender(state.data.theme, state.data.style_preset, state.data.variant, currentFormat, autoPdfToggle.checked);
+          await requestRender(
+            state.data.theme,
+            state.data.style_preset,
+            state.data.variant,
+            currentFormat,
+            autoPdfToggle.checked,
+            true
+          );
         } else if (key === 'x') {
           await requestStop();
         }
@@ -1326,13 +1846,14 @@ def _preview_page_html() -> str:
       });
 
       formatTabs.addEventListener('click', async (event) => {
-        if (!state.data) return;
-        const target = event.target;
+        if (!state.data || passiveController) return;
+        const target = event.target && typeof event.target.closest === 'function'
+          ? event.target.closest('button[data-format]')
+          : null;
         if (!target || !target.dataset) return;
         const nextFormat = target.dataset.format;
         if (!nextFormat) return;
-        currentFormat = nextFormat;
-        await requestRender(themeSelect.value, presetSelect.value || null, state.data.variant, currentFormat, autoPdfToggle.checked);
+        await requestRender(themeSelect.value, presetSelect.value || null, state.data.variant, nextFormat, autoPdfToggle.checked);
       });
 
       autoPdfToggle.addEventListener('change', async () => {
@@ -1342,7 +1863,7 @@ def _preview_page_html() -> str:
 
       rebuildButton.addEventListener('click', async () => {
         if (!state.data) return;
-        await requestRender(themeSelect.value, presetSelect.value || null, state.data.variant, currentFormat, autoPdfToggle.checked);
+        await requestRender(themeSelect.value, presetSelect.value || null, state.data.variant, currentFormat, autoPdfToggle.checked, true);
       });
 
       stopButton.addEventListener('click', async () => {
@@ -1350,10 +1871,36 @@ def _preview_page_html() -> str:
       });
 
       document.addEventListener('visibilitychange', () => {
-        if (!stopped) scheduleRefresh(true);
+        if (!stopped && document.visibilityState === 'visible') {
+          scheduleRefresh(true);
+        }
       });
       window.addEventListener('focus', () => {
-        if (!stopped) scheduleRefresh(true);
+        if (stopped) return;
+        claimController('focus');
+        scheduleRefresh(true);
+      });
+      window.addEventListener('beforeunload', () => {
+        clearScheduledRender();
+        if (currentSessionId) {
+          postControllerMessage({
+            type: 'release',
+            session_id: currentSessionId,
+            tab_id: controllerTabId,
+          });
+        }
+        closeSessionChannel();
+      });
+      window.addEventListener('pagehide', () => {
+        clearScheduledRender();
+        if (currentSessionId) {
+          postControllerMessage({
+            type: 'release',
+            session_id: currentSessionId,
+            tab_id: controllerTabId,
+          });
+        }
+        closeSessionChannel();
       });
 
       scheduleRefresh(true);

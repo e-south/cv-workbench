@@ -143,10 +143,27 @@ def test_preview_catalog_uses_project_proposal_variant_id(tmp_path: Path) -> Non
     assert controller.catalog().variants == ["project-focus"]
 
 
+def test_preview_controller_state_payload_includes_session_id() -> None:
+    controller = PreviewController(
+        sot_base=Path("sot.sample"),
+        config_path=Path("config/workbench.yaml"),
+        variant_id="base",
+        theme_id="default",
+        style_preset="modern",
+        session_id="session-123",
+    )
+
+    controller.build_once()
+    payload = controller.state_payload()
+
+    assert payload["session_id"] == "session-123"
+
+
 def test_preview_page_html_contains_controls() -> None:
     html = _preview_page_html()
 
     assert 'id="sidebar"' in html
+    assert 'id="hero"' in html
     assert 'src="about:blank"' in html
     assert 'id="variant-select"' in html
     assert 'id="theme-select"' in html
@@ -154,6 +171,8 @@ def test_preview_page_html_contains_controls() -> None:
     assert 'id="format-tabs"' in html
     assert 'id="auto-pdf-toggle"' in html
     assert 'id="stop-preview"' in html
+    assert 'id="controller-pill"' in html
+    assert 'id="build-pill"' in html
 
 
 def test_preview_page_sidebar_left() -> None:
@@ -161,6 +180,14 @@ def test_preview_page_sidebar_left() -> None:
 
     assert "left: 0" in html
     assert "width:" in html
+
+
+def test_preview_page_html_includes_responsive_layout_breakpoints() -> None:
+    html = _preview_page_html()
+
+    assert "@media (max-width: 1024px)" in html
+    assert "@media (max-width: 640px)" in html
+    assert "grid-template-columns: repeat(2, 1fr);" in html
 
 
 def test_preview_keyboard_shortcuts_ignore_interactive_controls() -> None:

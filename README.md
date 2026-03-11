@@ -10,6 +10,21 @@ Use [docs/readme.md](docs/readme.md) as the canonical docs router. The root
 README stays intentionally light; `docs/readme.md` routes the full workflow and
 contract surface.
 
+> [!NOTE]
+> Preview/browser hardening update (March 11, 2026)
+>
+> - Session ownership is explicit in the preview contract: `session.json` and `/api/state` carry a `session_id`, preview startup rejects an already-live session instead of silently overwriting it, stale session files are cleared, and `dev stop --force` no longer reports success if the preview port is still busy. See [src/cvworkbench/cli/app.py](src/cvworkbench/cli/app.py), [src/cvworkbench/dev/preview.py](src/cvworkbench/dev/preview.py), and [docs/reference/preview-contract.md](docs/reference/preview-contract.md).
+> - The preview page enforces a single active controller tab per session. A newer tab claims the session, older tabs become passive, disable controls, and stop polling instead of remaining competing live controllers, and a released/stopped session does not silently wake every remaining tab back up. See [src/cvworkbench/dev/preview.py](src/cvworkbench/dev/preview.py).
+> - Button responsiveness is materially better because format switches reuse already-built outputs locally, non-force control changes are debounced/coalesced before rebuild, steady-state summary DOM updates are suppressed, and redundant render requests are collapsed instead of stacking up. See [src/cvworkbench/dev/preview.py](src/cvworkbench/dev/preview.py) and [docs/reference/preview-contract.md](docs/reference/preview-contract.md).
+>
+> Verification:
+>
+> - Baseline before the first hardening pass: `build_once(html+pdf)` averaged `2.19s`; a rebuild after initial build averaged `4.41s`; switching `html -> pdf` also averaged `4.41s`.
+> - Tests passed: `uv run pytest -q tests/cli/test_preview.py tests/cli/test_dev_stop.py tests/cli/test_dev_serve.py tests/dev/test_preview_session.py tests/dev/test_preview_contract.py tests/ux/test_preview.py`
+> - Local Chrome DevTools smoke check validated local format switching with no redundant `POST /api/render`, passive-tab takeover, and artifacts under `var/runs/preview/hardening-20260311/`.
+>
+> This hardening is ownership-first: one live preview session, one active controller tab, no silent stale-session reuse, and fewer unnecessary rebuilds during fast operator interaction.
+
 ## Start Here
 
 - Python 3.12

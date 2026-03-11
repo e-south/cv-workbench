@@ -26,6 +26,10 @@ def test_preview_contract_selectors_present() -> None:
         'data-cvw-action="rebuild"',
         'data-cvw-action="stop"',
         'data-cvw-build-id',
+        'data-cvw-session-id',
+        'data-cvw-controller-state',
+        'data-cvw-status="controller-pill"',
+        'data-cvw-status="build-pill"',
         'data-cvw-status="summary"',
         'data-cvw-view="preview-frame"',
     ]
@@ -82,9 +86,60 @@ def test_preview_page_html_declares_inline_favicon() -> None:
 def test_preview_page_html_exposes_busy_status_messages() -> None:
     html = _preview_page_html()
     assert "Rebuilding preview..." in html
+    assert "Queued rebuild..." in html
+    assert "Finishing current rebuild; next change queued..." in html
     assert "Stopping preview..." in html
     assert "pendingAction" in html
     assert "syncOverlay(state.data || {}, true);" in html
+
+
+def test_preview_page_html_exposes_single_controller_tab_contract() -> None:
+    html = _preview_page_html()
+    assert "PASSIVE_CONTROLLER_MESSAGE" in html
+    assert "BroadcastChannel" in html
+    assert "Controller active in another tab" in html
+    assert "data-cvw-controller-state" in html
+
+
+def test_preview_page_html_requires_focus_before_reclaiming_released_controller() -> None:
+    html = _preview_page_html()
+    assert "CONTROLLER_AVAILABLE_MESSAGE" in html
+    assert "controllerClaimAvailable" in html
+    assert "document.hasFocus()" in html
+    assert "claimController('release')" in html
+
+
+def test_preview_page_html_broadcasts_stop_state_to_peer_tabs() -> None:
+    html = _preview_page_html()
+    assert "message.type === 'stopped'" in html
+    assert "type: 'stopped'" in html
+    assert "handleRemoteStop" in html
+    assert "window.addEventListener('pagehide'" in html
+
+
+def test_preview_page_html_short_circuits_local_format_switches() -> None:
+    html = _preview_page_html()
+    assert "canApplyLocalFormatChange" in html
+    assert "applyLocalFormatChange" in html
+    assert "renderInFlight" in html
+    assert "queuedRenderRequest" in html
+
+
+def test_preview_page_html_debounces_expensive_render_changes() -> None:
+    html = _preview_page_html()
+    assert "RENDER_SETTLE_MS = 180" in html
+    assert "scheduledRenderTimer" in html
+    assert "scheduledRenderRequest" in html
+    assert "scheduleRenderRequest" in html
+    assert "performRenderRequest" in html
+    assert "clearScheduledRender" in html
+
+
+def test_preview_page_html_syncs_summary_incrementally() -> None:
+    html = _preview_page_html()
+    assert "summarySignature" in html
+    assert "syncSummary" in html
+    assert "buildPill" in html
 
 
 def test_preview_page_html_normalizes_shortcuts_and_ignores_modified_keys() -> None:

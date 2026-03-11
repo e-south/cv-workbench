@@ -19,6 +19,8 @@ var/runs/preview/session.json
 Fields:
 - `pid`, `host`, `port`, `url`
 - `variant`, `theme`, `style_preset`
+- `session_id` (opaque lease id for the current preview server instance)
+- `project` (when preview was started with `--project`)
 - `started_at` (UTC ISO-8601)
 
 ## One-shot preview
@@ -32,6 +34,7 @@ instead of following `ACTIVE`.
 ## HTTP API
 
 `GET /api/state` returns the current preview state:
+- `session_id`
 - `variant`, `theme`, `style_preset`
 - `themes`, `presets`, `variants`, `projects`, `project`
 - `format`, `auto_pdf`, `build_id`, `last_error`
@@ -62,8 +65,10 @@ Browser automation should target the stable `data-cvw-*` hooks:
 - `data-cvw-format="html|pdf|md|ats"` on each format button
 - `data-cvw-active="true|false"` + `aria-pressed` on the active format button
 - `data-cvw-action="rebuild|stop"`
-- `data-cvw-status="status|error|summary|run-list"`
+- `data-cvw-status="status|error|summary|run-list|controller-pill|build-pill"`
 - `data-cvw-build-id` on `<body>` (updated on successful rebuild)
+- `data-cvw-session-id` on `<body>` (current preview lease id)
+- `data-cvw-controller-state="active|passive|stopped|disconnected"` on `<body>`
 - `data-cvw-view="preview-frame"`
 
 The project selector is read-only and displays the active project (if the
@@ -76,10 +81,25 @@ not a content editor.
 - `build_id` increments after each successful rebuild and is used to cache-bust
   the iframe URL.
 - UI controls call `/api/render`; state updates are visible via `/api/state`.
+- Non-force theme, preset, variant, format, and auto-PDF changes are briefly
+  debounced and coalesced in the browser so rapid control changes collapse into
+  one rebuild instead of multiple back-to-back renders.
+- Format switches reuse already-built outputs immediately when the requested
+  artifact is already present; the Rebuild button remains the explicit
+  force-refresh control.
 - The UI polls `/api/state` every second while visible, and backs off when the
   tab is hidden so idle background tabs generate less request noise.
+- Summary/build metadata is only re-painted when the visible state actually
+  changes, which avoids unnecessary DOM churn during steady-state polling.
+- Only one browser tab is treated as the active controller for a given
+  `session_id`. When a newer tab claims the same preview session, older tabs
+  become passive, disable controls, and stop polling until they regain focus.
+  If the active tab releases the session, passive peers stay passive until a
+  focused tab explicitly reclaims control; release does not silently reactivate
+  every open tab at once.
 - The Stop button (or `POST /api/stop`) shuts down the server and disables UI
-  controls.
+  controls. A successful stop also broadcasts the stopped state to other open
+  tabs for the same `session_id`; the tabs remain open but visibly disabled.
 - Keyboard shortcuts are ignored while focus is inside interactive controls so
   agents/operators do not accidentally rebuild or switch variants while
   navigating the sidebar.
@@ -87,6 +107,9 @@ not a content editor.
   Set `CVW_DEV_IDLE_TIMEOUT_SECONDS=0` to disable the idle timeout.
 - If the preview API becomes unreachable, the error status shows a
   "Preview disconnected" message.
+- Starting a new preview session against a workspace with an already-live
+  session fails fast with a reuse/stop hint; stale session records are cleared
+  automatically before startup continues.
 
 ## Browser automation recipe
 

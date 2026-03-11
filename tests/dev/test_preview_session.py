@@ -76,6 +76,33 @@ def test_load_preview_session_accepts_null_style_preset(tmp_path: Path) -> None:
     assert session.style_preset is None
 
 
+def test_load_preview_session_accepts_session_metadata(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    session_path = preview_session_path(config_path)
+    session_path.parent.mkdir(parents=True, exist_ok=True)
+    session_path.write_text(
+        json.dumps(
+            {
+                "pid": 123,
+                "host": "127.0.0.1",
+                "port": 8765,
+                "url": "http://127.0.0.1:8765/",
+                "variant": "base",
+                "theme": "default",
+                "style_preset": "modern",
+                "started_at": "2026-01-31T00:00:00+00:00",
+                "session_id": "session-123",
+                "project": "job",
+            }
+        )
+    )
+
+    session = load_preview_session(config_path)
+
+    assert session.session_id == "session-123"
+    assert session.project_id == "job"
+
+
 def test_parse_render_payload_requires_json_object() -> None:
     with pytest.raises(PreviewError, match="JSON object"):
         _parse_render_payload('["base"]')

@@ -20,6 +20,7 @@ import shlex
 import signal
 import socket
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,9 +63,11 @@ from cvworkbench.config import (
 from cvworkbench.dev.preview import (
     PreviewController,
     PreviewError,
+    PreviewSession,
     clear_preview_session,
     load_preview_session,
     new_preview_session,
+    preview_session_path,
     serve_preview,
     write_preview_session,
 )
@@ -2324,16 +2327,61 @@ def _post_preview_stop(url: str, timeout: float = 2.0) -> tuple[bool, str | None
         return False, str(exc)
 
 
+def _preview_api_reachable(url: str, timeout: float = 1.0) -> tuple[bool, str | None]:
+    endpoint = url.rstrip("/") + "/api/state"
+    try:
+        with url_request.urlopen(endpoint, timeout=timeout) as response:
+            if 200 <= response.status < 300:
+                return True, None
+            return False, f"Preview state probe failed with HTTP {response.status}"
+    except (url_error.URLError, ValueError) as exc:
+        return False, str(exc)
+
+
+def _port_is_open(host: str, port: int, timeout: float = 0.2) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def _wait_for_port_close(host: str, port: int, timeout: float = 2.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        try:
-            with socket.create_connection((host, port), timeout=0.2):
-                pass
-        except OSError:
+        if not _port_is_open(host, port, timeout=0.2):
             return True
         time.sleep(0.1)
     return False
+
+
+def _preview_pid_is_live(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _preview_session_conflict(session: PreviewSession) -> tuple[bool, str]:
+    api_ok, api_error = _preview_api_reachable(session.url)
+    if api_ok:
+        detail = f"Preview session already running at {session.url}"
+        if session.project_id:
+            detail += f" (project={session.project_id})"
+        return True, detail
+    port_open = _port_is_open(session.host, session.port)
+    if _preview_pid_is_live(session.pid) and port_open:
+        return True, (
+            "Preview session file points to a running process, but the preview API "
+            f"is not responding yet ({api_error or 'unknown error'})."
+        )
+    if port_open:
+        return True, (
+            "Preview port is still in use even though the recorded preview process is "
+            f"not live ({session.host}:{session.port})."
+        )
+    return False, api_error or "Recorded preview session is stale"
 
 
 def _terminate_preview_process(pid: int) -> None:
@@ -6154,6 +6202,7 @@ def dev_serve(
         except SotVersionError:
             sot_base = resolved
 
+    session_id = uuid.uuid4().hex
     try:
         controller = PreviewController(
             sot_base=sot_base,
@@ -6164,6 +6213,7 @@ def dev_serve(
             auto_pdf=True,
             project_dir=project_spec.project_dir if project_spec else None,
             project_sot_override=sot_base if project_spec and sot_path is not None else None,
+            session_id=session_id,
         )
     except PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -6202,8 +6252,35 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
+    session_path = preview_session_path(config_path)
+    if session_path.exists():
+        try:
+            existing_session = load_preview_session(config_path)
+        except PreviewError:
+            clear_preview_session(config_path)
+        else:
+            has_conflict, detail = _preview_session_conflict(existing_session)
+            if has_conflict:
+                typer.echo(f"ERROR: {detail}", err=True)
+                typer.echo(
+                    (
+                        "HINT: reuse the existing preview URL or run "
+                        f"`{_cvw_shell_command('dev stop')}` before starting a new session."
+                    ),
+                    err=True,
+                )
+                raise typer.Exit(code=1)
+            clear_preview_session(config_path)
+
     def _on_start(url: str, html_path: Path) -> None:
-        session = new_preview_session(host=host, port=port, url=url, state=controller.state())
+        session = new_preview_session(
+            host=host,
+            port=port,
+            url=url,
+            state=controller.state(),
+            session_id=session_id,
+            project_id=controller.project_id(),
+        )
         write_preview_session(session, config_path)
         _print_serve_summary(
             html_path,
@@ -6281,17 +6358,51 @@ def dev_stop(
     ok, error = _post_preview_stop(session.url)
     if not ok:
         if force:
-            _terminate_preview_process(session.pid)
+            if _preview_pid_is_live(session.pid):
+                _terminate_preview_process(session.pid)
         else:
-            typer.echo(f"ERROR: {error}", err=True)
-            raise typer.Exit(code=1)
+            has_conflict, _detail = _preview_session_conflict(session)
+            if has_conflict:
+                typer.echo(f"ERROR: {error}", err=True)
+                raise typer.Exit(code=1)
+            clear_preview_session(config_path)
+            print_summary(
+                "dev.stop",
+                [
+                    ("status", "cleared-stale-session"),
+                    ("host", session.host),
+                    ("port", session.port),
+                ],
+            )
+            return
 
     if not _wait_for_port_close(session.host, session.port):
         if force:
+            if not _preview_pid_is_live(session.pid):
+                typer.echo(
+                    f"ERROR: Preview port is still in use at {session.host}:{session.port}",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
             _terminate_preview_process(session.pid)
+            if not _wait_for_port_close(session.host, session.port):
+                typer.echo("ERROR: Preview server still running", err=True)
+                raise typer.Exit(code=1)
         else:
-            typer.echo("ERROR: Preview server still running", err=True)
-            raise typer.Exit(code=1)
+            has_conflict, _detail = _preview_session_conflict(session)
+            if has_conflict:
+                typer.echo("ERROR: Preview server still running", err=True)
+                raise typer.Exit(code=1)
+            clear_preview_session(config_path)
+            print_summary(
+                "dev.stop",
+                [
+                    ("status", "cleared-stale-session"),
+                    ("host", session.host),
+                    ("port", session.port),
+                ],
+            )
+            return
 
     clear_preview_session(config_path)
     print_summary(
