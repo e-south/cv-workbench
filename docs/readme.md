@@ -20,6 +20,7 @@ task instead of browsing the whole docs tree.
 | Capture a machine-readable workspace snapshot for automation | [reference/context-contract.md](reference/context-contract.md) | [concepts/overview.md](concepts/overview.md) |
 | Inspect workspace state, tags, runs, or explainable selection | [concepts/overview.md](concepts/overview.md) | [reference/context-contract.md](reference/context-contract.md) |
 | Run an explicit build or one-shot verification pass | [howto/quickstart.md](howto/quickstart.md) | [reference/preview-contract.md](reference/preview-contract.md) |
+| Run the repo-local verify harness in an isolated workspace | [reference/verify-contract.md](reference/verify-contract.md) | [reference/preview-contract.md](reference/preview-contract.md) |
 | Inspect the local preview UI or drive rebuilds safely | [reference/preview-contract.md](reference/preview-contract.md) | [howto/styling.md](howto/styling.md) |
 | Compare themes, presets, and export styling | [howto/styling.md](howto/styling.md) | [reference/preview-contract.md](reference/preview-contract.md) |
 | Ingest a job and create a project-scoped proposal | [howto/ingestion.md](howto/ingestion.md) | [reference/project-contract.md](reference/project-contract.md) |
@@ -36,6 +37,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [concepts/overview.md](concepts/overview.md): CLI surface and feature lanes
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
 - [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, and UI control hooks
+- [reference/verify-contract.md](reference/verify-contract.md): repo-local tracer-bullet verification harness
 - [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, and guarded patch application
 - [reference/variant-lifecycle.md](reference/variant-lifecycle.md): ephemeral draft/project proposal lifecycle
 - [reference/site-contract.md](reference/site-contract.md): local-first site sync contract
@@ -54,6 +56,7 @@ Operators:
 Agents and automation:
 - [reference/context-contract.md](reference/context-contract.md)
 - [reference/preview-contract.md](reference/preview-contract.md)
+- [reference/verify-contract.md](reference/verify-contract.md)
 - [reference/project-contract.md](reference/project-contract.md)
 - [concepts/overview.md](concepts/overview.md)
 

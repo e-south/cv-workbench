@@ -52,6 +52,7 @@ Deterministic bootstrap commands:
 uv run cvw context --json --compact
 uv run cvw workflow --id automation.verify
 uv run cvw workflow --id automation.verify --json --compact
+uv run python scripts/verify_repo.py
 ```
 
 ## Core Workflows
@@ -68,6 +69,7 @@ uv run cvw workflow --id automation.verify --json --compact
 - [docs/concepts/architecture.md](docs/concepts/architecture.md): repo boundaries and design constraints
 - [docs/howto/](docs/howto/): operator guides
 - [docs/reference/](docs/reference/): command contracts and invariants
+- [docs/reference/verify-contract.md](docs/reference/verify-contract.md): repo-local verify harness contract
 
 ## License
 

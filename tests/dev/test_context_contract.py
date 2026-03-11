@@ -51,6 +51,7 @@ def test_compact_bootstrap_docs_match_live_commands() -> None:
     assert "uv run cvw context --json --compact" in readme
     assert "uv run cvw workflow --id automation.verify" in readme
     assert "uv run cvw workflow --id automation.verify --json --compact" in readme
+    assert "uv run python scripts/verify_repo.py" in readme
     assert "uv run cvw context --json --compact" in quickstart
     assert "uv run cvw workflow --id automation.verify" in quickstart
     assert "uv run cvw workflow --id automation.verify --json --compact" in quickstart
@@ -61,6 +62,17 @@ def test_compact_bootstrap_docs_match_live_commands() -> None:
     assert "repair.sot_yaml" in contract
     assert "uv run cvw context --json --compact" in contract
     assert "uv run cvw workflow --id <recipe-id> --json --compact" in contract
+
+
+def test_verify_harness_docs_are_routed_from_readme_and_docs_index() -> None:
+    readme = (REPO_ROOT / "README.md").read_text()
+    docs_index = (REPO_ROOT / "docs" / "readme.md").read_text()
+    contract = (REPO_ROOT / "docs" / "reference" / "verify-contract.md").read_text()
+
+    assert "docs/reference/verify-contract.md" in readme
+    assert "reference/verify-contract.md" in docs_index
+    assert "uv run python scripts/verify_repo.py" in contract
+    assert "fails fast" in contract
 
 
 def test_sync_default_docs_are_consistent() -> None:
