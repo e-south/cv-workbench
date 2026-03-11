@@ -32,6 +32,20 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 
 Each command is single-purpose and composable.
 
+Primary feature lanes:
+- `tailor` scaffolds a deterministic draft from a job file. It copies the base
+  variant, snapshots the job text, emits `signals.json` and `prompt.json`, and
+  leaves `patch.diff` empty until an operator or agent authors a proposal.
+- `project guide` and `project new` create project-local tailoring workspaces
+  with a proposal `variant.yaml` plus `project-ops` `patch.yaml`. Supported
+  executable ops are intentionally narrow: guarded experience bullet
+  replacement and project summary replacement.
+- `reviewpack` packages immutable build artifacts for review. `import-docx`
+  maps supported reviewed edits back into structured `patch.yaml`; unsupported
+  edits fall back to `patch.diff` and `review_diff_only`.
+- Export is a `build` / `render` outcome, not a separate command. `preview` is
+  a local-only render-control UI for inspecting and rebuilding outputs.
+
 `uv run cvw workflow` renders the same recipe contract exposed by
 `uv run cvw context --json`, but in a smaller human-readable form that is more
 useful for operator logs and agent handoff. Use

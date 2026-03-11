@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -33,7 +34,14 @@ from cvworkbench.config import (
 )
 from cvworkbench.inputs.sot import load_sot
 from cvworkbench.inputs.sot_versions import resolve_active_sot_path
-from cvworkbench.ops.projects import ProjectError, load_project, resolve_project_dir
+from cvworkbench.ops.projects import (
+    ProjectError,
+    ProjectPatch,
+    compile_project_patch,
+    load_project,
+    load_project_patch_payload,
+    resolve_project_dir,
+)
 from cvworkbench.ops.runs import (
     RunError,
     RunInfo,
@@ -152,13 +160,14 @@ def import_docx_review(
     imported_path = draft_dir / "imported.md"
     imported_path.write_text(imported_markdown)
 
-    patch_text, apply_status, note_lines = _build_import_patch(
+    patch_name, patch_text, apply_status, note_lines = _build_import_patch(
         canonical_path=canonical_path,
         imported_markdown=imported_markdown,
         sot_path=resolution.sot_path,
         variant=resolution.variant,
+        project_patch=resolution.project_patch,
     )
-    patch_path = draft_dir / "patch.diff"
+    patch_path = draft_dir / patch_name
     patch_path.write_text(patch_text)
 
     notes_path = draft_dir / "notes.md"
@@ -275,6 +284,7 @@ class _ReviewTarget:
     variant: Variant
     review_dir: Path
     sot_path: Path
+    project_patch: ProjectPatch | None
 
 
 def _resolve_review_target(
@@ -288,9 +298,11 @@ def _resolve_review_target(
         raise ReviewError("--project cannot be combined with --variant")
 
     project = None
+    project_patch: ProjectPatch | None = None
     if project_dir is not None:
         try:
             project = load_project(project_dir)
+            project_patch = load_project_patch_payload(project.patch_path)
         except ProjectError as exc:
             raise ReviewError(str(exc)) from exc
         try:
@@ -307,6 +319,11 @@ def _resolve_review_target(
         except RunError as exc:
             raise ReviewError(str(exc)) from exc
         project = _load_project_for_run(config_path, run_info.run_id)
+        if project is not None:
+            try:
+                project_patch = load_project_patch_payload(project.patch_path)
+            except ProjectError as exc:
+                raise ReviewError(str(exc)) from exc
     else:
         try:
             run_info = resolve_latest_run(
@@ -335,6 +352,7 @@ def _resolve_review_target(
         variant=variant,
         review_dir=review_dir,
         sot_path=sot_path,
+        project_patch=project_patch,
     )
 
 
@@ -401,7 +419,16 @@ class _ExperienceBulletRef:
     role_id: str
     bullet_id: str
     heading: str
-    text: str
+    source_text: str
+    rendered_text: str
+
+
+@dataclass(frozen=True)
+class _ProjectSummaryRef:
+    project_id: str
+    heading: str
+    source_text: str
+    rendered_text: str
 
 
 def _build_import_patch(
@@ -410,23 +437,44 @@ def _build_import_patch(
     imported_markdown: str,
     sot_path: Path,
     variant: Variant,
-) -> tuple[str, str, list[str]]:
-    supported = _build_experience_bullet_patch(
+    project_patch: ProjectPatch | None,
+) -> tuple[str, str, str, list[str]]:
+    supported = _build_supported_project_patch(
         canonical_markdown=canonical_path.read_text(),
         imported_markdown=imported_markdown,
         sot_path=sot_path,
         variant=variant,
+        project_patch=project_patch,
     )
     if supported is not None:
-        return (
-            supported,
-            "ready",
+        apply_status = "ready" if len(supported.operations) > 0 else "ready_no_changes"
+        note_lines = (
             [
-                "This draft matched supported experience bullet text edits.",
-                "patch.diff targets SoT files and can be applied after review.",
-            ],
+                "This draft matched supported experience bullet or project summary text edits.",
+                "patch.yaml records compare-and-set project-ops targeting SoT files.",
+            ]
+            if len(supported.operations) > 0
+            else [
+                "This draft normalized to a supported project-ops patch with no SoT mutations.",
+                "patch.yaml is a verified no-op after markdown normalization.",
+            ]
+        )
+        return (
+            "patch.yaml",
+            yaml.safe_dump(
+                {
+                    "patch": {
+                        "format": supported.format,
+                        "operations": list(supported.operations),
+                    }
+                },
+                sort_keys=False,
+            ),
+            apply_status,
+            note_lines,
         )
     return (
+        "patch.diff",
         _diff_text(canonical_path, imported_markdown),
         "review_diff_only",
         [
@@ -437,13 +485,14 @@ def _build_import_patch(
     )
 
 
-def _build_experience_bullet_patch(
+def _build_supported_project_patch(
     *,
     canonical_markdown: str,
     imported_markdown: str,
     sot_path: Path,
     variant: Variant,
-) -> str | None:
+    project_patch: ProjectPatch | None,
+) -> ProjectPatch | None:
     if variant.document_type != "resume":
         return None
 
@@ -452,7 +501,6 @@ def _build_experience_bullet_patch(
     if len(canonical_tokens) != len(imported_tokens):
         return None
 
-    changed_bullets: list[tuple[str | None, str, str]] = []
     for canonical_token, imported_token in zip(canonical_tokens, imported_tokens):
         if (
             canonical_token.kind != imported_token.kind
@@ -462,76 +510,101 @@ def _build_experience_bullet_patch(
             return None
         if canonical_token.text == imported_token.text:
             continue
-        if canonical_token.kind != "bullet" or canonical_token.section != "Experience":
-            return None
-        changed_bullets.append(
-            (canonical_token.heading, canonical_token.text, imported_token.text)
-        )
+        if _normalize_noneditable_token_text(canonical_token.text) == _normalize_noneditable_token_text(
+            imported_token.text
+        ):
+            continue
+        if canonical_token.kind == "bullet" and canonical_token.section == "Experience":
+            continue
+        if (
+            canonical_token.kind == "text"
+            and canonical_token.section == "Projects"
+            and canonical_token.heading
+        ):
+            continue
+        return None
 
     sot = load_sot(sot_path)
-    bullet_refs = _selected_experience_bullets(sot, variant)
+    bullet_refs = _selected_experience_bullets(sot, variant, project_patch=project_patch)
+    project_refs = _selected_project_summaries(sot, project_patch=project_patch)
+    if bullet_refs is None or project_refs is None:
+        return None
     canonical_experience = [
         token for token in canonical_tokens if token.kind == "bullet" and token.section == "Experience"
     ]
-    if len(canonical_experience) != len(bullet_refs):
+    imported_experience = [
+        token for token in imported_tokens if token.kind == "bullet" and token.section == "Experience"
+    ]
+    canonical_projects = [
+        token
+        for token in canonical_tokens
+        if token.kind == "text" and token.section == "Projects" and token.heading
+    ]
+    imported_projects = [
+        token
+        for token in imported_tokens
+        if token.kind == "text" and token.section == "Projects" and token.heading
+    ]
+    if len(canonical_experience) != len(imported_experience):
         return None
-    for token, ref in zip(canonical_experience, bullet_refs):
-        if token.heading != ref.heading or token.text != ref.text:
+    if len(canonical_projects) != len(imported_projects):
+        return None
+    if canonical_experience:
+        if len(canonical_experience) != len(bullet_refs):
             return None
+        for canonical_token, ref in zip(canonical_experience, bullet_refs):
+            if canonical_token.heading != ref.heading or canonical_token.text != ref.rendered_text:
+                return None
+    if canonical_projects:
+        if len(canonical_projects) != len(project_refs):
+            return None
+        for canonical_token, ref in zip(canonical_projects, project_refs):
+            if canonical_token.heading != ref.heading or canonical_token.text != ref.rendered_text:
+                return None
 
-    updates: dict[tuple[str, str], str] = {}
-    for heading, old_text, new_text in changed_bullets:
-        ref = next(
-            (
-                item
-                for item in bullet_refs
-                if item.heading == heading and item.text == old_text
-            ),
-            None,
+    operations: list[dict[str, str]] = []
+    for canonical_token, imported_token, ref in zip(
+        canonical_experience,
+        imported_experience,
+        bullet_refs,
+    ):
+        if canonical_token.text == imported_token.text:
+            continue
+        operations.append(
+            {
+                "op": "replace-experience-bullet",
+                "role_id": ref.role_id,
+                "bullet_id": ref.bullet_id,
+                "old_text": ref.source_text,
+                "new_text": imported_token.text,
+            }
         )
-        if ref is None:
-            return None
-        updates[(ref.role_id, ref.bullet_id)] = new_text
-
-    original_path = sot_path / "experience.yaml"
-    original_text = original_path.read_text()
-    raw = yaml.safe_load(original_text)
-    if not isinstance(raw, dict):
-        return None
-    roles = raw.get("roles")
-    if not isinstance(roles, list):
-        return None
-
-    for role in roles:
-        if not isinstance(role, dict):
+    for canonical_token, imported_token, ref in zip(canonical_projects, imported_projects, project_refs):
+        if canonical_token.text == imported_token.text:
             continue
-        role_id = slugify(role.get("id", ""))
-        bullets = role.get("bullets")
-        if not isinstance(bullets, list):
-            continue
-        for bullet in bullets:
-            if not isinstance(bullet, dict):
-                continue
-            bullet_id = slugify(bullet.get("id", ""))
-            replacement = updates.get((role_id, bullet_id))
-            if replacement is not None:
-                bullet["text"] = replacement
+        operations.append(
+            {
+                "op": "replace-project-summary",
+                "project_id": ref.project_id,
+                "old_text": ref.source_text,
+                "new_text": imported_token.text,
+            }
+        )
 
-    updated_text = yaml.safe_dump(raw, sort_keys=False)
-    diff = unified_diff(
-        original_text.splitlines(),
-        updated_text.splitlines(),
-        fromfile="experience.yaml",
-        tofile="experience.yaml",
-        lineterm="",
-    )
-    return "\n".join(diff) + ("\n" if original_text or updated_text else "")
+    patch = ProjectPatch(format="project-ops", diff="", operations=tuple(operations))
+    try:
+        compile_project_patch(patch=patch, sot_path=sot_path)
+    except ProjectError:
+        return None
+    return patch
 
 
 def _selected_experience_bullets(
     sot: dict[str, Any],
     variant: Variant,
-) -> list[_ExperienceBulletRef]:
+    *,
+    project_patch: ProjectPatch | None,
+) -> list[_ExperienceBulletRef] | None:
     selection = build_selection(sot, variant)
     included = {
         (str(item.get("role_id")), str(item.get("id")))
@@ -570,42 +643,196 @@ def _selected_experience_bullets(
                 _ExperienceBulletRef(
                     role_id=role_id,
                     bullet_id=bullet_id,
-                    heading=heading,
-                    text=text.strip(),
+                    heading=_normalize_markdown_text(heading),
+                    source_text=text.strip(),
+                    rendered_text=_normalize_markdown_text(text),
                 )
             )
-    return refs
+    return _apply_project_patch_to_bullet_refs(refs, project_patch)
+
+
+def _selected_project_summaries(
+    sot: dict[str, Any],
+    *,
+    project_patch: ProjectPatch | None,
+) -> list[_ProjectSummaryRef] | None:
+    refs: list[_ProjectSummaryRef] = []
+    projects = sot.get("projects", {})
+    items = projects.get("projects")
+    if not isinstance(items, list):
+        return refs
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        project_id = slugify(item.get("id", ""))
+        heading = str(item.get("name", "")).strip()
+        summary = item.get("summary")
+        if not project_id or not heading or not isinstance(summary, str) or not summary.strip():
+            continue
+        refs.append(
+            _ProjectSummaryRef(
+                project_id=project_id,
+                heading=_normalize_markdown_text(heading),
+                source_text=summary.strip(),
+                rendered_text=_normalize_markdown_text(summary),
+            )
+        )
+    return _apply_project_patch_to_project_refs(refs, project_patch)
 
 
 def _tokenize_markdown(markdown: str) -> list[_MarkdownToken]:
     tokens: list[_MarkdownToken] = []
     section: str | None = None
     heading: str | None = None
+    paragraph_kind: str | None = None
+    paragraph_section: str | None = None
+    paragraph_heading: str | None = None
+    paragraph_parts: list[str] = []
+
+    def flush_paragraph() -> None:
+        nonlocal paragraph_kind, paragraph_section, paragraph_heading, paragraph_parts
+        if paragraph_kind is None:
+            return
+        text = _normalize_markdown_text(" ".join(paragraph_parts))
+        if text:
+            tokens.append(
+                _MarkdownToken(
+                    kind=paragraph_kind,
+                    section=paragraph_section,
+                    heading=paragraph_heading,
+                    text=text,
+                )
+            )
+        paragraph_kind = None
+        paragraph_section = None
+        paragraph_heading = None
+        paragraph_parts = []
+
     for raw_line in markdown.splitlines():
         line = raw_line.strip()
         if not line or line == ":::" or line.startswith("::: "):
+            flush_paragraph()
             continue
         if line.startswith("## "):
-            section = line[3:].strip()
+            flush_paragraph()
+            section = _normalize_markdown_text(line[3:])
             heading = None
             tokens.append(_MarkdownToken(kind="section", section=section, heading=None, text=section))
             continue
         if line.startswith("### "):
-            heading = line[4:].strip()
+            flush_paragraph()
+            heading = _normalize_markdown_text(line[4:])
             tokens.append(_MarkdownToken(kind="heading", section=section, heading=heading, text=heading))
             continue
         if line.startswith("- "):
-            tokens.append(
-                _MarkdownToken(
-                    kind="bullet",
-                    section=section,
-                    heading=heading,
-                    text=line[2:].strip(),
-                )
-            )
+            flush_paragraph()
+            paragraph_kind = "bullet"
+            paragraph_section = section
+            paragraph_heading = heading
+            paragraph_parts = [line[2:].strip()]
             continue
-        tokens.append(_MarkdownToken(kind="text", section=section, heading=heading, text=line))
+        if paragraph_kind is None:
+            paragraph_kind = "text"
+            paragraph_section = section
+            paragraph_heading = heading
+            paragraph_parts = [line]
+            continue
+        paragraph_parts.append(line)
+    flush_paragraph()
     return tokens
+
+
+def _normalize_markdown_text(text: str) -> str:
+    normalized = text.strip().replace("\xa0", " ")
+    normalized = re.sub(r"(?<=\d)--(?=\d)", "–", normalized)
+    normalized = re.sub(r"(?<=\S)\s+---\s+(?=\S)", " — ", normalized)
+    normalized = normalized.replace(r"\|", "|")
+    normalized = re.sub(r"\[([^\]]+)\]\{[^{}]*\}", r"\1", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _normalize_noneditable_token_text(text: str) -> str:
+    return re.sub(r"(?<=\w)\\\*(?=(?:,|$))", "", text)
+
+
+def _apply_project_patch_to_bullet_refs(
+    refs: list[_ExperienceBulletRef],
+    project_patch: ProjectPatch | None,
+) -> list[_ExperienceBulletRef] | None:
+    if project_patch is None:
+        return refs
+    if project_patch.format == "unified-diff":
+        return refs if not project_patch.diff.strip() else None
+
+    refs_by_target = {(ref.role_id, ref.bullet_id): ref for ref in refs}
+    rendered_text = {target: ref.rendered_text for target, ref in refs_by_target.items()}
+    for operation in project_patch.operations:
+        op_name = str(operation.get("op", "")).strip()
+        if op_name == "replace-project-summary":
+            continue
+        if op_name != "replace-experience-bullet":
+            return None
+        role_id = slugify(operation.get("role_id", ""))
+        bullet_id = slugify(operation.get("bullet_id", ""))
+        old_text = operation.get("old_text")
+        new_text = operation.get("new_text")
+        if not role_id or not bullet_id or not isinstance(old_text, str) or not isinstance(new_text, str):
+            return None
+        target = (role_id, bullet_id)
+        ref = refs_by_target.get(target)
+        if ref is None or ref.source_text != old_text:
+            return None
+        rendered_text[target] = _normalize_markdown_text(new_text)
+
+    return [
+        _ExperienceBulletRef(
+            role_id=ref.role_id,
+            bullet_id=ref.bullet_id,
+            heading=ref.heading,
+            source_text=ref.source_text,
+            rendered_text=rendered_text[(ref.role_id, ref.bullet_id)],
+        )
+        for ref in refs
+    ]
+
+
+def _apply_project_patch_to_project_refs(
+    refs: list[_ProjectSummaryRef],
+    project_patch: ProjectPatch | None,
+) -> list[_ProjectSummaryRef] | None:
+    if project_patch is None:
+        return refs
+    if project_patch.format == "unified-diff":
+        return refs if not project_patch.diff.strip() else None
+
+    refs_by_target = {ref.project_id: ref for ref in refs}
+    rendered_text = {project_id: ref.rendered_text for project_id, ref in refs_by_target.items()}
+    for operation in project_patch.operations:
+        op_name = str(operation.get("op", "")).strip()
+        if op_name == "replace-experience-bullet":
+            continue
+        if op_name != "replace-project-summary":
+            return None
+        project_id = slugify(operation.get("project_id", ""))
+        old_text = operation.get("old_text")
+        new_text = operation.get("new_text")
+        if not project_id or not isinstance(old_text, str) or not isinstance(new_text, str):
+            return None
+        ref = refs_by_target.get(project_id)
+        if ref is None or ref.source_text != old_text:
+            return None
+        rendered_text[project_id] = _normalize_markdown_text(new_text)
+
+    return [
+        _ProjectSummaryRef(
+            project_id=ref.project_id,
+            heading=ref.heading,
+            source_text=ref.source_text,
+            rendered_text=rendered_text[ref.project_id],
+        )
+        for ref in refs
+    ]
 
 
 def _which(command: str) -> str | None:

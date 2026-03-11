@@ -4,6 +4,9 @@ Projects are local, private workspaces for job tailoring. They keep job context,
 signals, and proposal drafts without mutating the Source of Truth unless you
 explicitly apply a patch.
 
+`project guide` ranks variants and scaffolds proposal artifacts. It does not
+perform free-form NL rewriting of your SoT.
+
 ## Commands
 
 - `uv run cvw project guide --job-url <url>` or `--job-file <path>`: create a project
@@ -14,8 +17,12 @@ explicitly apply a patch.
   latest project run, review readiness, and ready-to-run next commands without
   mutating the SoT.
 - `uv run cvw preview --project <slug> [--sot-path <path>]`: preview with project patch
-  applied in-memory, optionally against an explicit SoT override.
-- `uv run cvw reviewpack --project <slug>`: package the latest project-scoped run for review.
+  applied in-memory, optionally against an explicit SoT override. Project preview
+  renders stay inside `var/runs/preview/<slug>/`. When `--sot-path` points at a
+  concrete version directory, preview stays pinned to that exact directory.
+- `uv run cvw reviewpack --project <slug>`: package the latest review-ready
+  project-scoped run for review. Use `project show <slug>` after building to
+  get the pinned `--run` command for the current immutable run.
 - `uv run cvw reviewpack --run projects/<slug>/<run-id> [--force]`: package a specific
   immutable project-scoped run, optionally replacing an existing review pack directory.
 - `uv run cvw import-docx --from <docx> --project <slug>`: import a reviewed DOCX against
@@ -64,6 +71,8 @@ Use:
 
 - `uv run cvw build --project <slug>` and `uv run cvw preview --project <slug>` apply proposal
   patches in-memory.
+- Project builds write rendered artifacts into `var/runs/projects/<slug>/<run-id>/`
+  instead of overwriting shared `var/dist/<variant>/`.
 - `uv run cvw project show <slug>` reports the current proposal variant id,
   patch status, job source, latest project run, and replayable
   preview/build/apply/keep/discard commands.
@@ -78,15 +87,68 @@ Use:
 
 ## Patch format
 
-`proposals/patch.yaml` uses a unified-diff payload:
+New project scaffolds use an explicit project-op payload:
 
 ```yaml
 patch:
-  format: unified-diff
-  diff: ""
+  format: project-ops
+  operations: []
 ```
 
-Empty diff means no changes.
+Empty operations mean no project-local content edits yet.
+
+`project-ops` are now executable for guarded experience bullet replacements and
+project summary replacements. To author them without hand-editing YAML, use:
+
+```bash
+uv run cvw project patch replace-experience-bullet <slug> \
+  --role-id <role-id> \
+  --bullet-id <bullet-id> \
+  --new-text "Replacement text"
+
+uv run cvw project patch replace-project-summary <slug> \
+  --project-id <project-id> \
+  --new-text "Replacement text"
+```
+
+If `--old-text` is omitted, each command snapshots the current SoT source text
+into the op before writing `proposals/patch.yaml`.
+
+The resulting operation names a stable target plus the expected source text,
+then provides the replacement text:
+
+```yaml
+patch:
+  format: project-ops
+  operations:
+    - op: replace-experience-bullet
+      role_id: role-1
+      bullet_id: bullet-1
+      old_text: Built platform foundations.
+      new_text: Built platform foundations for regulated delivery.
+    - op: replace-project-summary
+      project_id: project-1
+      old_text: Example summary.
+      new_text: Example summary tailored for regulated delivery.
+```
+
+This is a compare-and-set contract:
+- `build --project` and `preview --project` compile the op list against the
+  current SoT and render from a project-local copy.
+- `project apply` applies the same compiled diff to the live SoT on disk.
+- If the target role/bullet/project is missing, duplicated, or the current text
+  no longer matches `old_text`, the command fails fast instead of silently
+  rewriting the wrong content.
+
+`import-docx` now writes `var/drafts/import-*/patch.yaml` using the same
+`project-ops` schema when reviewed Experience bullets or Projects summaries map
+cleanly back to SoT ids. Formatting-only normalized imports report
+`apply_status: ready_no_changes`. Unsupported edits still fall back to
+`var/drafts/import-*/patch.diff` with `apply_status: review_diff_only`.
+
+Legacy project proposal artifacts may still carry a `unified-diff` payload in
+`proposals/patch.yaml`, and project apply/preview continue to accept that
+format.
 
 Project-scoped review packs default to `var/reviews/projects/<slug>/` so they do
 not collide with variant-level review packs.

@@ -84,12 +84,16 @@ from cvworkbench.ops.doctor import run_doctor
 from cvworkbench.ops.projects import (
     ProjectError,
     apply_project_patch,
+    append_replace_experience_bullet_operation,
+    append_replace_project_summary_operation,
     create_project_from_file,
     create_project_from_url,
     load_project,
     load_project_details,
+    load_project_patch_payload,
     prepare_project_sot,
     resolve_project_dir,
+    suggest_project_variant_id,
 )
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.runs import (
@@ -138,6 +142,7 @@ variant_app = typer.Typer(no_args_is_help=True)
 clean_app = typer.Typer(no_args_is_help=True)
 sot_app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True)
+project_patch_app = typer.Typer(no_args_is_help=True)
 runs_app = typer.Typer(no_args_is_help=True)
 app.add_typer(job_app, name="job", help="Ingest and inspect job-posting context sources.")
 app.add_typer(tags_app, name="tags", help="List, lint, and summarize SoT tags.")
@@ -155,6 +160,11 @@ app.add_typer(
     project_app,
     name="project",
     help="Create, inspect, and apply job-tailoring project workspaces.",
+)
+project_app.add_typer(
+    project_patch_app,
+    name="patch",
+    help="Author validated project-op edits without hand-editing patch.yaml.",
 )
 
 
@@ -938,11 +948,11 @@ def _build_context_recipes(
                         sot_path=None,
                         configured_sot_path=configured_sot_path,
                     ),
-                    "description": "Generate an import draft plus notes describing whether patch.diff is applyable to SoT.",
+                    "description": "Generate an import draft plus notes describing whether patch.yaml or patch.diff is applyable to SoT.",
                 },
                 {
                     "command": "edit var/drafts/import-*/notes.md",
-                    "description": "Review notes.md to confirm whether patch.diff is applyable or still review_diff_only.",
+                    "description": "Review notes.md to confirm whether the drafted patch payload is applyable or still review_diff_only.",
                 },
                 {
                     "command": shlex.join(
@@ -955,18 +965,19 @@ def _build_context_recipes(
                             str((sot_path or Path("<path-to-sot>"))),
                         ]
                     ),
-                    "description": "Apply the imported patch after explicit approval when notes.md reports apply_status: ready.",
+                    "description": "Apply the imported patch after explicit approval when notes.md reports apply_status: ready. If it reports ready_no_changes, no SoT mutation is needed.",
                 },
             ],
             "outputs": [
                 "var/reviews/<variant>/cv.docx",
+                "var/drafts/import-*/patch.yaml",
                 "var/drafts/import-*/patch.diff",
                 "var/drafts/import-*/notes.md",
             ],
             "stop_conditions": [
                 "If no runs exist, run the baseline build recipe first.",
                 "Use reviewpack --run <run-id> when you need a pinned review pack in a multi-run workspace.",
-                "If notes.md reports review_diff_only, author a real SoT patch manually instead of applying patch.diff.",
+                "If notes.md reports review_diff_only, author a real SoT patch manually instead of applying the draft patch payload.",
             ],
         },
         {
@@ -1289,6 +1300,12 @@ def _run_is_review_ready(run: RunInfo | Mapping[str, Any]) -> bool:
 
     if not required_formats.issubset(set(outputs.keys())):
         return False
+    for fmt in required_formats:
+        output_path = outputs.get(fmt)
+        if not isinstance(output_path, str) or not output_path.strip():
+            return False
+        if not (run_path / output_path).exists():
+            return False
     return (run_path / "selection.json").exists()
 
 
@@ -1298,8 +1315,13 @@ def _project_commands(
     config_path: Path,
     variant_id: str | None = None,
     review_run_id: str | None = None,
+    sot_path: Path | None = None,
 ) -> dict[str, str]:
-    keep_variant_id = variant_id or "<variant-id>"
+    keep_variant_id = suggest_project_variant_id(
+        project_id=project_id,
+        config_path=config_path,
+        preferred_id=variant_id,
+    )
     commands = {
         "show": _cvw_recipe_command(
             f"project show {project_id}",
@@ -1309,17 +1331,17 @@ def _project_commands(
         "preview": _cvw_recipe_command(
             f"preview --project {project_id}",
             config_path=config_path,
-            sot_path=None,
+            sot_path=sot_path,
         ),
         "build": _cvw_recipe_command(
             f"build --project {project_id} --format md,pdf,docx",
             config_path=config_path,
-            sot_path=None,
+            sot_path=sot_path,
         ),
         "apply": _cvw_recipe_command(
             f"project apply {project_id}",
             config_path=config_path,
-            sot_path=None,
+            sot_path=sot_path,
         ),
         "keep": _cvw_recipe_command(
             f"variant keep --project {project_id} --id {keep_variant_id}",
@@ -1638,8 +1660,13 @@ def _inbox_entry_payload(entry: Any, config_path: Path) -> dict[str, Any]:
         if patch_root.name != "proposals":
             patch_root = patch_root / "proposals"
         payload["patch_path"] = str(patch_root / "patch.yaml")
+        keep_variant_id = suggest_project_variant_id(
+            project_id=project_id,
+            config_path=config_path,
+            preferred_id=entry.variant_id,
+        )
         payload["keep_command"] = _cvw_recipe_command(
-            f"variant keep --project {shlex.quote(project_id)} --id {shlex.quote(entry.variant_id)}",
+            f"variant keep --project {shlex.quote(project_id)} --id {shlex.quote(keep_variant_id)}",
             config_path=config_path,
             sot_path=None,
         )
@@ -2508,7 +2535,7 @@ def _print_project_new_summary(
         "project.new",
         [
             ("project_dir", project_dir),
-            ("variant", variant_id),
+            ("proposal_variant", variant_id),
             ("job_source", job_source),
             ("next_step", _cvw_shell_command(f"project show {project_dir.name}")),
             ("preview_step", _cvw_shell_command(f"preview --project {project_dir.name}")),
@@ -2526,7 +2553,7 @@ def _project_summary_payload(
     config_path: Path,
     proposal_variant_id: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "command": command,
         "project": {
             "project_id": project_id,
@@ -2540,12 +2567,16 @@ def _project_summary_payload(
             variant_id=proposal_variant_id or base_variant,
         ),
     }
+    if proposal_variant_id is not None:
+        payload["proposal"] = {"variant_id": proposal_variant_id}
+    return payload
 
 
 def _print_project_guide_summary(summary: dict[str, Any]) -> None:
     rows = [
         ("project_dir", summary["project"]["project_dir"]),
-        ("variant", summary["project"]["base_variant"]),
+        ("base_variant", summary["project"]["base_variant"]),
+        ("proposal_variant", summary["proposal"]["variant_id"]),
         ("job_source", summary["project"]["job_source"]),
         ("job_keywords", ", ".join(summary["job"]["keywords"]) or "none"),
         ("job_keywords_in_sot", ", ".join(summary["job"]["keywords_in_sot"]) or "none"),
@@ -2595,15 +2626,78 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
     print_summary("project.show", rows)
 
 
-def _print_apply_summary(draft_dir: Path, patch_path: Path, status: str, sot_path: Path) -> None:
+def _print_project_patch_summary(summary: dict[str, Any]) -> None:
+    rows: list[tuple[str, str | Path]] = [
+        ("project_dir", summary["project"]["project_dir"]),
+        ("sot_path", summary["project"]["sot_path"]),
+        ("patch_path", summary["patch"]["path"]),
+        ("patch_status", summary["patch"]["status"]),
+        ("operation", summary["operation"]["op"]),
+        ("target", summary["operation"]["target"]),
+        ("next_step", summary["commands"]["show"]),
+        ("preview_step", summary["commands"]["preview"]),
+        ("apply_step", summary["commands"]["apply"]),
+    ]
+    print_summary("project.patch", rows)
+
+
+def _print_apply_summary(
+    draft_dir: Path,
+    patch_path: Path,
+    status: str,
+    reason: str,
+    sot_path: Path,
+) -> None:
     print_summary(
         "apply",
         [
             ("draft_dir", draft_dir),
             ("patch", patch_path),
             ("status", status),
+            ("reason", reason),
             ("sot_path", sot_path),
         ],
+    )
+
+
+def _reviewpack_error_hint(
+    *,
+    message: str,
+    project: str | None,
+    run: str | None,
+    variant_id: str | None,
+) -> str:
+    if message.startswith("Run does not belong to project:"):
+        project_label = project or "<project-id>"
+        selector_hint = _cvw_shell_command(f"reviewpack --project {project_label}")
+        return (
+            f"HINT: the selected run does not belong to project {project_label!r}. "
+            f"Use `{selector_hint}` to package that project's latest run, pass a "
+            "matching `--run projects/<project-id>/<run-id>`, or drop `--project` "
+            "if you intended to package the selected run directly."
+        )
+    if message.startswith("Review pack already exists:"):
+        if run is not None:
+            force_hint = _cvw_shell_command(f"reviewpack --run {run} --force")
+        elif project is not None:
+            force_hint = _cvw_shell_command(f"reviewpack --project {project} --force")
+        else:
+            force_hint = _cvw_shell_command(
+                f"reviewpack --variant {variant_id or '<variant>'} --force"
+            )
+        return f"HINT: use `{force_hint}` to replace the existing review pack explicitly."
+
+    build_hint = (
+        f"build --project {project!r} --format md,pdf,docx"
+        if project is not None
+        else f"build --variant {variant_id or '<variant>'} --format md,pdf,docx"
+    )
+    return (
+        "HINT: build the target variant with review artifacts first, for example "
+        f"`{_cvw_shell_command(build_hint)}`, "
+        f"inspect `{_cvw_shell_command('workflow --id review.import')}`, "
+        "pass `--run <run-id>` to package a specific build deterministically, "
+        "or use `--force` to replace an existing review pack."
     )
 
 
@@ -4263,8 +4357,10 @@ def job_add(
 @project_app.command(
     "new",
     help=(
-        "Create a project workspace directly from a chosen base variant. "
-        "Use `project guide` if you want ranked variant recommendations first."
+        "Create a project workspace directly from a chosen base variant, with a "
+        "project-local proposal variant and patch scaffold. Use `project guide` "
+        "if you want ranked recommendations first. `--open` cannot be combined "
+        "with `--json`."
     ),
 )
 def project_new(
@@ -4343,6 +4439,9 @@ def project_new(
     if bool(job_url) == bool(job_file):
         typer.echo("ERROR: Provide exactly one of --job-url or --job-file", err=True)
         raise typer.Exit(code=2)
+    if json_output and open_after:
+        typer.echo("ERROR: --open cannot be combined with --json", err=True)
+        raise typer.Exit(code=2)
 
     config_path = resolve_config_path(config)
     base_variant = variant or resolve_default_variant(config_path)
@@ -4393,7 +4492,7 @@ def project_new(
     else:
         _print_project_new_summary(
             project_dir=result.project_dir,
-            variant_id=base_variant,
+            variant_id=load_variant(result.variant_path).id,
             job_source=job_source,
         )
 
@@ -4412,9 +4511,10 @@ def project_new(
 @project_app.command(
     "guide",
     help=(
-        "Ingest a job posting, rank candidate variants, and scaffold a project "
-        "workspace from the selected base variant. `--open` cannot be combined "
-        "with `--json`."
+        "Ingest a job posting, rank candidate variants, and scaffold a "
+        "project-local proposal workspace from the selected base variant. "
+        "This produces recommendations and editable project artifacts; it does "
+        "not rewrite the SoT. `--open` cannot be combined with `--json`."
     ),
 )
 def project_guide(
@@ -4668,7 +4768,14 @@ def project_show(
         review_run_id=review["run_id"] if review["review_ready"] else None,
     )
     review["next_command"] = commands.get("reviewpack", commands["build"])
-    patch_status = "empty" if details.patch_is_empty else f"{details.patch_line_count} lines"
+    if details.patch_is_empty:
+        patch_status = "empty"
+    elif details.patch_format == "project-ops":
+        patch_status = f"{details.patch_line_count} op"
+        if details.patch_line_count != 1:
+            patch_status += "s"
+    else:
+        patch_status = f"{details.patch_line_count} lines"
     summary = {
         "project": {
             "project_id": details.spec.project_id,
@@ -4692,6 +4799,7 @@ def project_show(
         },
         "patch": {
             "path": str(details.spec.patch_path),
+            "format": details.patch_format,
             "is_empty": details.patch_is_empty,
             "line_count": details.patch_line_count,
             "status": patch_status,
@@ -4705,6 +4813,269 @@ def project_show(
         return
 
     _print_project_show_summary(summary)
+
+
+@project_patch_app.command(
+    "replace-experience-bullet",
+    help=(
+        "Append a validated replace-experience-bullet project-op to "
+        "proposals/patch.yaml. If --old-text is omitted, the current SoT bullet "
+        "text is snapshotted automatically."
+    ),
+)
+def project_patch_replace_experience_bullet(
+    project: Annotated[
+        str,
+        typer.Argument(help="Project id or path"),
+    ],
+    role_id: Annotated[
+        str,
+        typer.Option(
+            "--role-id",
+            help="Stable role id from experience.yaml",
+        ),
+    ],
+    bullet_id: Annotated[
+        str,
+        typer.Option(
+            "--bullet-id",
+            help="Stable bullet id from experience.yaml",
+        ),
+    ],
+    new_text: Annotated[
+        str,
+        typer.Option(
+            "--new-text",
+            help="Replacement bullet text",
+        ),
+    ],
+    old_text: Annotated[
+        str | None,
+        typer.Option(
+            "--old-text",
+            help="Expected existing bullet text; defaults to the current SoT value",
+        ),
+    ] = None,
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Optional SoT override used for validation and source-text snapshotting",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
+    project_dir = resolve_project_dir(project, config_path)
+    try:
+        spec = load_project(project_dir)
+    except ProjectError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    resolved_sot = sot_path.resolve() if sot_path is not None else spec.sot_path.resolve()
+    if not resolved_sot.exists():
+        typer.echo(f"ERROR: SoT path not found: {resolved_sot}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        patch = append_replace_experience_bullet_operation(
+            project_dir=project_dir,
+            sot_path=resolved_sot,
+            role_id=role_id,
+            bullet_id=bullet_id,
+            new_text=new_text,
+            old_text=old_text,
+        )
+    except ProjectError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    op_count = len(patch.operations)
+    status = f"{op_count} op" if op_count == 1 else f"{op_count} ops"
+    followup_sot = resolved_sot if resolved_sot != spec.sot_path.resolve() else None
+    commands = _project_commands(
+        spec.project_id,
+        config_path=config_path,
+        sot_path=followup_sot,
+    )
+    summary = {
+        "command": "project.patch.replace-experience-bullet",
+        "project": {
+            "project_id": spec.project_id,
+            "project_dir": str(spec.project_dir),
+            "sot_path": str(resolved_sot),
+        },
+        "patch": {
+            "path": str(spec.patch_path),
+            "format": patch.format,
+            "line_count": op_count,
+            "status": status,
+        },
+        "operation": {
+            "op": "replace-experience-bullet",
+            "target": f"{role_id}:{bullet_id}",
+            "role_id": role_id,
+            "bullet_id": bullet_id,
+            "old_text": patch.operations[-1]["old_text"],
+            "new_text": patch.operations[-1]["new_text"],
+        },
+        "commands": commands,
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps(summary, indent=2, sort_keys=True))
+        return
+
+    _print_project_patch_summary(summary)
+
+
+@project_patch_app.command(
+    "replace-project-summary",
+    help=(
+        "Append a validated replace-project-summary project-op to "
+        "proposals/patch.yaml. If --old-text is omitted, the current SoT project "
+        "summary is snapshotted automatically."
+    ),
+)
+def project_patch_replace_project_summary(
+    project: Annotated[
+        str,
+        typer.Argument(help="Project id or path"),
+    ],
+    project_id: Annotated[
+        str,
+        typer.Option(
+            "--project-id",
+            help="Stable project id from projects.yaml",
+        ),
+    ],
+    new_text: Annotated[
+        str,
+        typer.Option(
+            "--new-text",
+            help="Replacement project summary text",
+        ),
+    ],
+    old_text: Annotated[
+        str | None,
+        typer.Option(
+            "--old-text",
+            help="Expected existing project summary; defaults to the current SoT value",
+        ),
+    ] = None,
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Optional SoT override used for validation and source-text snapshotting",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    config_path = resolve_config_path(config)
+    project_dir = resolve_project_dir(project, config_path)
+    try:
+        spec = load_project(project_dir)
+    except ProjectError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    resolved_sot = sot_path.resolve() if sot_path is not None else spec.sot_path.resolve()
+    if not resolved_sot.exists():
+        typer.echo(f"ERROR: SoT path not found: {resolved_sot}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        patch = append_replace_project_summary_operation(
+            project_dir=project_dir,
+            sot_path=resolved_sot,
+            project_id=project_id,
+            new_text=new_text,
+            old_text=old_text,
+        )
+    except ProjectError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    op_count = len(patch.operations)
+    status = f"{op_count} op" if op_count == 1 else f"{op_count} ops"
+    followup_sot = resolved_sot if resolved_sot != spec.sot_path.resolve() else None
+    commands = _project_commands(
+        spec.project_id,
+        config_path=config_path,
+        sot_path=followup_sot,
+    )
+    summary = {
+        "command": "project.patch.replace-project-summary",
+        "project": {
+            "project_id": spec.project_id,
+            "project_dir": str(spec.project_dir),
+            "sot_path": str(resolved_sot),
+        },
+        "patch": {
+            "path": str(spec.patch_path),
+            "format": patch.format,
+            "line_count": op_count,
+            "status": status,
+        },
+        "operation": {
+            "op": "replace-project-summary",
+            "target": project_id,
+            "project_id": project_id,
+            "old_text": patch.operations[-1]["old_text"],
+            "new_text": patch.operations[-1]["new_text"],
+        },
+        "commands": commands,
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps(summary, indent=2, sort_keys=True))
+        return
+
+    _print_project_patch_summary(summary)
 
 
 @project_app.command("apply")
@@ -5065,18 +5436,12 @@ def reviewpack(
         )
     except ReviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
-        build_hint = (
-            f"build --project {project!r} --format md,pdf,docx"
-            if project is not None
-            else f"build --variant {resolved_variant or '<variant>'} --format md,pdf,docx"
-        )
         typer.echo(
-            (
-                "HINT: build the target variant with review artifacts first, for example "
-                f"`{_cvw_shell_command(build_hint)}`, "
-                f"inspect `{_cvw_shell_command('workflow --id review.import')}`, "
-                "pass `--run <run-id>` to package a specific build deterministically, "
-                "or use `--force` to replace an existing review pack."
+            _reviewpack_error_hint(
+                message=str(exc),
+                project=project,
+                run=run,
+                variant_id=resolved_variant,
             ),
             err=True,
         )
@@ -5098,9 +5463,11 @@ def reviewpack(
         "Convert a reviewed DOCX into an import draft. Requires `--from` plus "
         "`--variant`, `--project`, or `--run`; `--run` may be combined with "
         "`--project` to pin a specific project-scoped run so canonical.md can "
-        "be resolved from the selected run. When the edited DOCX maps cleanly "
-        "to supported source fields, patch.diff targets SoT files; otherwise "
-        "it falls back to a review diff against canonical.md."
+        "be resolved from the selected run. When the edited DOCX is a resume "
+        "whose Experience bullet or Projects summary text edits map cleanly to "
+        "supported source fields, import-docx writes patch.yaml using "
+        "structured project-ops; otherwise it falls back to patch.diff against "
+        "canonical.md."
     ),
 )
 def import_docx(
@@ -5200,8 +5567,10 @@ def import_docx(
         "run_id": result.run_id,
         "apply_status": result.apply_status,
         "next_step": (
-            "Review notes.md, then apply patch.diff after explicit approval"
+            f"Review notes.md, then apply {result.patch_path.name} after explicit approval"
             if result.apply_status == "ready"
+            else "Review notes.md; the normalized patch is a verified no-op"
+            if result.apply_status == "ready_no_changes"
             else "Review notes.md and author a real SoT patch manually"
         ),
     }
@@ -5314,7 +5683,7 @@ def build(
             resolved = prepare_project_sot(
                 project_dir=project_spec.project_dir,
                 sot_path=resolved,
-                run_dir=run_dir,
+                target_dir=run_dir / "sot",
             )
         except ProjectError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
@@ -5343,6 +5712,7 @@ def build(
             style_preset=style_preset,
             variant_path_override=variant_path_override,
             run_dir=run_dir,
+            dist_dir=run_dir if project_spec is not None else None,
         )
     except (ValueError, RenderError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -5558,10 +5928,13 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    try:
-        sot_base = resolve_versioned_root(resolved)
-    except SotVersionError:
+    if sot_path is not None:
         sot_base = resolved
+    else:
+        try:
+            sot_base = resolve_versioned_root(resolved)
+        except SotVersionError:
+            sot_base = resolved
 
     controller = PreviewController(
         sot_base=sot_base,
@@ -5571,6 +5944,7 @@ def dev_serve(
         style_preset=resolved_preset,
         auto_pdf=True,
         project_dir=project_spec.project_dir if project_spec else None,
+        project_sot_override=sot_base if project_spec and sot_path is not None else None,
     )
     host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
     try:
@@ -5864,7 +6238,7 @@ def apply(
         Path,
         typer.Option(
             "--draft",
-            help="Draft directory containing patch.diff",
+            help="Draft directory containing patch.diff or patch.yaml",
         ),
     ],
     sot_path: Annotated[
@@ -5891,14 +6265,11 @@ def apply(
 ) -> None:
     configure_output_mode(plain, json_output)
     try:
-        patch_path = draft / "patch.diff"
-        patch_empty = patch_path.exists() and not patch_path.read_text().strip()
-        apply_draft(draft_dir=draft, sot_path=sot_path)
-    except ApplyError as exc:
+        result = apply_draft(draft_dir=draft, sot_path=sot_path)
+    except (ApplyError, ProjectError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    status = "no_changes" if patch_empty else "applied"
-    _print_apply_summary(draft, patch_path, status, sot_path)
+    _print_apply_summary(draft, result.patch_path, result.status, result.reason, sot_path)
 
 
 @app.command()

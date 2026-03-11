@@ -153,6 +153,8 @@ def test_apply_prints_status(tmp_path: Path) -> None:
     output = strip_ansi(result.stdout)
     assert "status:" in output
     assert "no_changes" in output
+    assert "reason:" in output
+    assert "empty_patch" in output
 
 
 def test_build_prints_output_locations() -> None:
@@ -238,7 +240,7 @@ def test_import_docx_help_mentions_run_resolution() -> None:
     output = strip_ansi(result.stdout)
     assert "--from" in output
     assert "canonical.md" in output
-    assert "patch.diff targets SoT files" in output
+    assert "patch.yaml using structured project-ops" in output
     assert "--run" in output
     assert "--variant" in output
     assert "--project" in output
@@ -310,6 +312,17 @@ def test_project_guide_help_mentions_open_json_constraint() -> None:
     runner = CliRunner()
 
     result = runner.invoke(app, ["project", "guide", "--help"])
+
+    assert result.exit_code == 0
+    assert "--open" in strip_ansi(result.stdout)
+    assert "--json" in strip_ansi(result.stdout)
+    assert "cannot be combined" in strip_ansi(result.stdout)
+
+
+def test_project_new_help_mentions_open_json_constraint() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["project", "new", "--help"])
 
     assert result.exit_code == 0
     assert "--open" in strip_ansi(result.stdout)
@@ -490,7 +503,7 @@ def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, mo
     assert inbox_entry["registry_status"] == "ephemeral"
     assert inbox_entry["expired"] is False
     assert inbox_entry["patch_path"] == str(patch_path)
-    assert "variant keep --project job --id base" in inbox_entry["keep_command"]
+    assert "variant keep --project job --id proposal-job" in inbox_entry["keep_command"]
     assert "variant discard --project job --yes" in inbox_entry["discard_command"]
     assert "preview --project job" in inbox_entry["preview_command"]
 

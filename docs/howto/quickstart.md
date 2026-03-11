@@ -197,6 +197,9 @@ Project proposals use project selectors instead of raw proposal paths:
 uv run cvw variant keep --project <project-id> --id <variant-id>
 ```
 
+If a copied project proposal still carries a colliding id such as `base`,
+`project show` and `variant inbox` will suggest a safe proposal id to keep.
+
 To discard or clean up drafts:
 
 ```bash
@@ -228,8 +231,13 @@ Guided path (recommended):
 uv run cvw project guide --job-url "https://example.com/job"
 uv run cvw project show <project-id>
 uv run cvw preview --project <project-id>
-uv run cvw reviewpack --project <project-id>
+uv run cvw build --project <project-id> --format md,pdf,docx
+uv run cvw project show <project-id>
 ```
+
+After the review-ready build completes, `project show` prints the pinned
+`reviewpack --project <project-id> --run projects/<project-id>/<run-id>`
+command for the latest immutable project run.
 
 Direct project creation when you already know the base variant:
 
@@ -240,12 +248,12 @@ uv run cvw preview --project <project-id>
 ```
 
 To package a specific project build deterministically, use the run path emitted by
-`build --project`:
+`build --project` or the pinned `project show` output:
 
 ```bash
 uv run cvw build --project <project-id> --format md,pdf,docx
 uv run cvw reviewpack --run projects/<project-id>/<run-id>
-uv run cvw import-docx --from ./var/reviews/projects/<project-id>/cv.docx --project <project-id>
+uv run cvw import-docx --from ./var/reviews/projects/<project-id>/cv.docx --project <project-id> --run projects/<project-id>/<run-id>
 ```
 
 If you need to refresh an existing review pack for the same run, rerun
@@ -259,6 +267,31 @@ If you re-run either command for the same job, provide a unique `--slug` to
 avoid colliding with an existing project directory.
 
 Projects keep job context, signals, and proposal drafts without mutating SoT.
+
+When you need a project-local content edit, use the guarded project patch
+authoring command:
+
+```bash
+uv run cvw project patch replace-experience-bullet <project-id> \
+  --role-id <role-id> \
+  --bullet-id <bullet-id> \
+  --new-text "Replacement text"
+
+uv run cvw project patch replace-project-summary <project-id> \
+  --project-id <project-id> \
+  --new-text "Replacement text"
+```
+
+This appends a `project-ops` entry to `var/projects/<project-id>/proposals/patch.yaml`.
+If you omit `--old-text`, the command snapshots the current SoT source text for
+that bullet or project summary. `preview --project`, `build --project`, and
+`project apply` all reuse the same compare-and-set contract.
+
+When reviewed DOCX edits stay on supported resume surfaces, `import-docx` now
+writes `var/drafts/import-*/patch.yaml` using the same `project-ops` schema.
+Formatting-only normalized imports report `apply_status: ready_no_changes`.
+Unsupported edits still fall back to `patch.diff` plus `apply_status:
+review_diff_only`.
 
 ## 11) Follow-up: clean generated artifacts
 

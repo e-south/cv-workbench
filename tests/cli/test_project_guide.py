@@ -15,6 +15,7 @@ import json
 import shlex
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
@@ -113,7 +114,36 @@ def test_project_guide_creates_project_and_recommends_variants(tmp_path: Path) -
     payload = json.loads(result.stdout)
     assert payload["command"] == "project.guide"
     assert payload["project"]["project_dir"].endswith("var/projects/job")
+    assert payload["proposal"]["variant_id"] == "proposal-job"
     assert payload["recommendations"]
+
+
+def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Leadership and reliability focus.\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-file",
+            str(job_path),
+            "--sot-path",
+            "sot.sample",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.count("project_dir:") == 1
+    assert "base_variant: base" in result.stdout
+    assert "proposal_variant: proposal-job" in result.stdout
+    assert result.stdout.count("preview_step:") == 1
 
 
 def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> None:
@@ -199,6 +229,451 @@ def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> N
     )
 
 
+def test_project_show_suggests_safe_keep_id_for_legacy_base_proposal(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    job_dir = project_dir / "job"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    signals_path = job_dir / "signals.json"
+    extracted_path = job_dir / "extracted.txt"
+    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    extracted_path.write_text("Leadership role.\n")
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+                "  job:",
+                "    source:",
+                "      type: file",
+                f"      value: {tmp_path / 'job.txt'}",
+                "    extracted_path: job/extracted.txt",
+                "    extracted_hash: deadbeef",
+                "    raw_path: null",
+                "  signals:",
+                "    path: job/signals.json",
+                "    hash: cafebabe",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf]\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "show",
+            "job",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["proposal"]["variant_id"] == "base"
+    assert payload["commands"]["keep"] == _recipe_command(
+        "variant keep --project job --id proposal-job",
+        config_path=config_path,
+    )
+
+
+def test_project_show_reports_project_ops_patch_metadata(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    job_dir = project_dir / "job"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    signals_path = job_dir / "signals.json"
+    extracted_path = job_dir / "extracted.txt"
+    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    extracted_path.write_text("Leadership role.\n")
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+                "  job:",
+                "    source:",
+                "      type: file",
+                f"      value: {tmp_path / 'job.txt'}",
+                "    extracted_path: job/extracted.txt",
+                "    extracted_hash: deadbeef",
+                "    raw_path: null",
+                "  signals:",
+                "    path: job/signals.json",
+                "    hash: cafebabe",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: proposal-focus",
+                "  outputs: [md, pdf]",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "patch.yaml").write_text(
+        "\n".join(
+            [
+                "patch:",
+                "  format: project-ops",
+                "  operations:",
+                "    - op: replace-experience-bullet",
+                "      role_id: role",
+                "      bullet_id: b1",
+                "      old_text: Did work",
+                "      new_text: Delivered measurable outcomes",
+            ]
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "show",
+            "job",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["patch"]["format"] == "project-ops"
+    assert payload["patch"]["is_empty"] is False
+    assert payload["patch"]["line_count"] == 1
+    assert payload["patch"]["status"] == "1 op"
+
+
+def test_project_patch_replace_experience_bullet_appends_validated_op(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {sot_path}",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
+    (proposals_dir / "patch.yaml").write_text(
+        "patch:\n  format: project-ops\n  operations: []\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "patch",
+            "replace-experience-bullet",
+            "job",
+            "--role-id",
+            "role-1",
+            "--bullet-id",
+            "bullet-1",
+            "--new-text",
+            "Built platform foundations for regulated delivery.",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "project.patch.replace-experience-bullet"
+    assert payload["patch"]["status"] == "1 op"
+    assert payload["operation"]["old_text"] == "Built platform foundations."
+    patch_payload = yaml.safe_load((proposals_dir / "patch.yaml").read_text())
+    assert patch_payload["patch"]["operations"][0]["new_text"] == (
+        "Built platform foundations for regulated delivery."
+    )
+
+
+def test_project_patch_replace_project_summary_appends_validated_op(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "\n".join(
+            [
+                "projects:",
+                "  - id: project-1",
+                "    name: Example Project",
+                "    summary: Example summary.",
+                "    tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {sot_path}",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
+    (proposals_dir / "patch.yaml").write_text(
+        "patch:\n  format: project-ops\n  operations: []\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "patch",
+            "replace-project-summary",
+            "job",
+            "--project-id",
+            "project-1",
+            "--new-text",
+            "Example summary tailored for regulated delivery.",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "project.patch.replace-project-summary"
+    assert payload["patch"]["status"] == "1 op"
+    assert payload["operation"]["old_text"] == "Example summary."
+    patch_payload = yaml.safe_load((proposals_dir / "patch.yaml").read_text())
+    assert patch_payload["patch"]["operations"][0]["new_text"] == (
+        "Example summary tailored for regulated delivery."
+    )
+
+
+def test_project_patch_followup_commands_include_override_sot_path(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    recorded_sot_path = tmp_path / "local" / "sot"
+    override_sot_path = tmp_path / "override" / "sot"
+    recorded_sot_path.mkdir(parents=True, exist_ok=True)
+    override_sot_path.mkdir(parents=True, exist_ok=True)
+    for root, summary in (
+        (recorded_sot_path, "Recorded summary."),
+        (override_sot_path, "Override summary."),
+    ):
+        (root / "experience.yaml").write_text(
+            "\n".join(
+                [
+                    "roles:",
+                    "  - id: role-1",
+                    "    company: Co",
+                    "    title: Title",
+                    "    start: 2020",
+                    "    bullets:",
+                    "      - id: bullet-1",
+                    "        text: Built platform foundations.",
+                    "        tags: [core]",
+                ]
+            )
+            + "\n"
+        )
+        (root / "projects.yaml").write_text(
+            "\n".join(
+                [
+                    "projects:",
+                    "  - id: project-1",
+                    "    name: Example Project",
+                    f"    summary: {summary}",
+                    "    tags: [core]",
+                ]
+            )
+            + "\n"
+        )
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {recorded_sot_path}",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
+    (proposals_dir / "patch.yaml").write_text(
+        "patch:\n  format: project-ops\n  operations: []\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "patch",
+            "replace-project-summary",
+            "job",
+            "--project-id",
+            "project-1",
+            "--new-text",
+            "Override summary tailored for regulated delivery.",
+            "--sot-path",
+            str(override_sot_path),
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["project"]["sot_path"] == str(override_sot_path.resolve())
+    assert payload["commands"]["preview"] == _recipe_command(
+        "preview --project job",
+        config_path=config_path,
+        sot_path=override_sot_path,
+    )
+    assert payload["commands"]["apply"] == _recipe_command(
+        "project apply job",
+        config_path=config_path,
+        sot_path=override_sot_path,
+    )
+
+
+def test_project_patch_replace_experience_bullet_rejects_legacy_patch_format(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {sot_path}",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "patch",
+            "replace-experience-bullet",
+            "job",
+            "--role-id",
+            "role-1",
+            "--bullet-id",
+            "bullet-1",
+            "--new-text",
+            "Built platform foundations for regulated delivery.",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "requires format=project-ops" in (result.stderr or "")
+
+
 def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     project_dir = tmp_path / "var" / "projects" / "job"
@@ -274,6 +749,108 @@ def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready
     )
 
 
+def test_project_show_requires_review_artifact_files_for_ready_status(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    job_dir = project_dir / "job"
+    run_dir = tmp_path / "var" / "runs" / "projects" / "job" / "2026-03-10T13-00-00Z"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "signals.json").write_text("{\"keywords\": [\"leadership\"]}\n")
+    (job_dir / "extracted.txt").write_text("Leadership role.\n")
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+                "  job:",
+                "    source:",
+                "      type: file",
+                f"      value: {tmp_path / 'job.txt'}",
+                "    extracted_path: job/extracted.txt",
+                "    extracted_hash: deadbeef",
+                "    raw_path: null",
+                "  signals:",
+                "    path: job/signals.json",
+                "    hash: cafebabe",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf, docx]\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (run_dir / "canonical.md").write_text("base\n")
+    (run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "created_at": "2026-03-10T13:00:00+00:00",
+                "formats": ["md", "pdf", "docx"],
+                "outputs": {"md": "cv.md", "pdf": "cv.pdf", "docx": "cv.docx"},
+                "variant": {"id": "base"},
+            }
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "show",
+            "job",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["review"]["status"] == "build_required"
+    assert payload["review"]["run_id"] == "projects/job/2026-03-10T13-00-00Z"
+    assert payload["review"]["review_ready"] is False
+    assert payload["review"]["next_command"] == _recipe_command(
+        "build --project job --format md,pdf,docx",
+        config_path=config_path,
+    )
+
+
+def test_project_new_rejects_open_with_json(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "sot.sample"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Leadership role.\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "new",
+            "--job-file",
+            str(job_path),
+            "--sot-path",
+            str(sot_path),
+            "--config",
+            str(config_path),
+            "--open",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "cannot be combined" in (result.stderr or "")
+    assert not (tmp_path / "var" / "projects" / "job").exists()
+
+
 def test_project_new_plain_prints_single_summary(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     sot_path = tmp_path / "sot.sample"
@@ -299,4 +876,5 @@ def test_project_new_plain_prints_single_summary(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert result.stdout.count("project_dir:") == 1
+    assert "proposal_variant: proposal-job" in result.stdout
     assert result.stdout.count("preview_step:") == 1

@@ -24,7 +24,10 @@ Fields:
 ## One-shot preview
 
 `uv run cvw preview --once` builds the preview outputs once and exits without starting
-the server. No session file is written in this mode.
+the server. No session file is written in this mode. With `--project`, the
+rendered files stay under `var/runs/preview/<project-id>/`. When `--sot-path`
+points at a concrete version directory, preview uses that exact directory
+instead of following `ACTIVE`.
 
 ## HTTP API
 
@@ -59,13 +62,14 @@ Browser automation should target the stable `data-cvw-*` hooks:
 - `data-cvw-format="html|pdf|md|ats"` on each format button
 - `data-cvw-active="true|false"` + `aria-pressed` on the active format button
 - `data-cvw-action="rebuild|stop"`
-- `data-cvw-status="status|error|run-list"`
+- `data-cvw-status="status|error|summary|run-list"`
 - `data-cvw-build-id` on `<body>` (updated on successful rebuild)
 - `data-cvw-view="preview-frame"`
 
 The project selector is read-only and displays the active project (if the
 preview was started with `--project`); otherwise it shows `none` instead of a
-disabled list of unrelated projects.
+disabled list of unrelated projects. The preview UI is a render-control surface,
+not a content editor.
 
 ## Interaction semantics
 

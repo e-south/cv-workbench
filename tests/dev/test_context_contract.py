@@ -71,3 +71,13 @@ def test_sync_default_docs_are_consistent() -> None:
     assert "defaults to local mode" in quickstart
     assert "defaults to local updates" in site_contract
     assert "current default is local-first sync" in journal
+
+
+def test_project_review_docs_keep_build_before_reviewpack() -> None:
+    quickstart = (REPO_ROOT / "docs" / "howto" / "quickstart.md").read_text()
+    contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
+
+    assert "uv run cvw build --project <project-id> --format md,pdf,docx" in quickstart
+    assert "uv run cvw reviewpack --project <project-id>" not in quickstart
+    assert "latest review-ready" in contract
+    assert "get the pinned `--run` command" in contract

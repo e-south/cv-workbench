@@ -17,11 +17,15 @@ import yaml
 
 from cvworkbench.ingestion.ingest import ExtractResult
 from cvworkbench.ops.projects import (
+    ProjectError,
     apply_project_patch,
+    append_replace_experience_bullet_operation,
+    append_replace_project_summary_operation,
     create_project_from_file,
     create_project_from_url,
     load_project,
     load_project_patch,
+    prepare_project_sot,
 )
 
 
@@ -111,8 +115,390 @@ def test_create_project_from_file(tmp_path: Path) -> None:
     assert spec.project_id == "orbit"
     assert spec.base_variant_id == "base"
     assert spec.variant_path.exists()
+    variant_payload = yaml.safe_load(spec.variant_path.read_text())
+    assert variant_payload["variant"]["id"] == "proposal-orbit"
+
+    patch_payload = yaml.safe_load(result.patch_path.read_text())
+    assert patch_payload["patch"]["format"] == "project-ops"
+    assert patch_payload["patch"]["operations"] == []
 
     diff = load_project_patch(project_dir)
     assert diff == ""
 
     apply_project_patch(project_dir=project_dir, sot_path=sot_path)
+
+
+def test_project_ops_replace_experience_bullet_prepare_and_apply(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+    result.patch_path.write_text(
+        yaml.safe_dump(
+            {
+                "patch": {
+                    "format": "project-ops",
+                    "operations": [
+                        {
+                            "op": "replace-experience-bullet",
+                            "role_id": "role-1",
+                            "bullet_id": "bullet-1",
+                            "old_text": "Built platform foundations.",
+                            "new_text": "Built platform foundations for regulated delivery.",
+                        }
+                    ],
+                }
+            },
+            sort_keys=False,
+        )
+    )
+
+    diff = load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    assert "experience.yaml" in diff
+    assert "-        text: Built platform foundations." in diff
+    assert "Built platform foundations for regulated delivery." in diff
+
+    prepared = prepare_project_sot(
+        project_dir=result.project_dir,
+        sot_path=sot_path,
+        target_dir=tmp_path / "var" / "runs" / "project-preview" / "sot",
+    )
+    assert prepared != sot_path
+    assert "regulated delivery" in (prepared / "experience.yaml").read_text()
+    assert "regulated delivery" not in (sot_path / "experience.yaml").read_text()
+
+    apply_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    assert "regulated delivery" in (sot_path / "experience.yaml").read_text()
+
+
+def test_append_replace_experience_bullet_operation_snapshots_current_text(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    patch = append_replace_experience_bullet_operation(
+        project_dir=result.project_dir,
+        sot_path=sot_path,
+        role_id="role-1",
+        bullet_id="bullet-1",
+        new_text="Built platform foundations for regulated delivery.",
+    )
+
+    assert len(patch.operations) == 1
+    op = patch.operations[0]
+    assert op["old_text"] == "Built platform foundations."
+    assert op["new_text"] == "Built platform foundations for regulated delivery."
+    diff = load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    assert "Built platform foundations for regulated delivery." in diff
+
+
+def test_project_ops_replace_project_summary_prepare_and_apply(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "\n".join(
+            [
+                "projects:",
+                "  - id: project-1",
+                "    name: Example Project",
+                "    summary: Example summary.",
+                "    tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+    result.patch_path.write_text(
+        yaml.safe_dump(
+            {
+                "patch": {
+                    "format": "project-ops",
+                    "operations": [
+                        {
+                            "op": "replace-project-summary",
+                            "project_id": "project-1",
+                            "old_text": "Example summary.",
+                            "new_text": "Example summary tailored for regulated delivery.",
+                        }
+                    ],
+                }
+            },
+            sort_keys=False,
+        )
+    )
+
+    diff = load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    assert "projects.yaml" in diff
+    assert "Example summary tailored for regulated delivery." in diff
+
+    prepared = prepare_project_sot(
+        project_dir=result.project_dir,
+        sot_path=sot_path,
+        target_dir=tmp_path / "var" / "runs" / "project-preview" / "sot",
+    )
+    assert prepared != sot_path
+    assert "regulated delivery" in (prepared / "projects.yaml").read_text()
+    assert "regulated delivery" not in (sot_path / "projects.yaml").read_text()
+
+    apply_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    assert "regulated delivery" in (sot_path / "projects.yaml").read_text()
+
+
+def test_append_replace_project_summary_operation_snapshots_current_text(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "\n".join(
+            [
+                "projects:",
+                "  - id: project-1",
+                "    name: Example Project",
+                "    summary: Example summary.",
+                "    tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    patch = append_replace_project_summary_operation(
+        project_dir=result.project_dir,
+        sot_path=sot_path,
+        project_id="project-1",
+        new_text="Example summary tailored for regulated delivery.",
+    )
+
+    assert len(patch.operations) == 1
+    op = patch.operations[0]
+    assert op["old_text"] == "Example summary."
+    assert op["new_text"] == "Example summary tailored for regulated delivery."
+    diff = load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    assert "Example summary tailored for regulated delivery." in diff
+
+
+def test_project_ops_fail_fast_on_source_text_drift(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+    result.patch_path.write_text(
+        yaml.safe_dump(
+            {
+                "patch": {
+                    "format": "project-ops",
+                    "operations": [
+                        {
+                            "op": "replace-experience-bullet",
+                            "role_id": "role-1",
+                            "bullet_id": "bullet-1",
+                            "old_text": "Stale source text.",
+                            "new_text": "Built platform foundations for regulated delivery.",
+                        }
+                    ],
+                }
+            },
+            sort_keys=False,
+        )
+    )
+
+    try:
+        apply_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    except ProjectError as exc:
+        assert "source text mismatch" in str(exc)
+    else:
+        raise AssertionError("Expected apply_project_patch to reject stale source text")
+
+
+def test_project_ops_fail_fast_on_duplicate_experience_targets(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+                "      - id: bullet-1",
+                "        text: Built platform foundations again.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+    result.patch_path.write_text(
+        yaml.safe_dump(
+            {
+                "patch": {
+                    "format": "project-ops",
+                    "operations": [
+                        {
+                            "op": "replace-experience-bullet",
+                            "role_id": "role-1",
+                            "bullet_id": "bullet-1",
+                            "old_text": "Built platform foundations.",
+                            "new_text": "Built platform foundations for regulated delivery.",
+                        }
+                    ],
+                }
+            },
+            sort_keys=False,
+        )
+    )
+
+    try:
+        load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
+    except ProjectError as exc:
+        assert "duplicate experience bullet target" in str(exc)
+    else:
+        raise AssertionError("Expected duplicate project-op target detection")

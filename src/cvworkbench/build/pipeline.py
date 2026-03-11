@@ -60,6 +60,7 @@ def build_documents(
     style_preset: str | None = None,
     variant_path_override: Path | None = None,
     run_dir: Path | None = None,
+    dist_dir: Path | None = None,
 ) -> BuildResult:
     if variant_path_override is not None:
         variant_path = variant_path_override
@@ -84,7 +85,7 @@ def build_documents(
     selection_path = run_dir / "selection.json"
     selection_path.write_text(json.dumps(selection, indent=2, sort_keys=True) + "\n")
 
-    dist_dir = resolve_dist_path(config_path) / variant.id
+    dist_dir = dist_dir or (resolve_dist_path(config_path) / variant.id)
     dist_dir.mkdir(parents=True, exist_ok=True)
     (dist_dir / "selection.json").write_text(json.dumps(selection, indent=2, sort_keys=True) + "\n")
 
@@ -122,7 +123,8 @@ def build_documents(
             plan,
         )
         run_output = run_dir / output_file.name
-        shutil.copy2(output_file, run_output)
+        if output_file.resolve() != run_output.resolve():
+            shutil.copy2(output_file, run_output)
         output_paths[fmt] = output_file
         render_details[fmt] = {
             "to": plan.to,

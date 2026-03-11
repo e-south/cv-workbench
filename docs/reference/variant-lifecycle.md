@@ -35,7 +35,9 @@ expiration metadata. The registry is local-only and gitignored.
 - `uv run cvw variant keep --path <variant.yaml> --id <variant-id>`: promote a draft or
   project proposal into `config/variants/`.
 - `uv run cvw variant keep --project <project-id> --id <variant-id>`: promote a project
-  proposal without reconstructing the raw `variant.yaml` path.
+  proposal without reconstructing the raw `variant.yaml` path. `variant inbox`
+  and `project show` now suggest a safe proposal id when the copied project
+  variant still carries a colliding id such as `base`.
 - `uv run cvw variant discard --path <variant.yaml> --yes`: discard a draft/proposal
   and delete its artifacts.
 - `uv run cvw variant discard --project <project-id> --yes`: discard a project proposal by

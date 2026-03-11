@@ -61,6 +61,18 @@ uv run cvw variant keep --project <slug> --id <variant-id>
 uv run cvw variant discard --project <slug> --yes
 ```
 
+New projects scaffold a project-local proposal variant plus a `project-ops`
+patch file at `proposals/patch.yaml`. `project guide` helps you choose a base
+variant and inspect signals; it does not directly rewrite SoT content.
+
+Today the supported executable op families are guarded experience bullet
+replacement and project summary replacement. Use
+`uv run cvw project patch replace-experience-bullet <slug> ...` or
+`uv run cvw project patch replace-project-summary <slug> ...` to append
+validated ops without hand-editing YAML. The commands record stable ids plus
+the expected source text so project preview, build, and apply fail fast if the
+underlying SoT has drifted.
+
 ## Configuration
 
 The registry path and user agent are set in `config/workbench.yaml`:

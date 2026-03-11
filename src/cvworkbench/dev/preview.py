@@ -107,6 +107,7 @@ class PreviewController:
         output_format: str = "html",
         auto_pdf: bool = True,
         project_dir: Path | None = None,
+        project_sot_override: Path | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._sot_base = sot_base
@@ -117,6 +118,7 @@ class PreviewController:
         self._format = output_format
         self._auto_pdf = auto_pdf
         self._project_dir = project_dir
+        self._project_sot_override = project_sot_override
         self._project_id: str | None = None
         self._catalog = self._load_catalog()
         self._state: PreviewState | None = None
@@ -161,15 +163,24 @@ class PreviewController:
                     self._project_id = project_spec.project_id
                     variant_path_override = project_spec.variant_path
                     self._variant_id = load_variant(project_spec.variant_path).id
-                    sot_path = resolve_active_sot_path(project_spec.sot_path)
+                    if self._project_sot_override is not None:
+                        sot_path = resolve_sot_path(self._project_sot_override, self._config_path)
+                    else:
+                        sot_path = resolve_active_sot_path(project_spec.sot_path)
                     run_dir = (
                         resolve_runs_path(self._config_path) / "preview" / project_spec.project_id
                     )
                     run_dir.mkdir(parents=True, exist_ok=True)
+                    staging_dir = (
+                        resolve_runs_path(self._config_path)
+                        / "preview-staging"
+                        / project_spec.project_id
+                        / "sot"
+                    )
                     sot_path = prepare_project_sot(
                         project_dir=project_spec.project_dir,
                         sot_path=sot_path,
-                        run_dir=run_dir,
+                        target_dir=staging_dir,
                     )
                 else:
                     sot_path = resolve_sot_path(self._sot_base, self._config_path)
@@ -197,6 +208,7 @@ class PreviewController:
                     style_preset=self._style_preset,
                     variant_path_override=variant_path_override,
                     run_dir=run_dir,
+                    dist_dir=run_dir if self._project_dir is not None else None,
                 )
             except (ValueError, ThemeError) as exc:
                 message = str(exc)

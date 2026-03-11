@@ -12,8 +12,10 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import difflib
+import json
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
@@ -111,6 +113,114 @@ def test_apply_rejects_review_diff_patches_that_do_not_target_sot_files(tmp_path
 
     assert result.exit_code != 0
     assert "Patch target does not exist under SoT: canonical.md" in (result.stderr or "")
+
+
+def test_apply_accepts_project_ops_patch_yaml(tmp_path: Path) -> None:
+    sot_path = tmp_path / "sot"
+    sot_path.mkdir()
+    _write_minimal_sot(sot_path)
+
+    draft_dir = tmp_path / "draft"
+    draft_dir.mkdir()
+    (draft_dir / "patch.yaml").write_text(
+        "\n".join(
+            [
+                "patch:",
+                "  format: project-ops",
+                "  operations:",
+                "    - op: replace-experience-bullet",
+                "      role_id: role-1",
+                "      bullet_id: bullet-1",
+                "      old_text: Delivered outcomes.",
+                "      new_text: Delivered measurable outcomes.",
+                "    - op: replace-project-summary",
+                "      project_id: project-1",
+                "      old_text: Example summary.",
+                "      new_text: Tailored project summary.",
+            ]
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(draft_dir),
+            "--sot-path",
+            str(sot_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Delivered measurable outcomes." in (sot_path / "experience.yaml").read_text()
+    assert "Tailored project summary." in (sot_path / "projects.yaml").read_text()
+
+
+def test_apply_reports_compiled_noop_reason_for_project_ops(tmp_path: Path) -> None:
+    sot_path = tmp_path / "sot"
+    sot_path.mkdir()
+    (sot_path / "experience.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "roles": [
+                    {
+                        "id": "role-1",
+                        "company": "Example Co",
+                        "title": "Engineer",
+                        "start": 2021,
+                        "bullets": [
+                            {
+                                "id": "bullet-1",
+                                "text": "Delivered outcomes.",
+                                "tags": ["impact"],
+                            }
+                        ],
+                    }
+                ]
+            },
+            sort_keys=False,
+        )
+    )
+
+    draft_dir = tmp_path / "draft"
+    draft_dir.mkdir()
+    (draft_dir / "patch.yaml").write_text(
+        "\n".join(
+            [
+                "patch:",
+                "  format: project-ops",
+                "  operations:",
+                "    - op: replace-experience-bullet",
+                "      role_id: role-1",
+                "      bullet_id: bullet-1",
+                "      old_text: Delivered outcomes.",
+                "      new_text: Delivered outcomes.",
+            ]
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(draft_dir),
+            "--sot-path",
+            str(sot_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["data"]["status"] == "no_changes"
+    assert payload["data"]["reason"] == "compiled_noop"
+    assert "Delivered outcomes." in (sot_path / "experience.yaml").read_text()
 
 
 def _write_minimal_sot(sot_path: Path) -> None:
