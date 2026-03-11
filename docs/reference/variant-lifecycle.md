@@ -29,7 +29,9 @@ expiration metadata. The registry is local-only and gitignored.
 - `uv run cvw variant list`: show configured variants alongside pending lifecycle entries.
 - `uv run cvw variant inbox`: list pending ephemeral variants. In `--json` mode it also
   emits selector-aware commands such as `keep_command`, `discard_command`, and
-  `preview_command` for project proposals.
+  `preview_command` for project proposals. Entries whose TTL has already
+  elapsed are surfaced as `status="expired_pending_gc"` with a dry-run
+  `gc_command` hint instead of silently looking identical to fresh proposals.
 - `uv run cvw variant keep --path <variant.yaml> --id <variant-id>`: promote a draft or
   project proposal into `config/variants/`.
 - `uv run cvw variant keep --project <project-id> --id <variant-id>`: promote a project

@@ -11,10 +11,13 @@ variants.
 uv run cvw theme list
 ```
 
+Shipped themes currently include `default`, `editorial`, and `signal`.
+
 ## Inspect a theme
 
 ```bash
 uv run cvw theme info default
+uv run cvw theme info editorial
 ```
 
 ## Render with a theme and preset
@@ -22,6 +25,8 @@ uv run cvw theme info default
 ```bash
 uv run cvw build --sot-path ./sot.sample --variant base --theme default --style-preset modern
 uv run cvw build --sot-path ./sot.sample --variant base --theme default --style-preset compact
+uv run cvw build --sot-path ./sot.sample --variant base --theme editorial --style-preset modern
+uv run cvw build --sot-path ./sot.sample --variant base --theme signal --style-preset compact
 ```
 
 ## Quick HTML preview

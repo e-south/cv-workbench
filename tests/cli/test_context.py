@@ -280,6 +280,54 @@ def test_context_recipe_steps_expose_machine_actionable_metadata(tmp_path: Path)
     assert review_edit_step["placeholders"] == ["<variant>"]
 
 
+def test_bootstrap_json_matches_compact_context_payload(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    config_path.write_text(
+        config_path.read_text().replace(
+            "  reviews: ../var/reviews\n",
+            "  reviews: ../var/reviews\n  sot: ../sot.sample\n",
+        )
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "--json", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "bootstrap"
+    assert payload["sot"]["status"] == "ready"
+    assert payload["recommended_workflows"][0]["id"] == "automation.verify"
+    assert payload["recommended_workflows"][0]["json_command"] == _workflow_command(
+        "automation.verify",
+        config_path=config_path,
+        json_output=True,
+        compact=True,
+    )
+    assert "latest_by_variant" not in payload["runs"]
+
+
+def test_bootstrap_plain_focuses_on_next_workflows(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    config_path.write_text(
+        config_path.read_text().replace(
+            "  reviews: ../var/reviews\n",
+            "  reviews: ../var/reviews\n  sot: ../sot.sample\n",
+        )
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "--plain", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    output = strip_ansi(result.stdout)
+    assert "next_workflows:" in output
+    assert "automation.verify" in output
+    assert "next_commands:" in output
+    assert "recipes:" not in output
+
+
 def test_context_compact_matches_full_shared_fields(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     _write_minimal_sot(tmp_path)
@@ -365,8 +413,14 @@ def test_context_compact_limits_run_scan_to_latest(tmp_path: Path, monkeypatch) 
 
     seen: dict[str, int] = {}
 
-    def fake_latest_runs_by_variant(config_path: Path, *, limit: int = 3):
+    def fake_latest_runs_by_variant(
+        config_path: Path,
+        *,
+        limit: int = 3,
+        include_project_runs: bool = False,
+    ):
         seen["limit"] = limit
+        seen["include_project_runs"] = int(include_project_runs)
         return {}, []
 
     app_module = importlib.import_module("cvworkbench.cli.app")
@@ -377,6 +431,7 @@ def test_context_compact_limits_run_scan_to_latest(tmp_path: Path, monkeypatch) 
 
     assert result.exit_code == 0
     assert seen["limit"] == 1
+    assert seen["include_project_runs"] == 0
 
 
 def test_context_uses_validated_payload_without_reloading_sot(tmp_path: Path, monkeypatch) -> None:
@@ -526,24 +581,40 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         "import-docx --from var/reviews/base/cv.docx --variant base",
         config_path=config_path,
     )
-    assert review_recipe["steps"][3]["command"] == _recipe_command(
+    assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
+    assert review_recipe["steps"][4]["command"] == _recipe_command(
         "apply --draft <draft-dir>",
         sot_path=sot_path,
     )
 
     project_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide")
     assert project_recipe["steps"][0]["command"] == _recipe_command(
-        "project guide --job-url <job-url>",
+        "project guide --job-file <job-file>",
         config_path=config_path,
         sot_path=sot_path,
     )
     assert project_recipe["steps"][1]["command"] == _recipe_command(
+        "project show <project-id>",
+        config_path=config_path,
+    )
+    assert project_recipe["steps"][2]["command"] == _recipe_command(
         "preview --project <project-id>",
         config_path=config_path,
         sot_path=sot_path,
     )
-    assert project_recipe["steps"][2]["command"] == _recipe_command(
+    assert project_recipe["steps"][3]["command"] == _recipe_command(
         "project apply <project-id>",
+        config_path=config_path,
+        sot_path=sot_path,
+    )
+
+    inspect_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.inspect")
+    assert inspect_recipe["steps"][0]["command"] == _recipe_command(
+        "project show <project-id>",
+        config_path=config_path,
+    )
+    assert inspect_recipe["steps"][1]["command"] == _recipe_command(
+        "preview --project <project-id>",
         config_path=config_path,
         sot_path=sot_path,
     )
@@ -592,10 +663,14 @@ def test_context_project_recipe_keeps_placeholder_project_id(tmp_path: Path) -> 
     payload = json.loads(result.stdout)
     project_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide")
     assert project_recipe["steps"][1]["command"] == _recipe_command(
-        "preview --project <project-id>",
+        "project show <project-id>",
         config_path=config_path,
     )
     assert project_recipe["steps"][2]["command"] == _recipe_command(
+        "preview --project <project-id>",
+        config_path=config_path,
+    )
+    assert project_recipe["steps"][3]["command"] == _recipe_command(
         "project apply <project-id>",
         config_path=config_path,
     )
@@ -676,6 +751,7 @@ def test_context_compact_recommends_local_bootstrap_when_local_sot_is_missing(tm
 def test_context_recipes_preserve_external_config_for_review_and_project(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     _write_minimal_sot(tmp_path)
+    sot_path = tmp_path / "sot.sample"
     config_path.write_text(
         config_path.read_text().replace(
             "  reviews: ../var/reviews\n",
@@ -697,15 +773,107 @@ def test_context_recipes_preserve_external_config_for_review_and_project(tmp_pat
         "import-docx --from var/reviews/base/cv.docx --variant base",
         config_path=config_path,
     )
+    assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
+    assert review_recipe["steps"][4]["command"] == _recipe_command(
+        "apply --draft <draft-dir>",
+        sot_path=sot_path,
+    )
     project_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide")
     assert project_recipe["steps"][0]["command"] == _recipe_command(
-        "project guide --job-url <job-url>",
+        "project guide --job-file <job-file>",
         config_path=config_path,
     )
     assert project_recipe["steps"][1]["command"] == _recipe_command(
+        "project show <project-id>",
+        config_path=config_path,
+    )
+    assert project_recipe["steps"][2]["command"] == _recipe_command(
         "preview --project <project-id>",
         config_path=config_path,
     )
+
+
+def test_context_recommended_workflows_skip_review_import_when_runs_are_not_review_ready(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    config_path.write_text(
+        config_path.read_text().replace(
+            "  reviews: ../var/reviews\n",
+            "  reviews: ../var/reviews\n  sot: ../sot.sample\n",
+        )
+    )
+    run_dir = tmp_path / "var" / "runs" / "2026-03-10T00-00-00Z"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "created_at": "2026-03-10T00:00:00+00:00",
+                "formats": ["md"],
+                "outputs": {"md": "cv.md"},
+                "variant": {"id": "base"},
+            }
+        )
+    )
+    (run_dir / "cv.md").write_text("# cv\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["context", "--json", "--compact", "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    recommended_ids = [item["id"] for item in payload["recommended_workflows"]]
+    assert "review.import" not in recommended_ids
+    assert "project.guide" in recommended_ids
+
+
+def test_context_variant_run_inventory_ignores_newer_project_runs(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    config_path.write_text(
+        config_path.read_text().replace(
+            "  reviews: ../var/reviews\n",
+            "  reviews: ../var/reviews\n  sot: ../sot.sample\n",
+        )
+    )
+    variant_run_dir = tmp_path / "var" / "runs" / "2026-03-09T00-00-00Z"
+    variant_run_dir.mkdir(parents=True, exist_ok=True)
+    (variant_run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (variant_run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "created_at": "2026-03-09T00:00:00+00:00",
+                "formats": ["md", "pdf", "docx"],
+                "outputs": {"md": "cv.md", "pdf": "cv.pdf", "docx": "cv.docx"},
+                "variant": {"id": "base"},
+            }
+        )
+    )
+    project_run_dir = tmp_path / "var" / "runs" / "projects" / "job" / "2026-03-10T00-00-00Z"
+    project_run_dir.mkdir(parents=True, exist_ok=True)
+    (project_run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "created_at": "2026-03-10T00:00:00+00:00",
+                "formats": ["md"],
+                "outputs": {"md": "cv.md"},
+                "variant": {"id": "base"},
+            }
+        )
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["context", "--json", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["runs"]["latest_by_variant"]["base"][0]["run_id"] == "2026-03-09T00-00-00Z"
+    recommended_ids = [item["id"] for item in payload["recommended_workflows"]]
+    assert "review.import" in recommended_ids
 
 
 def test_context_invalid_sot_recommends_repair_workflow(tmp_path: Path) -> None:

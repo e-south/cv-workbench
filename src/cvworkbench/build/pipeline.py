@@ -164,10 +164,19 @@ def build_documents(
 
 
 def create_run_dir(runs_root: Path) -> Path:
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-    run_dir = runs_root / timestamp
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
+    base_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+    runs_root.mkdir(parents=True, exist_ok=True)
+
+    for suffix in range(0, 1000):
+        name = base_timestamp if suffix == 0 else f"{base_timestamp}-{suffix:02d}"
+        run_dir = runs_root / name
+        try:
+            run_dir.mkdir(parents=False, exist_ok=False)
+        except FileExistsError:
+            continue
+        return run_dir
+
+    raise RuntimeError(f"Could not allocate unique run directory for timestamp: {base_timestamp}")
 
 
 def _ensure_run_dir(runs_root: Path, run_dir: Path | None) -> Path:

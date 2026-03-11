@@ -1,0 +1,44 @@
+:root {
+  --cv-font: "Iowan Old Style", "Georgia", serif;
+  --cv-text: #1f1613;
+  --cv-muted: #64534c;
+  --cv-accent: #7c3327;
+  --cv-rule: #dccbc1;
+}
+
+body {
+  font-family: var(--cv-font);
+  color: var(--cv-text);
+  margin: 1.1rem;
+  line-height: 1.35;
+  font-size: 0.95rem;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--cv-accent);
+  margin-bottom: 0.2rem;
+}
+
+h2 {
+  border-bottom: 1px solid var(--cv-rule);
+  padding-bottom: 0.15rem;
+}
+
+p {
+  margin: 0.15rem 0;
+}
+
+ul {
+  margin: 0.15rem 0 0.4rem 1rem;
+}
+
+li {
+  margin-bottom: 0.12rem;
+}
+
+small,
+.cv-muted {
+  color: var(--cv-muted);
+}

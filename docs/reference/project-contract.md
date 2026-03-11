@@ -10,6 +10,9 @@ explicitly apply a patch.
   and summarize SoT/job signals with variant recommendations.
 - `uv run cvw project new --job-url <url>` or `--job-file <path>`: create a project
   without generating guidance output.
+- `uv run cvw project show <slug>`: inspect the project proposal, patch status,
+  latest project run, review readiness, and ready-to-run next commands without
+  mutating the SoT.
 - `uv run cvw preview --project <slug> [--sot-path <path>]`: preview with project patch
   applied in-memory, optionally against an explicit SoT override.
 - `uv run cvw reviewpack --project <slug>`: package the latest project-scoped run for review.
@@ -61,6 +64,13 @@ Use:
 
 - `uv run cvw build --project <slug>` and `uv run cvw preview --project <slug>` apply proposal
   patches in-memory.
+- `uv run cvw project show <slug>` reports the current proposal variant id,
+  patch status, job source, latest project run, and replayable
+  preview/build/apply/keep/discard commands.
+- When the latest project run is review-ready, `project show` emits a pinned
+  `reviewpack --project <slug> --run <run-id>` command. Otherwise it reports
+  `review.status=build_required` and points back to
+  `build --project <slug> --format md,pdf,docx`.
 - `uv run cvw reviewpack --run projects/<slug>/<run-id>` packages a specific project build
   deterministically when multiple runs exist. Review packs now source DOCX/PDF/selection
   metadata from the selected run directory, not the shared `var/dist/<variant>/` directory.

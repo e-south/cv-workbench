@@ -17,6 +17,10 @@ Missing inputs are surfaced explicitly in the payload.
 - When the configured SoT is missing or invalid, `recommended_workflows`
   prioritizes an explicit repair lane (`repair.sot_path` or `repair.sot_yaml`)
   before suggesting build or preview flows.
+- `recommended_workflows` only points to workflows that are actionable in the
+  current workspace state. For example, `review.import` is only recommended
+  when a review-ready run already includes `cv.docx`, `cv.pdf`, and
+  `selection.json`.
 - `recipes` includes an automation-friendly smoke recipe that prefers markdown
   build output plus `preview --once` for noninteractive verification.
 - `recommended_workflows` points to the next 1-3 recipe ids to inspect, with a
@@ -28,6 +32,8 @@ Missing inputs are surfaced explicitly in the payload.
   (`command|manual`), `runnable` (`true|false`), and `placeholders`.
 - Project proposal recipe steps are selector-first (`--project <project-id>`)
   instead of teaching raw `proposals/variant.yaml` paths.
+- `recipes` includes an explicit `project.inspect` lane so agents can inspect a
+  proposal before previewing, reviewing, or applying it.
 
 ## Payload (JSON)
 
@@ -38,7 +44,10 @@ Top-level keys:
 - `variants`: configured variants, inbox, default, TTL.
   Project inbox entries include selector metadata plus ready-to-run
   `keep_command`, `discard_command`, and `preview_command` strings.
-- `runs`: latest/recents per variant plus invalid directories.
+- `runs`: latest/recents for configured top-level variants plus invalid directories.
+  Project-scoped runs are inspected via `project show` or explicit
+  `reviewpack --project/--run` resolution so variant inventory is not polluted
+  by newer project-only runs.
 - `projects`: local projects list and invalid entries.
 - `reviews`: review packs inventory.
 - `recipes`: ordered command sequences for common workflows.
@@ -79,6 +88,7 @@ Recipe ordering prioritizes:
 3) Automation-friendly smoke verification
 4) Review/import
 5) Job tailoring project
+6) Project inspection / proposal lifecycle
 
 ## Strict mode
 

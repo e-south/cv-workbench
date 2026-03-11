@@ -59,14 +59,19 @@ class RunGcSummary:
     status: str
 
 
-def scan_runs(config_path: Path, *, strict: bool = False) -> RunCatalog:
+def scan_runs(
+    config_path: Path,
+    *,
+    strict: bool = False,
+    include_project_runs: bool = True,
+) -> RunCatalog:
     runs_root = resolve_runs_path(config_path)
     if not runs_root.exists():
         return RunCatalog(runs=[], invalid=[])
 
     runs: list[RunInfo] = []
     invalid: list[Path] = []
-    for path in _iter_run_dirs(runs_root):
+    for path in _iter_run_dirs(runs_root, include_project_runs=include_project_runs):
         manifest_path = path / "manifest.json"
         if not manifest_path.exists():
             invalid.append(path)
@@ -85,7 +90,7 @@ def scan_runs(config_path: Path, *, strict: bool = False) -> RunCatalog:
     return RunCatalog(runs=runs, invalid=invalid)
 
 
-def _iter_run_dirs(runs_root: Path) -> list[Path]:
+def _iter_run_dirs(runs_root: Path, *, include_project_runs: bool = True) -> list[Path]:
     run_dirs: list[Path] = []
     for path in sorted(runs_root.iterdir()):
         if not path.is_dir():
@@ -93,6 +98,8 @@ def _iter_run_dirs(runs_root: Path) -> list[Path]:
         if path.name == "preview":
             continue
         if path.name == "projects":
+            if not include_project_runs:
+                continue
             for project_dir in sorted(path.iterdir()):
                 if not project_dir.is_dir():
                     continue
@@ -108,6 +115,10 @@ def _run_id(runs_root: Path, run_dir: Path) -> str:
     return run_dir.relative_to(runs_root).as_posix()
 
 
+def _run_is_project_scoped(run: RunInfo) -> bool:
+    return run.run_id.startswith("projects/")
+
+
 def group_runs_by_variant(runs: list[RunInfo]) -> dict[str, list[RunInfo]]:
     ordered = sorted(runs, key=lambda run: run.created_at, reverse=True)
     grouped: dict[str, list[RunInfo]] = {}
@@ -120,15 +131,24 @@ def latest_runs_by_variant(
     config_path: Path,
     *,
     limit: int = 3,
+    include_project_runs: bool = False,
 ) -> tuple[dict[str, list[RunInfo]], list[Path]]:
-    catalog = scan_runs(config_path, strict=False)
-    grouped = group_runs_by_variant(catalog.runs)
+    catalog = scan_runs(config_path, strict=False, include_project_runs=True)
+    runs = catalog.runs
+    if not include_project_runs:
+        runs = [run for run in runs if not _run_is_project_scoped(run)]
+    grouped = group_runs_by_variant(runs)
     trimmed = {variant: runs[:limit] for variant, runs in grouped.items()}
     return trimmed, catalog.invalid
 
 
-def resolve_latest_run(config_path: Path, variant_id: str | None = None) -> RunInfo:
-    catalog = scan_runs(config_path, strict=False)
+def resolve_latest_run(
+    config_path: Path,
+    variant_id: str | None = None,
+    *,
+    include_project_runs: bool = False,
+) -> RunInfo:
+    catalog = scan_runs(config_path, strict=False, include_project_runs=True)
     if not catalog.runs:
         if catalog.invalid:
             names = ", ".join(path.name for path in catalog.invalid)
@@ -136,10 +156,23 @@ def resolve_latest_run(config_path: Path, variant_id: str | None = None) -> RunI
         raise RunError("No runs available")
 
     runs = catalog.runs
+    if not include_project_runs:
+        runs = [run for run in runs if not _run_is_project_scoped(run)]
     if variant_id:
-        runs = [run for run in runs if run.variant_id == variant_id]
+        variant_runs = [run for run in catalog.runs if run.variant_id == variant_id]
+        if include_project_runs:
+            runs = variant_runs
+        else:
+            runs = [run for run in variant_runs if not _run_is_project_scoped(run)]
         if not runs:
+            if variant_runs and not include_project_runs:
+                raise RunError(
+                    f"No non-project runs available for variant: {variant_id}; "
+                    "use --project <project-id> or --run <run-id>"
+                )
             raise RunError(f"No runs available for variant: {variant_id}")
+    elif not runs:
+        raise RunError("No non-project runs available")
 
     return sorted(runs, key=lambda run: run.created_at, reverse=True)[0]
 

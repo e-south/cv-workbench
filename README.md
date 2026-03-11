@@ -32,15 +32,32 @@ brew install pandoc mactex-no-gui
 eval "$(/usr/libexec/path_helper)"
 ```
 
+One-time setup:
+
 ```bash
 uv sync --locked
-uv run cvw --help
 uv run cvw init --sample-default
 uv run cvw doctor
-uv run cvw context --json --compact
-uv run cvw workflow --id automation.verify
-uv run cvw workflow --id automation.verify --json --compact
+```
+
+Choose one lane after setup:
+
+Fastest sample build:
+
+```bash
 uv run cvw quickstart
+```
+
+Agent/bootstrap lane:
+
+```bash
+uv run cvw context --json --compact
+uv run cvw workflow --id automation.verify --json --compact
+```
+
+Explicit build + preview lane:
+
+```bash
 uv run cvw validate
 uv run cvw build --variant base --format md,pdf
 uv run cvw preview --variant base
@@ -55,12 +72,13 @@ SoT to be `./sot.sample`. Omit the flag when you want `init` to copy the sample
 into `./local/sot` for later replacement with private data.
 
 Use `uv run cvw context --json --compact` when you want a smaller bootstrap
-payload for logs, agent handoff, or scripting. It summarizes workspace state and
-adds `recommended_workflows` with exact `command` and `json_command`
-follow-ups. Treat the emitted strings as authoritative; outside the repo root
-they may use `uv run --project <repo> cvw ...` so replay stays valid.
-When the configured SoT is missing or invalid, those recommendations point to
-the repair/bootstrap lanes before build or preview.
+payload for logs, agent handoff, or scripting. Pair it with
+`uv run cvw workflow --id <recipe> --json --compact` when you want one narrow
+recipe instead of the full workspace summary. Treat the emitted command strings
+as authoritative; outside the repo root they may use
+`uv run --project <repo> cvw ...` so replay stays valid. When the configured
+SoT is missing or invalid, those recommendations point to the repair/bootstrap
+lanes before build or preview.
 
 Build output locations are printed after `uv run cvw build` completes, and artifacts
 are written under `var/dist/<variant>/` (configurable via `config/workbench.yaml`).
@@ -70,7 +88,8 @@ variant changes. The command prints a local preview URL; use Chrome DevTools MCP
 to open and interact with the preview UI (sidebar controls and shortcuts `t`,
 `p`, `v`, `f`, `r`, `x`). Browser inactivity now auto-stops the server after 30
 seconds by default; use `uv run cvw dev stop` for immediate shutdown or set
-`CVW_DEV_IDLE_TIMEOUT_SECONDS=0` to disable the idle timeout.
+`CVW_DEV_IDLE_TIMEOUT_SECONDS=0` to disable the idle timeout. Only loopback
+preview hosts are supported.
 
 Tip: you can run `uv run cvw` from any subdirectory in the repo. When a
 workspace already exists, commands such as `init`, `quickstart`, `context`,

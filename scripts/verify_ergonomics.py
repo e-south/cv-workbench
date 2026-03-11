@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -51,12 +52,14 @@ def _run_step(
     args: list[str],
     *,
     expected_returncode: int = 0,
+    env: dict[str, str] | None = None,
 ) -> StepResult:
     command = [PYTHON, "-m", "cvworkbench.cli", *args]
     started_at = time.perf_counter()
     result = subprocess.run(
         command,
         cwd=cwd,
+        env={**os.environ, **(env or {})},
         text=True,
         capture_output=True,
         check=False,
@@ -125,6 +128,31 @@ def _metric_summary(values: list[float]) -> dict[str, float]:
         "median_ms": round(statistics.median(milliseconds), 2),
         "max_ms": max(milliseconds),
     }
+
+
+def _signature_diff_message(
+    baseline: dict[str, dict[str, str]],
+    current: dict[str, dict[str, str]],
+) -> str:
+    differences: list[str] = []
+    for step_name in sorted(set(baseline) | set(current)):
+        baseline_step = baseline.get(step_name)
+        current_step = current.get(step_name)
+        if baseline_step == current_step:
+            continue
+        if baseline_step is None:
+            differences.append(f"{step_name}=missing-in-baseline")
+            continue
+        if current_step is None:
+            differences.append(f"{step_name}=missing-in-current")
+            continue
+        fields = [
+            field
+            for field in sorted(set(baseline_step) | set(current_step))
+            if baseline_step.get(field) != current_step.get(field)
+        ]
+        differences.append(f"{step_name}=" + ",".join(fields))
+    return "; ".join(differences)
 
 
 def _repo_cvw_command(subcommand: str) -> str:
@@ -359,10 +387,16 @@ def main() -> int:
         "workflow": [],
         "status": [],
         "build": [],
+        "context_after_md_build": [],
+        "context_after_review_ready_build": [],
         "preview_once": [],
+        "preview_reject_nonlocal_host": [],
         "project_guide": [],
+        "project_show": [],
+        "project_show_after_build": [],
         "variant_inbox": [],
         "project_build": [],
+        "variant_review_ready_build": [],
         "project_preview_once": [],
         "project_reviewpack": [],
         "project_reviewpack_force": [],
@@ -508,7 +542,12 @@ def main() -> int:
             _require_recipe_steps_include_config(
                 _recipe_by_id(external_recipes, "project.guide"),
                 workspace / "config" / "workbench.yaml",
-                step_indexes=[0, 1, 2],
+                step_indexes=[0, 1, 2, 3],
+            )
+            _require_recipe_steps_include_config(
+                _recipe_by_id(external_recipes, "project.inspect"),
+                workspace / "config" / "workbench.yaml",
+                step_indexes=[0, 1],
             )
             _require_recipe_steps_include_config(
                 _recipe_by_id(external_recipes, "variant.manage"),
@@ -551,24 +590,20 @@ def main() -> int:
             _require_recipe_steps_include_config(
                 explicit_project,
                 workspace / "config" / "workbench.yaml",
-                step_indexes=[0, 1, 2],
+                step_indexes=[0, 1, 2, 3],
             )
             _require_recipe_steps_include_sot(
                 explicit_project,
                 workspace / "sot.sample",
-                step_indexes=[0, 1, 2],
+                step_indexes=[0, 2, 3],
             )
+            _require_recipe_steps_exclude_sot(explicit_project, step_indexes=[1])
             _require_recipe_steps_include_config(
                 explicit_review,
                 workspace / "config" / "workbench.yaml",
                 step_indexes=[0, 2],
             )
-            _require_recipe_steps_exclude_sot(explicit_review, step_indexes=[0, 2])
-            _require_recipe_steps_include_sot(explicit_review, step_indexes=[3], sot_path=workspace / "sot.sample")
-            _require(
-                "--config" not in explicit_review["steps"][3]["command"],
-                "review.import apply step must not emit unsupported --config",
-            )
+            _require_recipe_steps_exclude_sot(explicit_review, step_indexes=[0, 2, 3])
             _require_recipe_steps_include_config(
                 explicit_refresh,
                 workspace / "config" / "workbench.yaml",
@@ -642,6 +677,17 @@ def main() -> int:
                 runnable=False,
                 placeholders=["<variant>"],
                 message="review.import edit step",
+            )
+            _require_recipe_step_contract(
+                review_recipe["steps"][3],
+                kind="manual",
+                runnable=False,
+                placeholders=[],
+                message="review.import notes step",
+            )
+            _require(
+                "not directly applyable" in review_recipe["stop_conditions"][2],
+                "review.import recipe must make the non-applyable review diff explicit",
             )
             _require(
                 context_payload["runs"]["invalid_summary"] == "bad-run",
@@ -774,6 +820,19 @@ def main() -> int:
             steps.append(build_step)
             _require((workspace / "var" / "dist" / "base" / "cv.md").exists(), "Markdown build output missing")
 
+            context_after_md_build_step = _run_step(
+                "context_after_md_build",
+                workspace,
+                ["context", "--json", "--compact"],
+            )
+            steps.append(context_after_md_build_step)
+            context_after_md_build_payload = json.loads(context_after_md_build_step.stdout)
+            _require(
+                "review.import"
+                not in [item["id"] for item in context_after_md_build_payload["recommended_workflows"]],
+                "Compact context must not recommend review.import when the latest run is not review-ready",
+            )
+
             preview_step = _run_step(
                 "preview_once",
                 workspace,
@@ -801,6 +860,27 @@ def main() -> int:
             steps.append(project_guide_step)
             project_guide_payload = json.loads(project_guide_step.stdout)
             project_id = project_guide_payload["project"]["project_id"]
+
+            project_show_step = _run_step(
+                "project_show",
+                workspace,
+                ["project", "show", project_id, "--json"],
+            )
+            steps.append(project_show_step)
+            project_show_payload = json.loads(project_show_step.stdout)
+            _require(
+                project_show_payload["proposal"]["variant_id"] == "base",
+                "project show must expose the proposal variant id",
+            )
+            _require(
+                project_show_payload["commands"]["preview"] == _repo_cvw_command(f"preview --project {project_id}"),
+                "project show must emit a replayable preview command",
+            )
+            _require(
+                project_show_payload["commands"]["keep"]
+                == _repo_cvw_command(f"variant keep --project {project_id} --id base"),
+                "project show must emit a ready-to-run keep command",
+            )
 
             variant_inbox_step = _run_step(
                 "variant_inbox",
@@ -832,6 +912,44 @@ def main() -> int:
             )
             steps.append(project_build_step)
 
+            project_show_after_build_step = _run_step(
+                "project_show_after_build",
+                workspace,
+                ["project", "show", project_id, "--json"],
+            )
+            steps.append(project_show_after_build_step)
+            project_show_after_build_payload = json.loads(project_show_after_build_step.stdout)
+            review_run_id = project_show_after_build_payload["review"]["run_id"]
+            _require(
+                project_show_after_build_payload["review"]["status"] == "ready",
+                "project show must report review.status=ready after a review-ready project build",
+            )
+            _require(
+                project_show_after_build_payload["commands"]["reviewpack"]
+                == _repo_cvw_command(f"reviewpack --project {project_id} --run {review_run_id}"),
+                "project show must emit a pinned reviewpack command when the latest project run is review-ready",
+            )
+
+            variant_review_ready_build_step = _run_step(
+                "variant_review_ready_build",
+                workspace,
+                ["build", "--variant", "base", "--format", "md,pdf,docx", "--plain"],
+            )
+            steps.append(variant_review_ready_build_step)
+
+            context_after_review_ready_build_step = _run_step(
+                "context_after_review_ready_build",
+                workspace,
+                ["context", "--json", "--compact"],
+            )
+            steps.append(context_after_review_ready_build_step)
+            context_after_review_ready_payload = json.loads(context_after_review_ready_build_step.stdout)
+            _require(
+                "review.import"
+                in [item["id"] for item in context_after_review_ready_payload["recommended_workflows"]],
+                "Compact context must recommend review.import after a review-ready run exists",
+            )
+
             project_preview_step = _run_step(
                 "project_preview_once",
                 workspace,
@@ -849,6 +967,20 @@ def main() -> int:
             _require(
                 (workspace / "var" / "dist" / "base" / "cv.html").exists(),
                 "Project preview --once must produce HTML output",
+            )
+
+            preview_reject_nonlocal_host_step = _run_step(
+                "preview_reject_nonlocal_host",
+                workspace,
+                ["preview", "--variant", "base", "--plain"],
+                expected_returncode=2,
+                env={"CVW_DEV_HOST": "0.0.0.0"},
+            )
+            steps.append(preview_reject_nonlocal_host_step)
+            _require(
+                "non-local preview binding is not supported"
+                in preview_reject_nonlocal_host_step.stderr,
+                "preview must fail fast on non-local host bindings",
             )
 
             project_run_dir = Path(_summary_value(project_build_step.stdout, "run_dir"))
@@ -913,9 +1045,11 @@ def main() -> int:
             if baseline_signatures is None:
                 baseline_signatures = signatures
             else:
+                diff_message = _signature_diff_message(baseline_signatures, signatures)
                 _require(
                     signatures == baseline_signatures,
-                    "Ergonomics verify produced non-repeatable normalized outputs across runs",
+                    "Ergonomics verify produced non-repeatable normalized outputs across runs"
+                    + (f": {diff_message}" if diff_message else ""),
                 )
 
             full_context_lines_all.append(full_context_lines)

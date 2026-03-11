@@ -3,6 +3,11 @@
 This guide walks through the fastest local path to a generated CV using the
 sample SoT data. It is safe to run in this public repo.
 
+After the initial setup, choose one lane:
+- `quickstart` for the fastest sample build.
+- `context --json --compact` plus `workflow --id ... --json --compact` for deterministic agent bootstrap.
+- `build` plus `preview` when you want explicit control over formats and preview state.
+
 ## Requirements
 
 - Python 3.12
@@ -63,7 +68,7 @@ Optional workspace status snapshot:
 uv run cvw status
 ```
 
-## 4) Build a sample CV
+## 4) Fastest sample build
 
 ```bash
 uv run cvw quickstart
@@ -90,7 +95,17 @@ You can run these commands from any subdirectory inside the repo. When a
 workspace already exists, `init` and `quickstart` walk up to the nearest
 `config/workbench.yaml` and resolve outputs relative to that configuration.
 
-## 5) Build explicitly (recommended for automation)
+## 5) Agent/bootstrap lane
+
+```bash
+uv run cvw context --json --compact
+uv run cvw workflow --id automation.verify --json --compact
+```
+
+Use the `workflow` command when you want one narrow recipe instead of the full
+workspace snapshot.
+
+## 6) Follow-up: build explicitly (recommended for automation)
 
 ```bash
 uv run cvw build --sot-path ./sot.sample --variant base --format md,pdf
@@ -104,7 +119,7 @@ uv run cvw build --plain --sot-path ./sot.sample --variant base --format md
 uv run cvw build --json --sot-path ./sot.sample --variant base --format md
 ```
 
-## 6) Sync to your site (local-first)
+## 7) Follow-up: sync to your site (local-first)
 
 ```bash
 uv run cvw sync --variant base --site /path/to/astro-site
@@ -112,12 +127,14 @@ uv run cvw sync --variant base --site /path/to/astro-site
 
 `uv run cvw sync` defaults to local mode. PR sync is opt-in via `--mode pr`.
 
-## 7) Preview styling quickly
+## 8) Follow-up: preview styling quickly
 
 ```bash
 uv run cvw theme list
+uv run cvw theme info editorial
 uv run cvw preview --sot-path ./sot.sample --variant base --style-preset modern
 uv run cvw preview --sot-path ./sot.sample --variant base --style-preset compact
+uv run cvw preview --sot-path ./sot.sample --variant base --theme signal --style-preset compact
 ```
 
 `uv run cvw preview` starts a live preview server and auto-rebuilds when you edit SoT
@@ -147,10 +164,10 @@ To disable the idle timeout:
 CVW_DEV_IDLE_TIMEOUT_SECONDS=0 uv run cvw preview --sot-path ./sot.sample --variant base
 ```
 
-To change the host or port:
+To change the local loopback host or port:
 
 ```bash
-CVW_DEV_HOST=0.0.0.0 CVW_DEV_PORT=8877 uv run cvw preview --sot-path ./sot.sample --variant base
+CVW_DEV_HOST=127.0.0.1 CVW_DEV_PORT=8877 uv run cvw preview --sot-path ./sot.sample --variant base
 ```
 
 To see a styling change, edit the preset CSS and let the watcher rebuild:
@@ -165,7 +182,7 @@ If you want the PDF to reflect the same preset:
 uv run cvw build --sot-path ./sot.sample --variant base --format pdf --style-preset compact
 ```
 
-## 8) Save variants intentionally
+## 9) Follow-up: save variants intentionally
 
 `uv run cvw tailor` writes draft variants to `var/drafts/` and registers them as
 ephemeral. Promote only the ones you want to keep:
@@ -203,12 +220,13 @@ uv run cvw variant list
 The retention window is controlled by `variant_lifecycle.ttl_days` in
 `config/workbench.yaml`.
 
-## 9) Start a project (job tailoring)
+## 10) Follow-up: start a project (job tailoring)
 
 Guided path (recommended):
 
 ```bash
 uv run cvw project guide --job-url "https://example.com/job"
+uv run cvw project show <project-id>
 uv run cvw preview --project <project-id>
 uv run cvw reviewpack --project <project-id>
 ```
@@ -217,6 +235,7 @@ Direct project creation when you already know the base variant:
 
 ```bash
 uv run cvw project new --job-url "https://example.com/job" --variant base
+uv run cvw project show <project-id>
 uv run cvw preview --project <project-id>
 ```
 
@@ -241,7 +260,7 @@ avoid colliding with an existing project directory.
 
 Projects keep job context, signals, and proposal drafts without mutating SoT.
 
-## 10) Clean generated artifacts
+## 11) Follow-up: clean generated artifacts
 
 ```bash
 uv run cvw clean runs --yes

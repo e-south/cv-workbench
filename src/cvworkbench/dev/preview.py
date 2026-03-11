@@ -910,6 +910,8 @@ def _preview_page_html() -> str:
     </div>
     <script>
       const DISCONNECTED_MESSAGE = 'Preview disconnected';
+      const VISIBLE_REFRESH_MS = 1000;
+      const HIDDEN_REFRESH_MS = 4000;
       const state = { data: null };
       const history = [];
       let stopped = false;
@@ -934,6 +936,7 @@ def _preview_page_html() -> str:
       let lastOverlayKey = null;
       let currentPreviewSrc = iframe.getAttribute('src') || '';
       let pendingAction = null;
+      let refreshTimer = null;
 
       async function fetchState() {
         const res = await fetch('/api/state');
@@ -1197,6 +1200,10 @@ def _preview_page_html() -> str:
             errorEl.style.display = 'block';
             return;
           }
+          if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+          }
           stopped = true;
           connectionError = null;
           setControlsEnabled(false);
@@ -1206,6 +1213,17 @@ def _preview_page_html() -> str:
           pendingAction = null;
           syncOverlay(state.data || {}, true);
         }
+      }
+
+      function refreshDelayMs() {
+        return document.visibilityState === 'visible' ? VISIBLE_REFRESH_MS : HIDDEN_REFRESH_MS;
+      }
+
+      function scheduleRefresh(immediate = false) {
+        if (refreshTimer) {
+          clearTimeout(refreshTimer);
+        }
+        refreshTimer = window.setTimeout(refresh, immediate ? 0 : refreshDelayMs());
       }
 
       async function refresh() {
@@ -1218,6 +1236,10 @@ def _preview_page_html() -> str:
           connectionError = DISCONNECTED_MESSAGE;
           const data = state.data || {};
           syncOverlay(data);
+        } finally {
+          if (!stopped) {
+            scheduleRefresh();
+          }
         }
       }
 
@@ -1315,8 +1337,14 @@ def _preview_page_html() -> str:
         await requestStop();
       });
 
-      refresh();
-      setInterval(refresh, 1000);
+      document.addEventListener('visibilitychange', () => {
+        if (!stopped) scheduleRefresh(true);
+      });
+      window.addEventListener('focus', () => {
+        if (!stopped) scheduleRefresh(true);
+      });
+
+      scheduleRefresh(true);
     </script>
   </body>
 </html>

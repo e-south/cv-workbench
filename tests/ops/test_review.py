@@ -148,6 +148,56 @@ def _write_run_manifest_at(
     )
 
 
+def _write_minimal_sot(root: Path) -> Path:
+    sot_path = root / "local" / "sot"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "person.yaml").write_text("id: sample\nname: Sample User\n")
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Example Co",
+                "    title: Engineer",
+                "    start: 2021",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Delivered outcomes.",
+                "        tags:",
+                "          - impact",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "projects:\n  - id: project-1\n    name: Example Project\n    summary: Example summary.\n    tags:\n      - sample\n"
+    )
+    (sot_path / "skills.yaml").write_text(
+        "skills:\n  - id: skill-1\n    name: Languages\n    keywords:\n      - Python\n"
+    )
+    (sot_path / "education.yaml").write_text(
+        "education:\n  - id: edu-1\n    institution: Example University\n    area: Computer Science\n    tags:\n      - sample\n"
+    )
+    (sot_path / "letters.yaml").write_text(
+        "\n".join(
+            [
+                "letters:",
+                "  - id: default-letter",
+                "    title: Cover Letter",
+                "    salutation: Dear Hiring Manager,",
+                "    closing: Sincerely,",
+                "    sections:",
+                "      - id: intro",
+                "        text: Intro text.",
+                "        tags:",
+                "          - general",
+            ]
+        )
+        + "\n"
+    )
+    return sot_path
+
+
 def test_reviewpack_creates_bundle(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_run_manifest_at(
@@ -243,6 +293,131 @@ def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
     assert drafts_dir.exists()
     patch_files = list(drafts_dir.rglob("patch.diff"))
     assert patch_files
+    notes_files = list(drafts_dir.rglob("notes.md"))
+    assert notes_files
+    assert "not directly applyable to SoT" in notes_files[0].read_text()
+
+
+def test_import_docx_generates_applyable_patch_for_experience_bullet_edits(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    sot_path = _write_minimal_sot(tmp_path)
+    canonical = "\n".join(
+        [
+            "## Experience",
+            "",
+            "### Engineer - Example Co",
+            "2021 — Present",
+            "",
+            "- Delivered outcomes.",
+            "",
+        ]
+    )
+    _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", canonical)
+
+    docx_path = tmp_path / "review.docx"
+    docx_path.write_bytes(b"docx")
+
+    def fake_convert(_path: Path) -> str:
+        return canonical.replace("Delivered outcomes.", "Delivered measurable outcomes.")
+
+    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "import-docx",
+                "--from",
+                str(docx_path),
+                "--run",
+                "2026-01-01T00-00-00Z",
+                "--config",
+                str(config_path),
+                "--plain",
+            ],
+        )
+
+    assert result.exit_code == 0
+    drafts_dir = resolve_drafts_path(config_path)
+    patch_files = list(drafts_dir.rglob("patch.diff"))
+    assert patch_files
+    patch_text = patch_files[0].read_text()
+    assert "experience.yaml" in patch_text
+    notes_files = list(drafts_dir.rglob("notes.md"))
+    assert notes_files
+    notes_text = notes_files[0].read_text()
+    assert "- apply_status: ready" in notes_text
+
+    apply_result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(patch_files[0].parent),
+            "--sot-path",
+            str(sot_path),
+            "--plain",
+        ],
+    )
+
+    assert apply_result.exit_code == 0
+    assert "Delivered measurable outcomes." in (sot_path / "experience.yaml").read_text()
+
+
+def test_import_docx_keeps_review_diff_only_for_unsupported_heading_edits(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    canonical = "\n".join(
+        [
+            "## Experience",
+            "",
+            "### Engineer - Example Co",
+            "2021 — Present",
+            "",
+            "- Delivered outcomes.",
+            "",
+        ]
+    )
+    _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", canonical)
+
+    docx_path = tmp_path / "review.docx"
+    docx_path.write_bytes(b"docx")
+
+    def fake_convert(_path: Path) -> str:
+        return canonical.replace("Engineer - Example Co", "Principal Engineer - Example Co")
+
+    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "import-docx",
+                "--from",
+                str(docx_path),
+                "--run",
+                "2026-01-01T00-00-00Z",
+                "--config",
+                str(config_path),
+                "--plain",
+            ],
+        )
+
+    assert result.exit_code == 0
+    drafts_dir = resolve_drafts_path(config_path)
+    patch_files = list(drafts_dir.rglob("patch.diff"))
+    assert patch_files
+    patch_text = patch_files[0].read_text()
+    assert "canonical.md" in patch_text
+    notes_files = list(drafts_dir.rglob("notes.md"))
+    assert notes_files
+    assert "- apply_status: review_diff_only" in notes_files[0].read_text()
 
 
 def test_import_docx_uses_variant_latest_run(tmp_path: Path, monkeypatch) -> None:
@@ -348,8 +523,14 @@ def test_import_docx_ignores_invalid_run_dirs_when_variant_resolves_latest_run(
     assert "base-before" in patch_text
 
 
-def test_reviewpack_uses_latest_project_run_for_variant(tmp_path: Path) -> None:
+def test_reviewpack_variant_ignores_project_scoped_runs(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "2026-01-02T00-00-00Z",
+        variant_id="base",
+        canonical="base-before\n",
+        review_ready=True,
+    )
     _write_run_manifest_at(
         tmp_path / "var" / "runs" / "projects" / "job" / "2026-01-03T00-00-00Z",
         variant_id="base",
@@ -365,7 +546,28 @@ def test_reviewpack_uses_latest_project_run_for_variant(tmp_path: Path) -> None:
         )
 
     assert result.exit_code == 0
-    assert "run_id: projects/job/2026-01-03T00-00-00Z" in result.stdout
+    assert "run_id: 2026-01-02T00-00-00Z" in result.stdout
+
+
+def test_reviewpack_variant_rejects_project_only_runs(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    _write_run_manifest_at(
+        tmp_path / "var" / "runs" / "projects" / "job" / "2026-01-03T00-00-00Z",
+        variant_id="base",
+        canonical="project-before\n",
+        review_ready=True,
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
+        )
+
+    assert result.exit_code != 0
+    assert "No non-project runs available for variant: base" in (result.stderr or "")
+    assert "--project <project-id>" in (result.stderr or "")
 
 
 def test_reviewpack_uses_explicit_run_and_isolates_project_review_dir(tmp_path: Path) -> None:
@@ -457,8 +659,9 @@ def test_reviewpack_uses_project_selector_for_latest_project_run(tmp_path: Path)
     assert "run_id: projects/job/2026-01-03T00-00-00Z" in result.stdout
 
 
-def test_import_docx_uses_latest_project_run_for_variant(tmp_path: Path, monkeypatch) -> None:
+def test_import_docx_variant_ignores_project_scoped_runs(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_minimal_config(tmp_path)
+    _write_run_manifest(tmp_path, "2026-01-02T00-00-00Z", "base", "base-before\n")
     _write_project_run_manifest(
         tmp_path,
         "job",
@@ -492,12 +695,51 @@ def test_import_docx_uses_latest_project_run_for_variant(tmp_path: Path, monkeyp
         )
 
     assert result.exit_code == 0
-    assert "run_id: projects/job/2026-01-03T00-00-00Z" in result.stdout
+    assert "run_id: 2026-01-02T00-00-00Z" in result.stdout
     drafts_dir = resolve_drafts_path(config_path)
     patch_files = list(drafts_dir.rglob("patch.diff"))
     assert patch_files
     patch_text = patch_files[0].read_text()
-    assert "project-before" in patch_text
+    assert "base-before" in patch_text
+
+
+def test_import_docx_variant_rejects_project_only_runs(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    _write_project_run_manifest(
+        tmp_path,
+        "job",
+        "2026-01-03T00-00-00Z",
+        "base",
+        "project-before\n",
+    )
+
+    docx_path = tmp_path / "review.docx"
+    docx_path.write_bytes(b"docx")
+
+    def fake_convert(_path: Path) -> str:
+        return "after\n"
+
+    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "import-docx",
+                "--from",
+                str(docx_path),
+                "--variant",
+                "base",
+                "--config",
+                str(config_path),
+                "--plain",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "No non-project runs available for variant: base" in (result.stderr or "")
+    assert "--run <run-id>" in (result.stderr or "")
 
 
 def test_import_docx_uses_project_selector(tmp_path: Path, monkeypatch) -> None:

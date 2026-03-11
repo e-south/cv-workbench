@@ -48,6 +48,71 @@ def test_apply_updates_sot(tmp_path: Path) -> None:
     assert "Updated User" in (sot_path / "person.yaml").read_text()
 
 
+def test_apply_rejects_patch_targets_outside_sot(tmp_path: Path) -> None:
+    sot_path = tmp_path / "sot"
+    sot_path.mkdir()
+    _write_minimal_sot(sot_path)
+    (tmp_path / "outside.txt").write_text("outside\n")
+
+    draft_dir = tmp_path / "draft"
+    draft_dir.mkdir()
+    patch_path = draft_dir / "patch.diff"
+    diff = difflib.unified_diff(
+        ["outside\n"],
+        ["changed\n"],
+        fromfile="../outside.txt",
+        tofile="../outside.txt",
+    )
+    patch_path.write_text("".join(diff))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(draft_dir),
+            "--sot-path",
+            str(sot_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "outside SoT" in (result.stderr or "")
+
+
+def test_apply_rejects_review_diff_patches_that_do_not_target_sot_files(tmp_path: Path) -> None:
+    sot_path = tmp_path / "sot"
+    sot_path.mkdir()
+    _write_minimal_sot(sot_path)
+
+    draft_dir = tmp_path / "draft"
+    draft_dir.mkdir()
+    patch_path = draft_dir / "patch.diff"
+    diff = difflib.unified_diff(
+        ["before\n"],
+        ["after\n"],
+        fromfile="canonical.md",
+        tofile="imported.md",
+    )
+    patch_path.write_text("".join(diff))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(draft_dir),
+            "--sot-path",
+            str(sot_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Patch target does not exist under SoT: canonical.md" in (result.stderr or "")
+
+
 def _write_minimal_sot(sot_path: Path) -> None:
     (sot_path / "person.yaml").write_text("id: sample\nname: Sample User\n")
     (sot_path / "experience.yaml").write_text(

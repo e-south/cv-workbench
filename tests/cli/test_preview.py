@@ -166,3 +166,23 @@ def test_preview_once_allows_project_with_explicit_sot_path(tmp_path: Path) -> N
     assert result.exit_code == 0
     assert "preview_file:" in result.stdout
     assert (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
+
+
+def test_preview_rejects_nonlocal_host_binding(monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.setenv("CVW_DEV_HOST", "0.0.0.0")
+
+    result = runner.invoke(
+        app,
+        [
+            "preview",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "non-local preview binding is not supported" in result.stderr

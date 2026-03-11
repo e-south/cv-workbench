@@ -61,3 +61,13 @@ def test_compact_bootstrap_docs_match_live_commands() -> None:
     assert "repair.sot_yaml" in contract
     assert "uv run cvw context --json --compact" in contract
     assert "uv run cvw workflow --id <recipe-id> --json --compact" in contract
+
+
+def test_sync_default_docs_are_consistent() -> None:
+    quickstart = (REPO_ROOT / "docs" / "howto" / "quickstart.md").read_text()
+    site_contract = (REPO_ROOT / "docs" / "reference" / "site-contract.md").read_text()
+    journal = (REPO_ROOT / "docs" / "reference" / "journal.md").read_text()
+
+    assert "defaults to local mode" in quickstart
+    assert "defaults to local updates" in site_contract
+    assert "current default is local-first sync" in journal

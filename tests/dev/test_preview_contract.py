@@ -57,6 +57,16 @@ def test_preview_page_html_handles_state_fetch_errors() -> None:
     assert "Preview disconnected" in html
 
 
+def test_preview_page_html_uses_visibility_aware_refresh_loop() -> None:
+    html = _preview_page_html()
+    assert "VISIBLE_REFRESH_MS = 1000" in html
+    assert "HIDDEN_REFRESH_MS = 4000" in html
+    assert "document.visibilityState === 'visible'" in html
+    assert "document.addEventListener('visibilitychange'" in html
+    assert "window.addEventListener('focus'" in html
+    assert "scheduleRefresh(true);" in html
+
+
 def test_preview_page_html_preserves_unset_project_value() -> None:
     html = _preview_page_html()
     assert "const projectOptions = data.project ? [data.project] : [];" in html

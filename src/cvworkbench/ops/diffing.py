@@ -20,9 +20,9 @@ from cvworkbench.build.paths import output_path
 from cvworkbench.config import (
     resolve_default_variant,
     resolve_dist_path,
-    resolve_runs_path,
     resolve_variant_path,
 )
+from cvworkbench.ops.runs import RunError, resolve_latest_run, resolve_run
 from cvworkbench.variants import load_variant
 
 
@@ -105,23 +105,25 @@ def _resolve_artifact_path(config_path: Path, selection: DiffSelection) -> Path:
 
 
 def _resolve_run_dir(config_path: Path, run: str | None) -> Path:
-    runs_root = resolve_runs_path(config_path)
-    if run:
-        candidate = Path(run)
-        if candidate.exists():
-            return candidate
-        candidate = runs_root / run
-        if candidate.exists():
-            return candidate
-        raise DiffError(f"Run not found: {run}")
+    try:
+        if run:
+            candidate = Path(run)
+            if candidate.exists():
+                run_dir = candidate if candidate.is_dir() else candidate.parent
+                if _looks_like_run_dir(run_dir):
+                    return run_dir
+                raise DiffError(f"Run directory does not contain recognized artifacts: {run_dir}")
+            return resolve_run(config_path, run).path
+        return resolve_latest_run(config_path, include_project_runs=False).path
+    except RunError as exc:
+        raise DiffError(str(exc)) from exc
 
-    if not runs_root.exists():
-        raise DiffError("Runs directory not found")
 
-    runs = [path for path in runs_root.iterdir() if path.is_dir()]
-    if not runs:
-        raise DiffError("No runs available")
-    return sorted(runs)[-1]
+def _looks_like_run_dir(path: Path) -> bool:
+    return any(
+        (path / artifact_name).exists()
+        for artifact_name in ("manifest.json", "canonical.md", "resume.json", "selection.json")
+    )
 
 
 def _read_artifact(path: Path, kind: str) -> str:

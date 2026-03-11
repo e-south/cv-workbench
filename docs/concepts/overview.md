@@ -26,7 +26,7 @@ The CLI is designed as a clean tool surface for MCP and other orchestration:
 - theme (list/info)
 - variant (list/promote/keep/discard/gc/inbox)
 - runs (gc)
-- project (new/guide/apply)
+- project (new/guide/show/apply)
 - tags (list/lint/stats)
 - sot (list/new/activate/diff)
 
@@ -34,7 +34,9 @@ Each command is single-purpose and composable.
 
 `uv run cvw workflow` renders the same recipe contract exposed by
 `uv run cvw context --json`, but in a smaller human-readable form that is more
-useful for operator logs and agent handoff.
+useful for operator logs and agent handoff. Use
+`uv run cvw workflow --id <recipe> --json --compact` when you want narrow,
+recipe-only retrieval instead of the full workspace summary.
 
 `uv run cvw context --json --compact` provides the same bootstrap state in a
 summary-only machine-readable form with recommended follow-up workflows.

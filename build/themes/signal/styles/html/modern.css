@@ -1,0 +1,57 @@
+:root {
+  --cv-font: "Avenir Next", "Helvetica Neue", "Helvetica", sans-serif;
+  --cv-text: #0f1d24;
+  --cv-muted: #52656d;
+  --cv-accent: #006d77;
+  --cv-accent-soft: #d9f1ee;
+}
+
+body {
+  font-family: var(--cv-font);
+  color: var(--cv-text);
+  margin: 1.35rem;
+  line-height: 1.42;
+  letter-spacing: 0.01em;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--cv-text);
+}
+
+h2 {
+  display: inline-block;
+  background: var(--cv-accent-soft);
+  border-left: 0.35rem solid var(--cv-accent);
+  padding: 0.18rem 0.55rem;
+  margin-top: 1.25rem;
+}
+
+h3 {
+  color: var(--cv-accent);
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+}
+
+p {
+  margin: 0.22rem 0;
+}
+
+ul {
+  margin: 0.25rem 0 0.5rem 1rem;
+}
+
+li {
+  margin-bottom: 0.18rem;
+}
+
+a {
+  color: var(--cv-accent);
+}
+
+small,
+.cv-muted {
+  color: var(--cv-muted);
+}

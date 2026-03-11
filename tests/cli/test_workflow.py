@@ -260,6 +260,63 @@ def test_workflow_json_uses_project_selector_for_variant_manage_recipe(tmp_path:
     )
 
 
+def test_workflow_json_supports_project_inspect_recipe(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "workflow",
+            "--json",
+            "--id",
+            "project.inspect",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert [recipe["id"] for recipe in payload["recipes"]] == ["project.inspect"]
+    steps = payload["recipes"][0]["steps"]
+    assert steps[0]["command"] == _recipe_command(
+        "project show <project-id>",
+        config_path=config_path,
+    )
+    assert steps[1]["command"] == _recipe_command(
+        "preview --project <project-id>",
+        config_path=config_path,
+    )
+
+
+def test_workflow_json_supports_project_guide_file_input_recipe(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "workflow",
+            "--json",
+            "--id",
+            "project.guide",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert [recipe["id"] for recipe in payload["recipes"]] == ["project.guide"]
+    assert payload["recipes"][0]["steps"][0]["command"] == _recipe_command(
+        "project guide --job-file <job-file>",
+        config_path=config_path,
+    )
+
+
 def test_workflow_json_supports_local_bootstrap_recipe(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     config_path.write_text(

@@ -1,0 +1,61 @@
+:root {
+  --cv-font: "Iowan Old Style", "Georgia", serif;
+  --cv-text: #221815;
+  --cv-muted: #6f5b53;
+  --cv-accent: #8a3b2f;
+  --cv-rule: #d7c2b7;
+  --cv-bg: #fcfaf7;
+}
+
+body {
+  font-family: var(--cv-font);
+  color: var(--cv-text);
+  background: linear-gradient(180deg, var(--cv-bg) 0%, #fffdfb 100%);
+  margin: 1.6rem;
+  line-height: 1.58;
+  max-width: 54rem;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--cv-accent);
+  letter-spacing: 0.02em;
+}
+
+h1 {
+  font-size: 2rem;
+  margin-bottom: 0.3rem;
+}
+
+h2 {
+  border-bottom: 1px solid var(--cv-rule);
+  padding-bottom: 0.25rem;
+  margin-top: 1.5rem;
+}
+
+h3 {
+  font-size: 1rem;
+  margin-bottom: 0.2rem;
+}
+
+p {
+  margin: 0.35rem 0;
+}
+
+ul {
+  margin: 0.3rem 0 0.65rem 1.2rem;
+}
+
+li {
+  margin-bottom: 0.2rem;
+}
+
+a {
+  color: var(--cv-accent);
+}
+
+small,
+.cv-muted {
+  color: var(--cv-muted);
+}

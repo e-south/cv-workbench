@@ -26,6 +26,7 @@ from cvworkbench.ingestion.registry import load_registry_settings
 from cvworkbench.ingestion.signals import build_signals
 from cvworkbench.ops.patches import PatchError, apply_patch_text
 from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, register_variant
+from cvworkbench.variants import load_variant
 
 
 class ProjectError(RuntimeError):
@@ -52,6 +53,21 @@ class ProjectSpec:
     variant_path: Path
     patch_path: Path
     sot_path: Path
+
+
+@dataclass(frozen=True)
+class ProjectDetails:
+    spec: ProjectSpec
+    created_at: str
+    job_source_type: str
+    job_source_value: str
+    extracted_path: Path
+    raw_path: Path | None
+    signals_path: Path
+    signals_hash: str
+    proposal_variant_id: str
+    patch_is_empty: bool
+    patch_line_count: int
 
 
 def resolve_project_dir(project: str, config_path: Path) -> Path:
@@ -295,6 +311,64 @@ def load_project(project_dir: Path) -> ProjectSpec:
     )
 
 
+def load_project_details(project_dir: Path) -> ProjectDetails:
+    spec = load_project(project_dir)
+    project_file = project_dir / "project.yaml"
+    raw = yaml.safe_load(project_file.read_text())
+    project_data = raw.get("project") if isinstance(raw, dict) else None
+    if not isinstance(project_data, dict):
+        raise ProjectError("Project manifest is invalid")
+
+    created_at = str(project_data.get("created_at", "")).strip()
+    if not created_at:
+        raise ProjectError("Project created_at is required")
+
+    job_data = project_data.get("job")
+    if not isinstance(job_data, dict):
+        raise ProjectError("Project job metadata is invalid")
+    source_data = job_data.get("source")
+    if not isinstance(source_data, dict):
+        raise ProjectError("Project job source metadata is invalid")
+    job_source_type = str(source_data.get("type", "")).strip()
+    job_source_value = str(source_data.get("value", "")).strip()
+    if not job_source_type or not job_source_value:
+        raise ProjectError("Project job source metadata is incomplete")
+
+    extracted_path = _project_relative_path(project_dir, job_data.get("extracted_path"))
+    raw_value = job_data.get("raw_path")
+    raw_path = _project_relative_path(project_dir, raw_value) if raw_value else None
+
+    signals_data = project_data.get("signals")
+    if not isinstance(signals_data, dict):
+        raise ProjectError("Project signals metadata is invalid")
+    signals_path = _project_relative_path(project_dir, signals_data.get("path"))
+    signals_hash = str(signals_data.get("hash", "")).strip()
+    if not signals_hash:
+        raise ProjectError("Project signals hash is required")
+
+    try:
+        proposal_variant_id = load_variant(spec.variant_path).id
+    except ValueError as exc:
+        raise ProjectError(str(exc)) from exc
+
+    diff = load_project_patch(project_dir)
+    patch_lines = diff.splitlines()
+
+    return ProjectDetails(
+        spec=spec,
+        created_at=created_at,
+        job_source_type=job_source_type,
+        job_source_value=job_source_value,
+        extracted_path=extracted_path,
+        raw_path=raw_path,
+        signals_path=signals_path,
+        signals_hash=signals_hash,
+        proposal_variant_id=proposal_variant_id,
+        patch_is_empty=diff.strip() == "",
+        patch_line_count=len(patch_lines),
+    )
+
+
 def load_project_patch(project_dir: Path) -> str:
     patch_path = project_dir / "proposals" / "patch.yaml"
     if not patch_path.exists():
@@ -357,6 +431,13 @@ def _relative_path(root: Path, target: Path | None) -> Path | None:
         return target.relative_to(root)
     except ValueError:
         return target
+
+
+def _project_relative_path(project_dir: Path, value: Any) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise ProjectError("Project manifest path metadata is incomplete")
+    candidate = Path(value)
+    return candidate if candidate.is_absolute() else (project_dir / candidate)
 
 
 def _hash_file(path: Path) -> str:

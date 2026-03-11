@@ -7,7 +7,7 @@
 - SoT YAML compiled to JSON Resume; PDF via Pandoc -> LaTeX
 - Variants allow selection rules + AI-assisted rewrites (drafts only)
 - Run manifests and AI logs stay local under var/runs/
-- Sync default is PR automation to site repo
+- Initial sync design targeted PR automation to the site repo; current default is local-first sync and PR mode is opt-in
 - Outputs include short resume, long CV, cover letters
 - LLM integration via Codex CLI
 - Pre-commit uses ruff + gitleaks
