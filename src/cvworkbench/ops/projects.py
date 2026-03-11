@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import unified_diff
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import yaml
@@ -84,6 +86,8 @@ _PROJECT_PATCH_FORMAT_UNIFIED_DIFF = "unified-diff"
 _PROJECT_PATCH_FORMAT_OPS = "project-ops"
 _PROJECT_OP_REPLACE_EXPERIENCE_BULLET = "replace-experience-bullet"
 _PROJECT_OP_REPLACE_PROJECT_SUMMARY = "replace-project-summary"
+_PROJECT_PATCH_MUTEXES: dict[str, Lock] = {}
+_PROJECT_PATCH_MUTEXES_GUARD = Lock()
 
 
 def resolve_project_dir(project: str, config_path: Path) -> Path:
@@ -834,19 +838,66 @@ def _append_project_operation(
     sot_path: Path,
     operation: dict[str, str],
 ) -> ProjectPatch:
-    patch_path, raw, patch_data, operations = _load_project_patch_authoring_state(project_dir)
-    candidate_operations = tuple([*operations, operation])
-    _compile_project_operations(operations=candidate_operations, sot_path=sot_path)
+    patch_path = project_dir / "proposals" / "patch.yaml"
+    with _project_patch_authoring_lock(patch_path):
+        patch_path, raw, patch_data, operations = _load_project_patch_authoring_state(project_dir)
+        candidate_operations = tuple([*operations, operation])
+        _compile_project_operations(operations=candidate_operations, sot_path=sot_path)
 
-    patch_data["operations"] = list(candidate_operations)
-    raw.setdefault("created_at", _now_iso())
-    raw["updated_at"] = _now_iso()
-    patch_path.write_text(yaml.safe_dump(raw, sort_keys=False))
+        patch_data["operations"] = list(candidate_operations)
+        raw.setdefault("created_at", _now_iso())
+        raw["updated_at"] = _now_iso()
+        patch_path.write_text(yaml.safe_dump(raw, sort_keys=False))
     return ProjectPatch(
         format=_PROJECT_PATCH_FORMAT_OPS,
         diff="",
         operations=candidate_operations,
     )
+
+
+@contextmanager
+def _project_patch_authoring_lock(patch_path: Path):
+    path_key = str(patch_path.resolve())
+    with _PROJECT_PATCH_MUTEXES_GUARD:
+        mutex = _PROJECT_PATCH_MUTEXES.setdefault(path_key, Lock())
+
+    with mutex:
+        lock_path = patch_path.with_name(f"{patch_path.name}.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            _lock_project_patch_handle(handle)
+            try:
+                yield
+            finally:
+                _unlock_project_patch_handle(handle)
+
+
+def _lock_project_patch_handle(handle: Any) -> None:
+    try:
+        import fcntl
+    except ImportError:
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        return
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_project_patch_handle(handle: Any) -> None:
+    try:
+        import fcntl
+    except ImportError:
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _load_project_patch_authoring_state(

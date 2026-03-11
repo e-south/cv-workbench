@@ -1,9 +1,13 @@
 # Ingestion
 
-The ingestion pipeline turns a URL (or any text-based context source) into a
-local registry entry with deterministic signals and a draft variant strategy.
+Use `project guide` or `project new` for the main job-tailoring workflow. Those
+commands create a project-local proposal, signals, and patch scaffold. Use
+`job add` when you want the generic registry path without creating a project.
 
-## Add a context URL
+The ingestion pipeline turns a URL (or any text-based context source) into
+deterministic local artifacts.
+
+## Generic Context Ingestion
 
 ```bash
 uv run cvw job add --url https://example.com/context

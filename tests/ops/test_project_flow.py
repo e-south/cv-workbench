@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import yaml
@@ -381,6 +382,117 @@ def test_append_replace_project_summary_operation_snapshots_current_text(tmp_pat
     assert op["new_text"] == "Example summary tailored for regulated delivery."
     diff = load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
     assert "Example summary tailored for regulated delivery." in diff
+
+
+def test_append_project_operations_serializes_concurrent_writers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: bullet-1",
+                "        text: Built platform foundations.",
+                "        tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "\n".join(
+            [
+                "projects:",
+                "  - id: project-1",
+                "    name: Example Project",
+                "    summary: Example summary.",
+                "    tags: [core]",
+            ]
+        )
+        + "\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    barrier = threading.Barrier(2)
+    projects_module = __import__("cvworkbench.ops.projects", fromlist=["_load_project_patch_authoring_state"])
+    original_loader = projects_module._load_project_patch_authoring_state
+
+    def _delayed_loader(project_dir: Path):
+        state = original_loader(project_dir)
+        try:
+            barrier.wait(timeout=0.2)
+        except threading.BrokenBarrierError:
+            pass
+        return state
+
+    monkeypatch.setattr(
+        "cvworkbench.ops.projects._load_project_patch_authoring_state",
+        _delayed_loader,
+    )
+
+    start_gate = threading.Barrier(3)
+    errors: list[BaseException] = []
+
+    def _append_experience() -> None:
+        try:
+            start_gate.wait(timeout=1.0)
+            append_replace_experience_bullet_operation(
+                project_dir=result.project_dir,
+                sot_path=sot_path,
+                role_id="role-1",
+                bullet_id="bullet-1",
+                new_text="Built platform foundations for regulated delivery.",
+            )
+        except BaseException as exc:  # pragma: no cover - exercised only on failure
+            errors.append(exc)
+
+    def _append_project() -> None:
+        try:
+            start_gate.wait(timeout=1.0)
+            append_replace_project_summary_operation(
+                project_dir=result.project_dir,
+                sot_path=sot_path,
+                project_id="project-1",
+                new_text="Example summary tailored for regulated delivery.",
+            )
+        except BaseException as exc:  # pragma: no cover - exercised only on failure
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=_append_experience),
+        threading.Thread(target=_append_project),
+    ]
+    for thread in threads:
+        thread.start()
+    start_gate.wait(timeout=1.0)
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    payload = yaml.safe_load(result.patch_path.read_text())
+    operations = payload["patch"]["operations"]
+    assert len(operations) == 2
+    assert {operation["op"] for operation in operations} == {
+        "replace-experience-bullet",
+        "replace-project-summary",
+    }
 
 
 def test_project_ops_fail_fast_on_source_text_drift(tmp_path: Path) -> None:
