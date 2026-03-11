@@ -172,6 +172,28 @@ def test_build_prints_output_locations() -> None:
     assert "run_dir:" in output
 
 
+def test_build_reports_unsupported_format_without_traceback() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "build",
+            "--variant",
+            "base",
+            "--format",
+            "xyz",
+            "--sot-path",
+            "sot.sample",
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unsupported output format 'xyz'" in (result.stderr or "")
+    assert "Traceback" not in (result.stderr or "")
+
+
 def test_cli_module_entrypoint() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "cvworkbench.cli", "--help"],

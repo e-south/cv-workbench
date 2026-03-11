@@ -116,6 +116,105 @@ def test_project_guide_creates_project_and_recommends_variants(tmp_path: Path) -
     assert payload["project"]["project_dir"].endswith("var/projects/job")
     assert payload["proposal"]["variant_id"] == "proposal-job"
     assert payload["recommendations"]
+    assert payload["proposal_plan"]["path"].endswith("proposal-plan.json")
+    assert Path(payload["proposal_plan"]["path"]).exists()
+
+
+def test_project_guide_ranks_variants_with_weighted_signal_evidence(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "variant:\n  id: base\n  outputs: [md, pdf]\n"
+    )
+    (variants_dir / "cover.yaml").write_text(
+        "variant:\n  id: cover\n  outputs: [md]\n  include_tags: [leadership]\n"
+    )
+    (variants_dir / "ops.yaml").write_text(
+        "variant:\n  id: ops\n  outputs: [md]\n  include_tags: [reliability]\n"
+    )
+    (variants_dir / "blocked.yaml").write_text(
+        "variant:\n  id: blocked\n  outputs: [md]\n  exclude_tags: [leadership]\n"
+    )
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  projects: ../var/projects",
+                "variant_lifecycle:",
+                "  ttl_days: 7",
+                "variants:",
+                "  default: base",
+            ]
+        )
+        + "\n"
+    )
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "person.yaml").write_text("id: sample\nname: Sample\n")
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role-1",
+                "    company: Example Co",
+                "    title: Engineer",
+                "    start: 2021",
+                "    bullets:",
+                "      - id: b1",
+                "        text: Led reliable delivery.",
+                "        tags: [leadership, reliability]",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "projects:\n  - id: p1\n    name: Example Project\n    summary: Summary.\n    tags: [reliability]\n"
+    )
+    (sot_path / "skills.yaml").write_text(
+        "skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n"
+    )
+    (sot_path / "education.yaml").write_text(
+        "education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [sample]\n"
+    )
+    (sot_path / "letters.yaml").write_text(
+        "letters:\n  - id: base\n    title: Base\n    salutation: Hello\n    closing: Thanks\n    sections:\n      - id: intro\n        text: Text\n        tags: [sample]\n"
+    )
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Reliability reliability reliability and leadership.\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-file",
+            str(job_path),
+            "--sot-path",
+            str(sot_path),
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    recommendations = payload["recommendations"]
+    assert recommendations[0]["variant_id"] == "ops"
+    assert recommendations[0]["score"] > recommendations[1]["score"]
+    assert recommendations[0]["score_breakdown"]["job_signal"] >= 3
+    assert recommendations[0]["rationale"]
+    assert recommendations[-1]["variant_id"] == "blocked"
+    assert recommendations[-1]["eligible"] is False
+    assert payload["proposal_plan"]["selected_variant"] == "ops"
+    assert payload["proposal_plan"]["status"] == "targeted"
+    plan_path = Path(payload["proposal_plan"]["path"])
+    assert plan_path.exists()
+    stored_plan = json.loads(plan_path.read_text())
+    assert stored_plan["selected_variant"] == "ops"
 
 
 def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> None:

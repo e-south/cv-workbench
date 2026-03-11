@@ -4,7 +4,8 @@ Projects are local, private workspaces for job tailoring. They keep job context,
 signals, and proposal drafts without mutating the Source of Truth unless you
 explicitly apply a patch.
 
-`project guide` ranks variants and scaffolds proposal artifacts. It does not
+`project guide` ranks variants, records deterministic evidence-backed rationale
+in `job/proposal-plan.json`, and scaffolds proposal artifacts. It does not
 perform free-form NL rewriting of your SoT.
 
 ## Commands
@@ -48,6 +49,7 @@ var/projects/<slug>/
     source.url        # or source.path
     extracted.txt
     signals.json
+    proposal-plan.json
     raw.html          # only if --store-raw
   proposals/
     variant.yaml
@@ -83,6 +85,9 @@ Use:
 - `uv run cvw reviewpack --run projects/<slug>/<run-id>` packages a specific project build
   deterministically when multiple runs exist. Review packs now source DOCX/PDF/selection
   metadata from the selected run directory, not the shared `var/dist/<variant>/` directory.
+- Variant-level `var/dist/<variant>/manifest.json` and `selection.json` are deterministic
+  across identical rebuilds; run-scoped manifests keep `created_at` so run catalogs can
+  still sort immutable runs.
 - `uv run cvw project apply <slug>` applies the patch to your SoT on disk.
 
 ## Patch format
@@ -142,7 +147,10 @@ This is a compare-and-set contract:
 
 `import-docx` now writes `var/drafts/import-*/patch.yaml` using the same
 `project-ops` schema when reviewed Experience bullets or Projects summaries map
-cleanly back to SoT ids. Formatting-only normalized imports report
+cleanly back to SoT ids. Canonical markdown now follows the same variant
+selection gates as rendered review artifacts, so filtered project imports no
+longer fall back to `review_diff_only` just because hidden items were present
+in the unrendered canonical source. Formatting-only normalized imports report
 `apply_status: ready_no_changes`. Unsupported edits still fall back to
 `var/drafts/import-*/patch.diff` with `apply_status: review_diff_only`.
 

@@ -63,7 +63,8 @@ uv run cvw variant discard --project <slug> --yes
 
 New projects scaffold a project-local proposal variant plus a `project-ops`
 patch file at `proposals/patch.yaml`. `project guide` helps you choose a base
-variant and inspect signals; it does not directly rewrite SoT content.
+variant, writes `job/proposal-plan.json` with deterministic ranking rationale
+and evidence snippets, and does not directly rewrite SoT content.
 
 Today the supported executable op families are guarded experience bullet
 replacement and project summary replacement. Use

@@ -1852,6 +1852,15 @@ def _load_job_signals(signals_path: Path) -> dict[str, Any]:
     return raw
 
 
+def _load_optional_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    raw = json.loads(path.read_text())
+    if not isinstance(raw, dict):
+        return None
+    return raw
+
+
 def _normalize_keywords(values: list[str]) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -1874,11 +1883,105 @@ def _job_keyword_overlap(job_keywords: list[str], tag_counts: dict[str, int]) ->
     }
 
 
+def _job_signal_counts(signals: dict[str, Any], job_keywords: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    evidence = signals.get("evidence")
+    if isinstance(evidence, dict):
+        for keyword, spans in evidence.items():
+            normalized = normalize_tag(keyword) if isinstance(keyword, str) else ""
+            if not normalized:
+                continue
+            mentions = 0
+            if isinstance(spans, list):
+                mentions = sum(1 for span in spans if isinstance(span, dict))
+            counts[normalized] = max(counts.get(normalized, 0), mentions)
+    for keyword in job_keywords:
+        counts.setdefault(keyword, 1)
+    return counts
+
+
+def _build_job_evidence(
+    text: str,
+    *,
+    signals: dict[str, Any],
+    job_keywords: list[str],
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    evidence = signals.get("evidence")
+    if not isinstance(evidence, dict):
+        return []
+    signal_counts = _job_signal_counts(signals, job_keywords)
+    items: list[tuple[str, int, int, int]] = []
+    for keyword in job_keywords:
+        spans = evidence.get(keyword)
+        if not isinstance(spans, list) or not spans:
+            continue
+        first = spans[0]
+        if not isinstance(first, dict):
+            continue
+        start = first.get("start")
+        end = first.get("end")
+        if not isinstance(start, int) or not isinstance(end, int):
+            continue
+        items.append((keyword, signal_counts.get(keyword, 1), start, end))
+    items.sort(key=lambda item: (-item[1], item[0]))
+
+    previews: list[dict[str, Any]] = []
+    for keyword, mentions, start, end in items[:limit]:
+        previews.append(
+            {
+                "keyword": keyword,
+                "mentions": mentions,
+                "snippet": _excerpt_text(text, start, end),
+            }
+        )
+    return previews
+
+
+def _excerpt_text(text: str, start: int, end: int, radius: int = 48) -> str:
+    left = max(0, start - radius)
+    right = min(len(text), end + radius)
+    snippet = " ".join(text[left:right].split())
+    if left > 0:
+        snippet = f"...{snippet}"
+    if right < len(text):
+        snippet = f"{snippet}..."
+    return snippet
+
+
+def _recommendation_rationale(
+    *,
+    include: set[str],
+    include_matches: list[str],
+    include_missing: list[str],
+    exclude_matches: list[str],
+    missing_in_sot: list[str],
+    default: bool,
+) -> list[str]:
+    reasons: list[str] = []
+    if include_matches:
+        reasons.append("matched include tags: " + ", ".join(include_matches))
+    elif include:
+        reasons.append("no include tag matches in the job text")
+    elif default:
+        reasons.append("broad default fallback with no include-tag gate")
+    else:
+        reasons.append("broad fallback variant with no include-tag gate")
+    if missing_in_sot:
+        reasons.append("include tags absent from current SoT: " + ", ".join(missing_in_sot))
+    if include_missing:
+        reasons.append("job text does not mention: " + ", ".join(include_missing))
+    if exclude_matches:
+        reasons.append("blocked by exclude tags: " + ", ".join(exclude_matches))
+    return reasons
+
+
 def _recommend_variants(
     variants: list[dict[str, Any]],
     job_keywords: list[str],
     tag_counts: dict[str, int],
     default_variant: str,
+    signal_counts: dict[str, int],
 ) -> list[dict[str, Any]]:
     job_set = set(job_keywords)
     tag_set = set(tag_counts.keys())
@@ -1890,7 +1993,13 @@ def _recommend_variants(
         include_missing = sorted(include - job_set)
         missing_in_sot = sorted(include - tag_set)
         exclude_matches = sorted(exclude & job_set)
-        score = len(include_matches)
+        include_signal_score = sum(signal_counts.get(tag, 0) for tag in include_matches)
+        include_sot_score = sum(tag_counts.get(tag, 0) for tag in include_matches)
+        default_bonus = 1 if not include and variant["id"] == default_variant else 0
+        missing_penalty = (len(include_missing) * 2) + (len(missing_in_sot) * 3)
+        exclude_penalty = len(exclude_matches) * 5
+        score = (include_signal_score * 3) + include_sot_score + default_bonus
+        score -= missing_penalty + exclude_penalty
         eligible = len(exclude_matches) == 0
         recommendations.append(
             {
@@ -1903,10 +2012,31 @@ def _recommend_variants(
                 "include_missing": include_missing,
                 "exclude_matches": exclude_matches,
                 "missing_in_sot": missing_in_sot,
+                "score_breakdown": {
+                    "job_signal": include_signal_score,
+                    "sot_coverage": include_sot_score,
+                    "default_bonus": default_bonus,
+                    "missing_penalty": missing_penalty,
+                    "exclude_penalty": exclude_penalty,
+                },
+                "rationale": _recommendation_rationale(
+                    include=include,
+                    include_matches=include_matches,
+                    include_missing=include_missing,
+                    exclude_matches=exclude_matches,
+                    missing_in_sot=missing_in_sot,
+                    default=variant["id"] == default_variant,
+                ),
             }
         )
     recommendations.sort(
-        key=lambda item: (not item["eligible"], -item["score"], item["variant_id"])
+        key=lambda item: (
+            not item["eligible"],
+            -item["score"],
+            -len(item["include_matches"]),
+            not item["default"],
+            item["variant_id"],
+        )
     )
     for idx, item in enumerate(recommendations, start=1):
         item["rank"] = idx
@@ -1923,12 +2053,63 @@ def _recommendations_summary_line(recommendations: list[dict[str, Any]], limit: 
             parts.append("default")
         if item.get("include_matches"):
             parts.append("match=" + ",".join(item["include_matches"]))
+        if item.get("rationale"):
+            parts.append("why=" + item["rationale"][0])
         if item.get("exclude_matches"):
             parts.append("exclude=" + ",".join(item["exclude_matches"]))
         if item.get("missing_in_sot"):
             parts.append("missing_sot=" + ",".join(item["missing_in_sot"]))
         lines.append(" | ".join(parts))
     return "\n".join(lines)
+
+
+def _build_proposal_plan(
+    *,
+    project_id: str,
+    project_dir: Path,
+    job_keywords: list[str],
+    keyword_overlap: dict[str, list[str]],
+    recommendations: list[dict[str, Any]],
+    job_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    selected = recommendations[0] if recommendations else None
+    selected_variant = selected["variant_id"] if selected is not None else None
+    status = (
+        "blocked"
+        if selected is None or not selected["eligible"]
+        else "targeted"
+        if selected["include_matches"]
+        else "fallback"
+    )
+    if selected is None:
+        summary = "No variants are available."
+    elif selected["rationale"]:
+        summary = selected["rationale"][0]
+    else:
+        summary = "Use the proposal variant as the starting point."
+
+    steps = [
+        f"Inspect `project show {project_id}` and preview the proposal variant.",
+        "Capture supported SoT edits as project-ops before exporting review artifacts.",
+        "Build md,pdf,docx once the proposal text matches the intended scope.",
+    ]
+    if keyword_overlap["missing"]:
+        steps.insert(
+            1,
+            "Patch missing job signals into SoT-backed bullets or project summaries before review export.",
+        )
+
+    return {
+        "path": str(project_dir / "job" / "proposal-plan.json"),
+        "selected_variant": selected_variant,
+        "status": status,
+        "summary": summary,
+        "job_keywords": job_keywords,
+        "job_keywords_missing_in_sot": keyword_overlap["missing"],
+        "job_evidence": job_evidence,
+        "recommendation": selected,
+        "steps": steps,
+    }
 
 
 def _load_review_summaries(config_path: Path) -> list[dict[str, Any]]:
@@ -2573,6 +2754,10 @@ def _project_summary_payload(
 
 
 def _print_project_guide_summary(summary: dict[str, Any]) -> None:
+    evidence = summary["proposal_plan"].get("job_evidence", [])
+    evidence_summary = ", ".join(
+        f"{item['keyword']}({item['mentions']})" for item in evidence if isinstance(item, dict)
+    )
     rows = [
         ("project_dir", summary["project"]["project_dir"]),
         ("base_variant", summary["project"]["base_variant"]),
@@ -2581,6 +2766,10 @@ def _print_project_guide_summary(summary: dict[str, Any]) -> None:
         ("job_keywords", ", ".join(summary["job"]["keywords"]) or "none"),
         ("job_keywords_in_sot", ", ".join(summary["job"]["keywords_in_sot"]) or "none"),
         ("job_keywords_missing", ", ".join(summary["job"]["keywords_missing"]) or "none"),
+        ("recommended_variant", summary["proposal_plan"]["selected_variant"] or "none"),
+        ("recommendation_status", summary["proposal_plan"]["status"]),
+        ("recommendation_summary", summary["proposal_plan"]["summary"]),
+        ("job_evidence", evidence_summary or "none"),
         ("sot_tags_top", summary["sot"]["tags_summary"]),
         ("recommendations", _recommendations_summary_line(summary["recommendations"])),
         (
@@ -3303,7 +3492,7 @@ def quickstart(
             variant_id="base",
             formats=["md", "pdf", "docx"],
         )
-    except (ValueError, RenderError) as exc:
+    except (ValueError, RenderError, ThemeError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
@@ -4663,6 +4852,13 @@ def project_guide(
         raw_keywords = [item for item in keywords_value if isinstance(item, str)]
     job_keywords = _normalize_keywords(raw_keywords)
     keyword_overlap = _job_keyword_overlap(job_keywords, counts)
+    signal_counts = _job_signal_counts(signals, job_keywords)
+    job_text = project_paths.extracted_path.read_text()
+    job_evidence = _build_job_evidence(
+        job_text,
+        signals=signals,
+        job_keywords=job_keywords,
+    )
 
     try:
         variants = _load_variants_from_config(config_path)
@@ -4670,7 +4866,23 @@ def project_guide(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    recommendations = _recommend_variants(variants, job_keywords, counts, base_variant)
+    recommendations = _recommend_variants(
+        variants,
+        job_keywords,
+        counts,
+        base_variant,
+        signal_counts,
+    )
+    proposal_plan = _build_proposal_plan(
+        project_id=project_paths.project_dir.name,
+        project_dir=project_paths.project_dir,
+        job_keywords=job_keywords,
+        keyword_overlap=keyword_overlap,
+        recommendations=recommendations,
+        job_evidence=job_evidence,
+    )
+    proposal_plan_path = Path(proposal_plan["path"])
+    proposal_plan_path.write_text(json.dumps(proposal_plan, indent=2, sort_keys=True) + "\n")
 
     summary = {
         **_project_summary_payload(
@@ -4686,6 +4898,7 @@ def project_guide(
             "keywords": job_keywords,
             "keywords_in_sot": keyword_overlap["matched"],
             "keywords_missing": keyword_overlap["missing"],
+            "evidence": job_evidence,
         },
         "sot": {
             "path": str(resolved_sot),
@@ -4698,6 +4911,7 @@ def project_guide(
             "default": base_variant,
         },
         "recommendations": recommendations,
+        "proposal_plan": proposal_plan,
     }
 
     if get_output_mode() == OutputMode.JSON:
@@ -4776,6 +4990,8 @@ def project_show(
             patch_status += "s"
     else:
         patch_status = f"{details.patch_line_count} lines"
+    proposal_plan_path = details.signals_path.parent / "proposal-plan.json"
+    proposal_plan = _load_optional_json(proposal_plan_path)
     summary = {
         "project": {
             "project_id": details.spec.project_id,
@@ -4807,6 +5023,8 @@ def project_show(
         "review": review,
         "commands": commands,
     }
+    if proposal_plan is not None:
+        summary["proposal_plan"] = proposal_plan
 
     if get_output_mode() == OutputMode.JSON:
         typer.echo(json.dumps({"command": "project.show", **summary}, indent=2, sort_keys=True))
@@ -5714,7 +5932,7 @@ def build(
             run_dir=run_dir,
             dist_dir=run_dir if project_spec is not None else None,
         )
-    except (ValueError, RenderError) as exc:
+    except (ValueError, RenderError, ThemeError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _print_build_summary(result)
@@ -5822,7 +6040,7 @@ def render(
                 pdf_engine,
                 plan,
             )
-        except RenderError as exc:
+        except (RenderError, ThemeError) as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         output_files[fmt] = output_file
@@ -5936,16 +6154,20 @@ def dev_serve(
         except SotVersionError:
             sot_base = resolved
 
-    controller = PreviewController(
-        sot_base=sot_base,
-        config_path=config_path,
-        variant_id=resolved_variant,
-        theme_id=resolved_theme,
-        style_preset=resolved_preset,
-        auto_pdf=True,
-        project_dir=project_spec.project_dir if project_spec else None,
-        project_sot_override=sot_base if project_spec and sot_path is not None else None,
-    )
+    try:
+        controller = PreviewController(
+            sot_base=sot_base,
+            config_path=config_path,
+            variant_id=resolved_variant,
+            theme_id=resolved_theme,
+            style_preset=resolved_preset,
+            auto_pdf=True,
+            project_dir=project_spec.project_dir if project_spec else None,
+            project_sot_override=sot_base if project_spec and sot_path is not None else None,
+        )
+    except PreviewError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
     try:
         port = int(os.environ.get("CVW_DEV_PORT", "8765"))

@@ -83,3 +83,9 @@ def test_tailor_writes_draft_files(tmp_path: Path) -> None:
     assert "keywords" in signals
     assert "sample" in signals["keywords"]
     assert "job" in signals["keywords"]
+    assert "evidence" in signals
+
+    prompt = yaml.safe_load((output_dir / "prompt.json").read_text())
+    assert prompt["job"]["keywords"][:2] == ["sample", "job"]
+    assert {item["keyword"] for item in prompt["signals"]["top_evidence"]} >= {"job", "sample"}
+    assert prompt["proposal_plan"]["focus_keywords"][:2] == ["sample", "job"]

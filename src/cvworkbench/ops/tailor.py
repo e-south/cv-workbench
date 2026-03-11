@@ -22,6 +22,7 @@ from typing import Any
 import yaml
 
 from cvworkbench.config import resolve_variant_path
+from cvworkbench.ingestion.signals import build_signals as build_job_signals
 from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, register_variant
 
 
@@ -84,6 +85,7 @@ def tailor_job(
         base_variant_id=base_variant_id,
         draft_variant_id=draft_variant_id,
         signals_path=signals_path,
+        signals_payload=signals_payload,
     )
     prompt_path.write_text(json.dumps(prompt_payload, indent=2, sort_keys=True) + "\n")
 
@@ -112,20 +114,40 @@ def _build_prompt_payload(
     base_variant_id: str,
     draft_variant_id: str,
     signals_path: Path,
+    signals_payload: dict[str, Any],
 ) -> dict[str, Any]:
+    keywords = signals_payload.get("keywords")
+    evidence = signals_payload.get("evidence")
+    evidence_items = [
+        {"keyword": key, "mentions": len(value)}
+        for key, value in (evidence.items() if isinstance(evidence, dict) else [])
+        if isinstance(key, str) and isinstance(value, list)
+    ]
+    evidence_items.sort(key=lambda item: (-item["mentions"], item["keyword"]))
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "job": {
             "path": str(job_path),
             "hash": _hash_file(job_path),
+            "keywords": keywords if isinstance(keywords, list) else [],
+            "word_count": signals_payload.get("word_count"),
         },
         "signals": {
             "path": str(signals_path),
             "hash": _hash_file(signals_path),
+            "top_evidence": evidence_items[:5],
         },
         "base_variant": base_variant_id,
         "draft_variant": draft_variant_id,
         "instructions": "Generate a tailored variant and patch proposal.",
+        "proposal_plan": {
+            "focus_keywords": (keywords[:5] if isinstance(keywords, list) else []),
+            "steps": [
+                "Review the copied job context and focus on the strongest repeated keywords.",
+                "Draft only SoT-backed variant or patch changes.",
+                "Prefer explicit patch operations over free-form rewrite notes.",
+            ],
+        },
         "model_id": None,
         "temperature": None,
         "diff_summary": None,
@@ -133,29 +155,14 @@ def _build_prompt_payload(
 
 
 def _build_signals(job_path: Path) -> dict[str, Any]:
-    text = job_path.read_text()
-    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
-    keywords = _dedupe([token for token in tokens if len(token) >= 3])
-    return {
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "source": {
-            "path": str(job_path),
+    return build_job_signals(
+        job_path.read_text(),
+        {
+            "type": "file",
+            "value": str(job_path),
             "hash": _hash_file(job_path),
         },
-        "keywords": keywords[:25],
-        "word_count": len(tokens),
-    }
-
-
-def _dedupe(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in items:
-        if item in seen:
-            continue
-        seen.add(item)
-        result.append(item)
-    return result
+    )
 
 
 def _hash_file(path: Path) -> str:
