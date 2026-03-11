@@ -152,7 +152,24 @@ def build_documents(
         },
     )
     write_manifest(dist_dir / "manifest.json", manifest)
-    write_manifest(run_dir / "manifest.json", manifest)
+    run_manifest = build_manifest(
+        variant=variant,
+        variant_path=variant_path,
+        sot_path=sot_path,
+        formats=selected_formats,
+        output_paths=output_paths,
+        resume_path=resume_path,
+        pdf_engine=pdf_engine,
+        repo_root=config_path.parent.parent,
+        render={
+            "theme": theme_obj.id,
+            "theme_hash": theme_hash,
+            "style_preset": preset,
+            "formats": render_details,
+        },
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    write_manifest(run_dir / "manifest.json", run_manifest)
 
     return BuildResult(
         variant=variant,

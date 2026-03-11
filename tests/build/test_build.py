@@ -164,6 +164,110 @@ def test_build_project_writes_outputs_to_project_run_dir(tmp_path: Path) -> None
     assert not (tmp_path / "var" / "dist" / "base" / "cv.md").exists()
 
 
+def test_build_canonical_matches_variant_selection(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md]",
+                "  include_tags: [core]",
+                "  max_bullets_per_role: 1",
+            ]
+        )
+        + "\n"
+    )
+    config_path = config_dir / "workbench.yaml"
+    root = Path(__file__).resolve().parents[2]
+    themes_dir = root / "build" / "themes"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {themes_dir}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+    sot_path = tmp_path / "sot.sample"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "person.yaml").write_text("id: sample\nname: Sample\n")
+    (sot_path / "experience.yaml").write_text(
+        "\n".join(
+            [
+                "roles:",
+                "  - id: role",
+                "    company: Co",
+                "    title: Title",
+                "    start: 2020",
+                "    bullets:",
+                "      - id: core-1",
+                "        text: Keep first core bullet.",
+                "        tags: [core]",
+                "      - id: core-2",
+                "        text: Drop second core bullet by max limit.",
+                "        tags: [core]",
+                "      - id: extra-1",
+                "        text: Drop unmatched bullet.",
+                "        tags: [other]",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "\n".join(
+            [
+                "projects:",
+                "  - id: kept-project",
+                "    name: Keep Project",
+                "    summary: Keep this summary.",
+                "    tags: [core]",
+                "  - id: dropped-project",
+                "    name: Drop Project",
+                "    summary: Drop this summary.",
+                "    tags: [other]",
+            ]
+        )
+        + "\n"
+    )
+    (sot_path / "skills.yaml").write_text(
+        "skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n"
+    )
+    (sot_path / "education.yaml").write_text(
+        "education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [core]\n"
+    )
+    (sot_path / "letters.yaml").write_text(
+        "letters:\n  - id: base\n    title: Base\n    salutation: Hello\n    closing: Thanks\n    sections:\n      - id: intro\n        text: Text\n        tags: [core]\n"
+    )
+
+    result = pipeline_module.build_documents(
+        sot_path=sot_path,
+        config_path=config_path,
+        variant_id="base",
+        formats=["md"],
+    )
+
+    canonical = result.canonical_path.read_text()
+
+    assert "Keep first core bullet." in canonical
+    assert "Drop second core bullet by max limit." not in canonical
+    assert "Drop unmatched bullet." not in canonical
+    assert "Keep Project" in canonical
+    assert "Keep this summary." in canonical
+    assert "Drop Project" not in canonical
+    assert "Drop this summary." not in canonical
+
+
 def test_build_project_applies_project_ops_without_mutating_base_sot(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"

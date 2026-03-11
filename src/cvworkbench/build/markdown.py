@@ -244,13 +244,25 @@ def _build_experience(
 
         bullets = role.get("bullets")
         if isinstance(bullets, list) and bullets:
-            lines.append("")
+            emitted_bullet = False
+            selected_count = 0
             for bullet in bullets:
                 if not isinstance(bullet, dict):
+                    continue
+                if not _tags_match_variant(bullet.get("tags"), variant):
+                    continue
+                if (
+                    variant.max_bullets_per_role is not None
+                    and selected_count >= variant.max_bullets_per_role
+                ):
                     continue
                 bullet_text = _string(bullet.get("text"))
                 if not bullet_text:
                     continue
+                if not emitted_bullet:
+                    lines.append("")
+                    emitted_bullet = True
+                selected_count += 1
                 bullet_id = slugify(bullet.get("id", ""))
                 tag_classes = _tag_classes(bullet.get("tags"))
                 div_attr = _format_div_attributes(
@@ -281,6 +293,8 @@ def _build_projects(
     _append_section_intro(lines, "projects", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
+            continue
+        if not _tags_match_variant(item.get("tags"), variant):
             continue
         project_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
@@ -339,6 +353,8 @@ def _build_education(
     for item in items:
         if not isinstance(item, dict):
             continue
+        if not _tags_match_variant(item.get("tags"), variant):
+            continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
         div_attr = _format_div_attributes(f"education-{entry_id}", ["section", *tag_list])
@@ -394,6 +410,8 @@ def _build_publications(
     for item in items:
         if not isinstance(item, dict):
             continue
+        if not _tags_match_variant(item.get("tags"), variant):
+            continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
         div_attr = _format_div_attributes(f"publication-{entry_id}", ["section", *tag_list])
@@ -435,6 +453,8 @@ def _build_conferences(
     _append_section_intro(lines, "conferences", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
+            continue
+        if not _tags_match_variant(item.get("tags"), variant):
             continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
@@ -478,6 +498,8 @@ def _build_honors(
     for item in items:
         if not isinstance(item, dict):
             continue
+        if not _tags_match_variant(item.get("tags"), variant):
+            continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
         div_attr = _format_div_attributes(f"honor-{entry_id}", ["section", *tag_list])
@@ -518,6 +540,8 @@ def _build_service(
     for item in items:
         if not isinstance(item, dict):
             continue
+        if not _tags_match_variant(item.get("tags"), variant):
+            continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
         div_attr = _format_div_attributes(f"service-{entry_id}", ["section", *tag_list])
@@ -557,6 +581,8 @@ def _build_teaching(
     _append_section_intro(lines, "teaching", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
+            continue
+        if not _tags_match_variant(item.get("tags"), variant):
             continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
@@ -600,6 +626,8 @@ def _build_references(
     _append_section_intro(lines, "references", variant, snippets)
     for item in items:
         if not isinstance(item, dict):
+            continue
+        if not _tags_match_variant(item.get("tags"), variant):
             continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
@@ -687,7 +715,11 @@ def _select_snippet_text(
 
 
 def _snippet_matches_variant(snippet: dict[str, Any], variant: Variant) -> bool:
-    tag_set = _expand_tag_set(snippet.get("tags"))
+    return _tags_match_variant(snippet.get("tags"), variant)
+
+
+def _tags_match_variant(raw_tags: Any, variant: Variant) -> bool:
+    tag_set = _expand_tag_set(raw_tags)
     if variant.exclude_tags and _has_any(tag_set, variant.exclude_tags):
         return False
     if not variant.include_tags:

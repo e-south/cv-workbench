@@ -35,6 +35,13 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
     if not sot_path.exists():
         raise ApplyError(f"SoT path not found: {sot_path}")
 
+    apply_status = _load_apply_status(draft_dir / "notes.md")
+    if apply_status == "review_diff_only":
+        raise ApplyError(
+            "Draft notes mark apply_status: review_diff_only; inspect notes.md and "
+            "author an explicit SoT patch instead of applying this draft"
+        )
+
     patch_payload_path = draft_dir / "patch.yaml"
     patch_path = draft_dir / "patch.diff"
     if patch_payload_path.exists():
@@ -85,3 +92,16 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
         status="applied",
         reason="mutation_applied",
     )
+
+
+def _load_apply_status(notes_path: Path) -> str | None:
+    if not notes_path.exists():
+        return None
+    prefix = "- apply_status:"
+    for line in notes_path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(prefix):
+            continue
+        value = stripped[len(prefix) :].strip()
+        return value or None
+    return None

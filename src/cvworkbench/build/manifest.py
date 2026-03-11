@@ -14,7 +14,6 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -35,9 +34,9 @@ def build_manifest(
     pdf_engine: str | None,
     repo_root: Path,
     render: dict[str, Any] | None = None,
+    created_at: str | None = None,
 ) -> dict[str, Any]:
     payload = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
         "variant": {
             "id": variant.id,
             "document_type": variant.document_type,
@@ -64,6 +63,8 @@ def build_manifest(
             "pdf_engine_version": _tool_version([pdf_engine, "--version"]) if pdf_engine else None,
         },
     }
+    if created_at is not None:
+        payload["created_at"] = created_at
     if render is not None:
         payload["render"] = render
     return payload

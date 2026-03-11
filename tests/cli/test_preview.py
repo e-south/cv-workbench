@@ -77,6 +77,62 @@ def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     assert not session_path.exists()
 
 
+def test_preview_once_reports_invalid_variant_catalog_without_traceback(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md, pdf, html]",
+            ]
+        )
+        + "\n"
+    )
+    (variants_dir / "bad.yaml").write_text("not_variant: true\n")
+    root = Path(__file__).resolve().parents[2]
+    themes_dir = root / "build" / "themes"
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {themes_dir}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "preview",
+            "--once",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Variant file must contain a 'variant' mapping" in (result.stderr or "")
+    assert "Traceback" not in (result.stderr or "")
+
+
 def test_preview_once_allows_project_with_explicit_sot_path(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"

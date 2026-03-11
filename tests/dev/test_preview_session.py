@@ -16,7 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from cvworkbench.dev.preview import PreviewError, load_preview_session, preview_session_path
+from cvworkbench.dev.preview import (
+    PreviewError,
+    _parse_render_payload,
+    load_preview_session,
+    preview_session_path,
+)
 
 
 def _write_minimal_config(root: Path) -> Path:
@@ -69,3 +74,24 @@ def test_load_preview_session_accepts_null_style_preset(tmp_path: Path) -> None:
 
     assert session.variant_id == "base"
     assert session.style_preset is None
+
+
+def test_parse_render_payload_requires_json_object() -> None:
+    with pytest.raises(PreviewError, match="JSON object"):
+        _parse_render_payload('["base"]')
+
+
+def test_parse_render_payload_rejects_invalid_json() -> None:
+    with pytest.raises(PreviewError, match="Invalid JSON"):
+        _parse_render_payload("{")
+
+
+def test_parse_render_payload_rejects_non_boolean_auto_pdf() -> None:
+    with pytest.raises(PreviewError, match="auto_pdf must be a boolean"):
+        _parse_render_payload('{"auto_pdf": "yes"}')
+
+
+def test_parse_render_payload_accepts_valid_body() -> None:
+    payload = _parse_render_payload('{"variant": "base", "auto_pdf": true}')
+
+    assert payload == {"variant": "base", "auto_pdf": True}

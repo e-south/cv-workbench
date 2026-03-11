@@ -261,6 +261,33 @@ def test_reviewpack_ignores_invalid_run_dirs_when_valid_run_exists(tmp_path: Pat
     assert (out_dir / "cv.pdf").exists()
 
 
+def test_reviewpack_rejects_manifest_outputs_outside_run_dir(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    run_dir = tmp_path / "var" / "runs" / "2026-01-02T00-00-00Z"
+    _write_run_manifest_at(
+        run_dir,
+        variant_id="base",
+        canonical="before\n",
+        review_ready=True,
+    )
+    (tmp_path / "secret.docx").write_bytes(b"secret")
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["outputs"]["docx"] = "../../../secret.docx"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
+        )
+
+    assert result.exit_code != 0
+    assert "escapes run directory" in (result.stderr or "")
+    assert not (resolve_reviews_path(config_path) / "base").exists()
+
+
 def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", "before\n")
@@ -450,6 +477,111 @@ def test_import_docx_normalizes_wrapped_markdown_without_forcing_review_diff_onl
     assert "next_step: Review notes.md; the normalized patch is a verified no-op" in result.stdout
 
 
+def test_import_docx_normalizes_flattened_noneditable_sections_without_forcing_review_diff_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    canonical = "\n".join(
+        [
+            "# Sample User",
+            "",
+            "## Experience",
+            "",
+            "### Engineer - Example Co",
+            "2021 — Present",
+            "",
+            "- Delivered outcomes.",
+            "",
+            "## Projects",
+            "",
+            "### Example Project",
+            "Example summary.",
+            "",
+            "## Education",
+            "",
+            "### Example State University",
+            "BS - Computer Science",
+            "2014 — 2018",
+            "",
+            "## References",
+            "",
+            "### Dr. Jane Advisor",
+            "Professor | Example University",
+            "PhD Advisor | jane.advisor@example.edu",
+            "Available upon request.",
+            "",
+        ]
+    )
+    _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", canonical)
+
+    docx_path = tmp_path / "review.docx"
+    docx_path.write_bytes(b"docx")
+
+    def fake_convert(_path: Path) -> str:
+        return "\n".join(
+            [
+                "# Sample User",
+                "",
+                "## Experience",
+                "",
+                "### Engineer - Example Co",
+                "",
+                "2021 --- Present",
+                "",
+                "- Delivered outcomes.",
+                "",
+                "## Projects",
+                "",
+                "### Example Project",
+                "",
+                "Example summary.",
+                "",
+                "## Education",
+                "",
+                "### Example State University",
+                "",
+                "BS - Computer Science 2014 --- 2018",
+                "",
+                "## References",
+                "",
+                "### Dr. Jane Advisor",
+                "",
+                "Professor \\| Example University PhD Advisor \\| jane.advisor@example.edu Available upon request.",
+                "",
+            ]
+        )
+
+    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "import-docx",
+                "--from",
+                str(docx_path),
+                "--run",
+                "2026-01-01T00-00-00Z",
+                "--config",
+                str(config_path),
+                "--plain",
+            ],
+        )
+
+    assert result.exit_code == 0
+    patch_files = list(resolve_drafts_path(config_path).rglob("patch.yaml"))
+    assert patch_files
+    patch_payload = yaml.safe_load(patch_files[0].read_text())
+    assert patch_payload["patch"]["format"] == "project-ops"
+    assert patch_payload["patch"]["operations"] == []
+
+    notes_files = list(resolve_drafts_path(config_path).rglob("notes.md"))
+    assert notes_files
+    assert "- apply_status: ready_no_changes" in notes_files[0].read_text()
+
+
 def test_import_docx_maps_duplicate_experience_bullets_by_position(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -540,6 +672,99 @@ def test_import_docx_maps_duplicate_experience_bullets_by_position(
     bullets = updated["roles"][0]["bullets"]
     assert bullets[0]["text"] == "Delivered outcomes."
     assert bullets[1]["text"] == "Delivered measurable outcomes."
+
+
+def test_import_docx_generates_applyable_patch_for_filtered_project_summary_edits(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_minimal_config(tmp_path)
+    base_variant_path = config_path.parent / "variants" / "base.yaml"
+    base_variant_path.write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md, pdf, docx]",
+                "  include_tags: [sample]",
+            ]
+        )
+        + "\n"
+    )
+    sot_path = _write_minimal_sot(tmp_path)
+    (sot_path / "projects.yaml").write_text(
+        "\n".join(
+            [
+                "projects:",
+                "  - id: project-1",
+                "    name: Example Project",
+                "    summary: Example summary.",
+                "    tags: [sample]",
+                "  - id: project-2",
+                "    name: Hidden Project",
+                "    summary: Hidden summary.",
+                "    tags: [internal]",
+            ]
+        )
+        + "\n"
+    )
+    canonical = "\n".join(
+        [
+            "## Projects",
+            "",
+            "### Example Project",
+            "Example summary.",
+            "",
+        ]
+    )
+    _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", canonical)
+
+    docx_path = tmp_path / "review.docx"
+    docx_path.write_bytes(b"docx")
+
+    def fake_convert(_path: Path) -> str:
+        return canonical.replace("Example summary.", "Tailored example summary.")
+
+    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "import-docx",
+                "--from",
+                str(docx_path),
+                "--run",
+                "2026-01-01T00-00-00Z",
+                "--config",
+                str(config_path),
+                "--plain",
+            ],
+        )
+
+    assert result.exit_code == 0
+    patch_files = list(resolve_drafts_path(config_path).rglob("patch.yaml"))
+    assert patch_files
+    patch_payload = yaml.safe_load(patch_files[0].read_text())
+    assert patch_payload["patch"]["format"] == "project-ops"
+    assert patch_payload["patch"]["operations"][0]["op"] == "replace-project-summary"
+
+    apply_result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(patch_files[0].parent),
+            "--sot-path",
+            str(sot_path),
+            "--plain",
+        ],
+    )
+
+    assert apply_result.exit_code == 0
+    updated_projects = yaml.safe_load((sot_path / "projects.yaml").read_text())
+    assert updated_projects["projects"][0]["summary"] == "Tailored example summary."
+    assert updated_projects["projects"][1]["summary"] == "Hidden summary."
 
 
 def test_import_docx_keeps_review_diff_only_for_unsupported_heading_edits(

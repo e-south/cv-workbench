@@ -360,7 +360,14 @@ def _require_run_output(run: RunInfo, fmt: str) -> Path:
     output_name = run.outputs.get(fmt)
     if not output_name:
         raise ReviewError(f"Selected run does not include {fmt} output: {run.run_id}")
-    path = run.path / output_name
+    run_root = run.path.resolve()
+    path = (run.path / output_name).resolve()
+    try:
+        path.relative_to(run_root)
+    except ValueError as exc:
+        raise ReviewError(
+            f"Selected run {fmt} output escapes run directory: {output_name}"
+        ) from exc
     if not path.exists():
         raise ReviewError(
             f"Selected run is missing immutable {fmt} output: {path}. "
@@ -496,8 +503,8 @@ def _build_supported_project_patch(
     if variant.document_type != "resume":
         return None
 
-    canonical_tokens = _tokenize_markdown(canonical_markdown)
-    imported_tokens = _tokenize_markdown(imported_markdown)
+    canonical_tokens = _coalesce_noneditable_text_tokens(_tokenize_markdown(canonical_markdown))
+    imported_tokens = _coalesce_noneditable_text_tokens(_tokenize_markdown(imported_markdown))
     if len(canonical_tokens) != len(imported_tokens):
         return None
 
@@ -526,7 +533,7 @@ def _build_supported_project_patch(
 
     sot = load_sot(sot_path)
     bullet_refs = _selected_experience_bullets(sot, variant, project_patch=project_patch)
-    project_refs = _selected_project_summaries(sot, project_patch=project_patch)
+    project_refs = _selected_project_summaries(sot, variant=variant, project_patch=project_patch)
     if bullet_refs is None or project_refs is None:
         return None
     canonical_experience = [
@@ -654,8 +661,18 @@ def _selected_experience_bullets(
 def _selected_project_summaries(
     sot: dict[str, Any],
     *,
+    variant: Variant,
     project_patch: ProjectPatch | None,
 ) -> list[_ProjectSummaryRef] | None:
+    selection = build_selection(sot, variant)
+    included = {
+        str(item.get("id"))
+        for item in selection.get("items", [])
+        if isinstance(item, dict)
+        and item.get("type") == "section"
+        and item.get("section") == "projects"
+        and item.get("included") is True
+    }
     refs: list[_ProjectSummaryRef] = []
     projects = sot.get("projects", {})
     items = projects.get("projects")
@@ -665,6 +682,8 @@ def _selected_project_summaries(
         if not isinstance(item, dict):
             continue
         project_id = slugify(item.get("id", ""))
+        if project_id not in included:
+            continue
         heading = str(item.get("name", "")).strip()
         summary = item.get("summary")
         if not project_id or not heading or not isinstance(summary, str) or not summary.strip():
@@ -740,6 +759,29 @@ def _tokenize_markdown(markdown: str) -> list[_MarkdownToken]:
         paragraph_parts.append(line)
     flush_paragraph()
     return tokens
+
+
+def _coalesce_noneditable_text_tokens(tokens: list[_MarkdownToken]) -> list[_MarkdownToken]:
+    merged: list[_MarkdownToken] = []
+    for token in tokens:
+        if (
+            merged
+            and token.kind == "text"
+            and merged[-1].kind == "text"
+            and token.section == merged[-1].section
+            and token.heading == merged[-1].heading
+            and not (token.section == "Projects" and token.heading)
+        ):
+            previous = merged[-1]
+            merged[-1] = _MarkdownToken(
+                kind=previous.kind,
+                section=previous.section,
+                heading=previous.heading,
+                text=_normalize_markdown_text(f"{previous.text} {token.text}"),
+            )
+            continue
+        merged.append(token)
+    return merged
 
 
 def _normalize_markdown_text(text: str) -> str:

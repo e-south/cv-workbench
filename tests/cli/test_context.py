@@ -843,6 +843,9 @@ def test_context_variant_run_inventory_ignores_newer_project_runs(tmp_path: Path
     variant_run_dir = tmp_path / "var" / "runs" / "2026-03-09T00-00-00Z"
     variant_run_dir.mkdir(parents=True, exist_ok=True)
     (variant_run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (variant_run_dir / "cv.md").write_text("# cv\n")
+    (variant_run_dir / "cv.pdf").write_bytes(b"pdf")
+    (variant_run_dir / "cv.docx").write_bytes(b"docx")
     (variant_run_dir / "manifest.json").write_text(
         json.dumps(
             {

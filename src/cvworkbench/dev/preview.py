@@ -306,7 +306,10 @@ class PreviewController:
             raise PreviewError(f"Variants directory not found: {variant_dir}")
         variants: list[str] = []
         for path in sorted(variant_dir.glob("*.yaml")):
-            variant = load_variant(path)
+            try:
+                variant = load_variant(path)
+            except ValueError as exc:
+                raise PreviewError(str(exc)) from exc
             variants.append(variant.id)
         if not variants:
             raise PreviewError("No variants found")
@@ -634,18 +637,15 @@ def _make_handler(
             length = int(self.headers.get("Content-Length", "0") or "0")
             body = self.rfile.read(length).decode("utf-8") if length else ""
             try:
-                payload = json.loads(body) if body else {}
-            except json.JSONDecodeError:
-                self.send_error(400, "Invalid JSON")
+                payload = _parse_render_payload(body)
+            except PreviewError as exc:
+                self._send_json({"error": str(exc)}, status=400)
                 return
             theme = payload.get("theme") or None
             preset = payload.get("style_preset") or None
             variant = payload.get("variant") or None
             output_format = payload.get("format") or None
             auto_pdf = payload.get("auto_pdf")
-            if auto_pdf is not None and not isinstance(auto_pdf, bool):
-                self.send_error(400, "auto_pdf must be a boolean")
-                return
             try:
                 controller.rebuild(
                     variant_id=variant,
@@ -1360,4 +1360,19 @@ def _preview_page_html() -> str:
     </script>
   </body>
 </html>
-"""
+    """
+
+
+def _parse_render_payload(body: str) -> dict[str, Any]:
+    if not body:
+        return {}
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise PreviewError("Invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise PreviewError("Render request body must be a JSON object")
+    auto_pdf = payload.get("auto_pdf")
+    if auto_pdf is not None and not isinstance(auto_pdf, bool):
+        raise PreviewError("auto_pdf must be a boolean")
+    return payload

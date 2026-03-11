@@ -17,6 +17,41 @@ from pathlib import Path
 from cvworkbench.build.pipeline import build_documents
 
 
+def _write_build_config(root: Path) -> Path:
+    config_dir = root / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md]",
+            ]
+        )
+        + "\n"
+    )
+    themes_dir = Path(__file__).resolve().parents[2] / "build" / "themes"
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {themes_dir}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+    return config_path
+
+
 def test_manifest_written() -> None:
     result = build_documents(
         sot_path=Path("sot.sample"),
@@ -77,3 +112,31 @@ def test_build_writes_render_outputs_to_run_dir() -> None:
 
     assert run_output.exists()
     assert run_output.read_text() == dist_output.read_text()
+
+
+def test_dist_manifest_is_deterministic_across_repeated_builds(tmp_path: Path) -> None:
+    config_path = _write_build_config(tmp_path)
+    dist_manifest_path = tmp_path / "var" / "dist" / "base" / "manifest.json"
+
+    build_documents(
+        sot_path=Path("sot.sample"),
+        config_path=config_path,
+        variant_id="base",
+        formats=["md"],
+        run_dir=tmp_path / "var" / "runs" / "first",
+    )
+    first_manifest = dist_manifest_path.read_text()
+
+    build_documents(
+        sot_path=Path("sot.sample"),
+        config_path=config_path,
+        variant_id="base",
+        formats=["md"],
+        run_dir=tmp_path / "var" / "runs" / "second",
+    )
+    second_manifest = dist_manifest_path.read_text()
+    run_manifest = json.loads((tmp_path / "var" / "runs" / "second" / "manifest.json").read_text())
+
+    assert first_manifest == second_manifest
+    assert "created_at" not in json.loads(second_manifest)
+    assert isinstance(run_manifest["created_at"], str)

@@ -115,6 +115,39 @@ def test_apply_rejects_review_diff_patches_that_do_not_target_sot_files(tmp_path
     assert "Patch target does not exist under SoT: canonical.md" in (result.stderr or "")
 
 
+def test_apply_rejects_review_diff_only_drafts(tmp_path: Path) -> None:
+    sot_path = tmp_path / "sot"
+    sot_path.mkdir()
+    _write_minimal_sot(sot_path)
+
+    draft_dir = tmp_path / "draft"
+    draft_dir.mkdir()
+    (draft_dir / "notes.md").write_text(
+        "# Import Notes\n\n- apply_status: review_diff_only\n",
+    )
+    patch_path = draft_dir / "patch.diff"
+    before = ["id: sample\n", "name: Sample User\n"]
+    after = ["id: sample\n", "name: Updated User\n"]
+    diff = difflib.unified_diff(before, after, fromfile="person.yaml", tofile="person.yaml")
+    patch_path.write_text("".join(diff))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(draft_dir),
+            "--sot-path",
+            str(sot_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "review_diff_only" in (result.stderr or "")
+    assert "Sample User" in (sot_path / "person.yaml").read_text()
+
+
 def test_apply_accepts_project_ops_patch_yaml(tmp_path: Path) -> None:
     sot_path = tmp_path / "sot"
     sot_path.mkdir()

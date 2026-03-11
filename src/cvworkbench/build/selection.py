@@ -11,7 +11,6 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from cvworkbench.text import slugify, tag_classes
@@ -27,7 +26,6 @@ def build_selection(sot: dict[str, Any], variant: Variant) -> dict[str, Any]:
     _append_section_items(items, sot, include_set, exclude_set)
 
     return {
-        "created_at": datetime.now(timezone.utc).isoformat(),
         "variant": variant.id,
         "max_bullets_per_role": variant.max_bullets_per_role,
         "items": items,
