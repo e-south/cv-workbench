@@ -20,6 +20,7 @@ from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 from cvworkbench.dev.preview import PreviewSession
+from tests.utils import strip_ansi
 
 
 def _write_preview_config(config_path: Path) -> None:
@@ -149,7 +150,9 @@ def test_dev_serve_rejects_legacy_flag() -> None:
     )
 
     assert result.exit_code == 2
-    assert "--viewer" in result.stderr
+    output = strip_ansi((result.stdout or "") + (result.stderr or ""))
+    assert "--viewer" in output
+    assert "No such option" in output
 
 
 def test_dev_serve_rejects_live_existing_session(tmp_path: Path, monkeypatch) -> None:
