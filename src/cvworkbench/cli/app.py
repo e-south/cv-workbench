@@ -60,17 +60,6 @@ from cvworkbench.config import (
     resolve_variant_path,
     resolve_variant_ttl_days,
 )
-from cvworkbench.dev.preview import (
-    PreviewController,
-    PreviewError,
-    PreviewSession,
-    clear_preview_session,
-    load_preview_session,
-    new_preview_session,
-    preview_session_path,
-    serve_preview,
-    write_preview_session,
-)
 from cvworkbench.ingestion.registry import RegistryError, add_url_context
 from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES, load_sot
 from cvworkbench.inputs.sot_versions import (
@@ -79,7 +68,6 @@ from cvworkbench.inputs.sot_versions import (
     resolve_versioned_root,
 )
 from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
-from cvworkbench.inputs.validation import inspect_sot, validate_sot
 from cvworkbench.ops.apply import ApplyError, apply_draft
 from cvworkbench.ops.clean import CleanError, clean_path
 from cvworkbench.ops.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
@@ -175,6 +163,28 @@ project_app.add_typer(
 def _not_implemented(command: str) -> None:
     typer.echo(f"{command} is not implemented yet", err=True)
     raise typer.Exit(code=2)
+
+
+def _inspect_sot(sot_path: Path):
+    from cvworkbench.inputs.validation import inspect_sot
+
+    return inspect_sot(sot_path)
+
+
+def _validate_sot(sot_path: Path) -> list[str]:
+    from cvworkbench.inputs.validation import validate_sot
+
+    return validate_sot(sot_path)
+
+
+def _preview_runtime():
+    from cvworkbench.dev import preview as preview_runtime
+
+    return preview_runtime
+
+
+def serve_preview(*args, **kwargs):
+    return _preview_runtime().serve_preview(*args, **kwargs)
 
 
 def _parse_formats(values: list[str] | None) -> list[str] | None:
@@ -2507,7 +2517,7 @@ def _build_context_shared_state(
 
     sot_status = "missing"
     if resolved_sot is not None:
-        inspection = inspect_sot(resolved_sot)
+        inspection = _inspect_sot(resolved_sot)
         if inspection.errors:
             for error in inspection.errors:
                 _record_context_issue(error, issues, strict)
@@ -3017,7 +3027,7 @@ def validate(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    errors = validate_sot(resolved)
+    errors = _validate_sot(resolved)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -3116,7 +3126,7 @@ def status(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    inspection = inspect_sot(resolved_sot)
+    inspection = _inspect_sot(resolved_sot)
     if inspection.errors:
         for error in inspection.errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -3568,7 +3578,7 @@ def quickstart(
         typer.echo(f"ERROR: Sample SoT not found: {sample_sot}", err=True)
         raise typer.Exit(code=1)
 
-    errors = validate_sot(sample_sot)
+    errors = _validate_sot(sample_sot)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -4888,7 +4898,7 @@ def project_guide(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    errors = validate_sot(resolved_sot)
+    errors = _validate_sot(resolved_sot)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -6005,7 +6015,7 @@ def build(
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
 
-    errors = validate_sot(resolved)
+    errors = _validate_sot(resolved)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -6207,6 +6217,7 @@ def dev_serve(
 ) -> None:
     configure_output_mode(plain, json_output)
     _reject_legacy_preview_env()
+    preview = _preview_runtime()
     config_path = resolve_config_path(config)
     project_spec = None
     try:
@@ -6248,7 +6259,7 @@ def dev_serve(
 
     session_id = uuid.uuid4().hex
     try:
-        controller = PreviewController(
+        controller = preview.PreviewController(
             sot_base=sot_base,
             config_path=config_path,
             variant_id=resolved_variant,
@@ -6259,7 +6270,7 @@ def dev_serve(
             project_sot_override=sot_base if project_spec and sot_path is not None else None,
             session_id=session_id,
         )
-    except PreviewError as exc:
+    except preview.PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
@@ -6279,7 +6290,7 @@ def dev_serve(
     if once or os.environ.get("CVW_DEV_ONCE") == "1":
         try:
             state = controller.build_once()
-        except PreviewError as exc:
+        except preview.PreviewError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         html_path = state.output_files.get("html", state.dist_dir / "cv.html")
@@ -6296,12 +6307,12 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    session_path = preview_session_path(config_path)
+    session_path = preview.preview_session_path(config_path)
     if session_path.exists():
         try:
-            existing_session = load_preview_session(config_path)
-        except PreviewError:
-            clear_preview_session(config_path)
+            existing_session = preview.load_preview_session(config_path)
+        except preview.PreviewError:
+            preview.clear_preview_session(config_path)
         else:
             has_conflict, detail = _preview_session_conflict(existing_session)
             if has_conflict:
@@ -6314,10 +6325,10 @@ def dev_serve(
                     err=True,
                 )
                 raise typer.Exit(code=1)
-            clear_preview_session(config_path)
+            preview.clear_preview_session(config_path)
 
     def _on_start(url: str, html_path: Path) -> None:
-        session = new_preview_session(
+        session = preview.new_preview_session(
             host=host,
             port=port,
             url=url,
@@ -6325,7 +6336,7 @@ def dev_serve(
             session_id=session_id,
             project_id=controller.project_id(),
         )
-        write_preview_session(session, config_path)
+        preview.write_preview_session(session, config_path)
         _print_serve_summary(
             html_path,
             url,
@@ -6340,7 +6351,7 @@ def dev_serve(
             idle_timeout_seconds=idle_timeout_seconds,
             on_start=_on_start,
         )
-    except PreviewError as exc:
+    except preview.PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     except OSError as exc:
@@ -6357,7 +6368,7 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     finally:
-        clear_preview_session(config_path)
+        preview.clear_preview_session(config_path)
 
 
 @dev_app.command("stop")
@@ -6392,10 +6403,11 @@ def dev_stop(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
+    preview = _preview_runtime()
     config_path = resolve_config_path(config)
     try:
-        session = load_preview_session(config_path)
-    except PreviewError as exc:
+        session = preview.load_preview_session(config_path)
+    except preview.PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
@@ -6409,7 +6421,7 @@ def dev_stop(
             if has_conflict:
                 typer.echo(f"ERROR: {error}", err=True)
                 raise typer.Exit(code=1)
-            clear_preview_session(config_path)
+            preview.clear_preview_session(config_path)
             print_summary(
                 "dev.stop",
                 [
@@ -6437,7 +6449,7 @@ def dev_stop(
             if has_conflict:
                 typer.echo("ERROR: Preview server still running", err=True)
                 raise typer.Exit(code=1)
-            clear_preview_session(config_path)
+            preview.clear_preview_session(config_path)
             print_summary(
                 "dev.stop",
                 [
@@ -6448,7 +6460,7 @@ def dev_stop(
             )
             return
 
-    clear_preview_session(config_path)
+    preview.clear_preview_session(config_path)
     print_summary(
         "dev.stop",
         [

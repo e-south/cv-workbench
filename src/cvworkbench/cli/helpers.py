@@ -23,8 +23,6 @@ from cvworkbench.config import (
     resolve_runs_path,
     resolve_sot_path,
 )
-from cvworkbench.inputs.sot import load_sot
-from cvworkbench.inputs.validation import validate_sot
 
 
 def configure_output_mode(plain: bool, json_output: bool) -> None:
@@ -40,6 +38,9 @@ def configure_output_mode(plain: bool, json_output: bool) -> None:
 
 
 def load_sot_payload(sot_path: Path | None, config: Path) -> dict[str, Any]:
+    from cvworkbench.inputs.sot import load_sot
+    from cvworkbench.inputs.validation import validate_sot
+
     try:
         resolved = resolve_sot_path(sot_path, config)
     except (FileNotFoundError, ValueError) as exc:
