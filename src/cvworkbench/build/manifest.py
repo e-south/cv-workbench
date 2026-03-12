@@ -14,6 +14,8 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -23,16 +25,58 @@ from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES
 from cvworkbench.variants import Variant
 
 
-def build_manifest(
+@dataclass(frozen=True)
+class ManifestMetadata:
+    resume_name: str
+    resume_hash: str
+    sot_hashes: dict[str, str]
+    snippet_hashes: dict[str, str]
+    variant_hash: str
+    git_commit: str | None
+    pandoc_version: str | None
+    pdf_engine: str | None
+    pdf_engine_version: str | None
+
+
+def collect_manifest_metadata(
     *,
-    variant: Variant,
     variant_path: Path,
     sot_path: Path,
-    formats: list[str],
-    output_paths: dict[str, Path],
     resume_path: Path,
     pdf_engine: str | None,
     repo_root: Path,
+) -> ManifestMetadata:
+    task_count = 7 if pdf_engine else 6
+    with ThreadPoolExecutor(max_workers=task_count) as executor:
+        resume_hash_future = executor.submit(_hash_file, resume_path)
+        sot_hashes_future = executor.submit(_hash_sot, sot_path)
+        snippet_hashes_future = executor.submit(_hash_snippets, sot_path)
+        variant_hash_future = executor.submit(_hash_file, variant_path)
+        git_commit_future = executor.submit(_git_commit, repo_root)
+        pandoc_version_future = executor.submit(_tool_version, ["pandoc", "--version"])
+        pdf_engine_version_future = (
+            executor.submit(_tool_version, [pdf_engine, "--version"]) if pdf_engine else None
+        )
+
+    return ManifestMetadata(
+        resume_name=resume_path.name,
+        resume_hash=resume_hash_future.result(),
+        sot_hashes=sot_hashes_future.result(),
+        snippet_hashes=snippet_hashes_future.result(),
+        variant_hash=variant_hash_future.result(),
+        git_commit=git_commit_future.result(),
+        pandoc_version=pandoc_version_future.result(),
+        pdf_engine=pdf_engine,
+        pdf_engine_version=pdf_engine_version_future.result() if pdf_engine_version_future else None,
+    )
+
+
+def build_manifest(
+    *,
+    variant: Variant,
+    formats: list[str],
+    output_paths: dict[str, Path],
+    metadata: ManifestMetadata,
     render: dict[str, Any] | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
@@ -50,17 +94,17 @@ def build_manifest(
         "formats": list(formats),
         "outputs": {fmt: output_paths[fmt].name for fmt in formats if fmt in output_paths},
         "resume": {
-            "path": resume_path.name,
-            "hash": _hash_file(resume_path),
+            "path": metadata.resume_name,
+            "hash": metadata.resume_hash,
         },
-        "sot_hashes": _hash_sot(sot_path),
-        "snippet_hashes": _hash_snippets(sot_path),
-        "variant_hash": _hash_file(variant_path),
-        "git": {"commit": _git_commit(repo_root)},
+        "sot_hashes": metadata.sot_hashes,
+        "snippet_hashes": metadata.snippet_hashes,
+        "variant_hash": metadata.variant_hash,
+        "git": {"commit": metadata.git_commit},
         "tools": {
-            "pandoc": _tool_version(["pandoc", "--version"]),
-            "pdf_engine": pdf_engine,
-            "pdf_engine_version": _tool_version([pdf_engine, "--version"]) if pdf_engine else None,
+            "pandoc": metadata.pandoc_version,
+            "pdf_engine": metadata.pdf_engine,
+            "pdf_engine_version": metadata.pdf_engine_version,
         },
     }
     if created_at is not None:

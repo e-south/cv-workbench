@@ -235,6 +235,11 @@ uv run cvw build --project <project-id> --format md,pdf,docx
 uv run cvw project show <project-id>
 ```
 
+When you omit `--variant`, `project guide` now retargets the scaffolded project
+to the top eligible recommendation it computed from job signals and SoT tags.
+If you already know the lane you want, pass `--variant <id>` and the explicit
+choice is preserved while the recommendation report remains advisory.
+
 After the review-ready build completes, `project show` prints the pinned
 `reviewpack --project <project-id> --run projects/<project-id>/<run-id>`
 command for the latest immutable project run.

@@ -32,9 +32,10 @@ import typer
 import yaml
 
 from cvworkbench.build.explain import ExplainError, explain_item, load_selection
+from cvworkbench.build.formats import normalize_output_formats
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import BuildResult, build_documents, create_run_dir
-from cvworkbench.build.rendering import RenderError, render_document
+from cvworkbench.build.rendering import RenderError, RenderRequest, render_documents, resolve_filter_paths
 from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, resolve_selection_path
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
@@ -80,10 +81,12 @@ from cvworkbench.ops.projects import (
     append_replace_project_summary_operation,
     create_project_from_file,
     create_project_from_url,
+    discard_project_workspace,
     load_project,
     load_project_details,
     load_project_patch_payload,
     prepare_project_sot,
+    retarget_project_variant,
     resolve_project_dir,
     suggest_project_variant_id,
 )
@@ -194,7 +197,7 @@ def _parse_formats(values: list[str] | None) -> list[str] | None:
     for value in values:
         parts = [part.strip() for part in value.split(",") if part.strip()]
         formats.extend(parts)
-    return formats
+    return normalize_output_formats(formats)
 
 
 def _print_build_summary(result: BuildResult) -> None:
@@ -2124,6 +2127,9 @@ def _build_proposal_plan(
     keyword_overlap: dict[str, list[str]],
     recommendations: list[dict[str, Any]],
     job_evidence: list[dict[str, Any]],
+    requested_variant: str,
+    applied_variant: str,
+    selection_mode: str,
 ) -> dict[str, Any]:
     selected = recommendations[0] if recommendations else None
     selected_variant = selected["variant_id"] if selected is not None else None
@@ -2154,7 +2160,10 @@ def _build_proposal_plan(
 
     return {
         "path": str(project_dir / "job" / "proposal-plan.json"),
+        "requested_variant": requested_variant,
         "selected_variant": selected_variant,
+        "applied_variant": applied_variant,
+        "selection_mode": selection_mode,
         "status": status,
         "summary": summary,
         "job_keywords": job_keywords,
@@ -2866,6 +2875,7 @@ def _print_project_guide_summary(summary: dict[str, Any]) -> None:
         ("job_keywords_in_sot", ", ".join(summary["job"]["keywords_in_sot"]) or "none"),
         ("job_keywords_missing", ", ".join(summary["job"]["keywords_missing"]) or "none"),
         ("recommended_variant", summary["proposal_plan"]["selected_variant"] or "none"),
+        ("selection_mode", summary["proposal_plan"]["selection_mode"]),
         ("recommendation_status", summary["proposal_plan"]["status"]),
         ("recommendation_summary", summary["proposal_plan"]["summary"]),
         ("job_evidence", evidence_summary or "none"),
@@ -4887,7 +4897,8 @@ def project_guide(
 
     config_path = resolve_config_path(config)
     try:
-        base_variant = variant or resolve_default_variant(config_path)
+        configured_default_variant = resolve_default_variant(config_path)
+        requested_variant = variant or configured_default_variant
     except ValueError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -4919,7 +4930,7 @@ def project_guide(
             project_paths = create_project_from_url(
                 url=job_url,
                 slug=slug,
-                base_variant_id=base_variant,
+                base_variant_id=requested_variant,
                 config_path=config_path,
                 sot_path=resolved_sot,
                 store_raw=store_raw,
@@ -4929,7 +4940,7 @@ def project_guide(
             project_paths = create_project_from_file(
                 job_path=job_file or Path(),
                 slug=slug,
-                base_variant_id=base_variant,
+                base_variant_id=requested_variant,
                 config_path=config_path,
                 sot_path=resolved_sot,
                 store_raw=store_raw,
@@ -4969,9 +4980,39 @@ def project_guide(
         variants,
         job_keywords,
         counts,
-        base_variant,
+        configured_default_variant,
         signal_counts,
     )
+    applied_variant = requested_variant
+    selection_mode = "explicit" if variant else "requested"
+    selected_recommendation = recommendations[0] if recommendations else None
+    if variant is None and selected_recommendation is not None and selected_recommendation["eligible"]:
+        recommended_variant = selected_recommendation["variant_id"]
+        if recommended_variant != requested_variant:
+            try:
+                retarget_project_variant(
+                    project_dir=project_paths.project_dir,
+                    base_variant_id=recommended_variant,
+                    config_path=config_path,
+                )
+            except Exception as exc:
+                try:
+                    discard_project_workspace(
+                        project_dir=project_paths.project_dir,
+                        config_path=config_path,
+                    )
+                except Exception as rollback_exc:
+                    typer.echo(f"ERROR: {exc}", err=True)
+                    typer.echo(
+                        "ERROR: Failed to roll back the project workspace after guide retargeting failed: "
+                        f"{rollback_exc}",
+                        err=True,
+                    )
+                    raise typer.Exit(code=1) from exc
+                typer.echo(f"ERROR: {exc}", err=True)
+                raise typer.Exit(code=1) from exc
+        applied_variant = recommended_variant
+        selection_mode = "recommended"
     proposal_plan = _build_proposal_plan(
         project_id=project_paths.project_dir.name,
         project_dir=project_paths.project_dir,
@@ -4979,6 +5020,9 @@ def project_guide(
         keyword_overlap=keyword_overlap,
         recommendations=recommendations,
         job_evidence=job_evidence,
+        requested_variant=requested_variant,
+        applied_variant=applied_variant,
+        selection_mode=selection_mode,
     )
     proposal_plan_path = Path(proposal_plan["path"])
     proposal_plan_path.write_text(json.dumps(proposal_plan, indent=2, sort_keys=True) + "\n")
@@ -4988,7 +5032,7 @@ def project_guide(
             command="project.guide",
             project_id=project_paths.project_dir.name,
             project_dir=project_paths.project_dir,
-            base_variant=base_variant,
+            base_variant=applied_variant,
             job_source=job_source,
             config_path=config_path,
             proposal_variant_id=load_variant(project_paths.variant_path).id,
@@ -5007,7 +5051,7 @@ def project_guide(
         "variants": {
             "config": variants,
             "count": len(variants),
-            "default": base_variant,
+            "default": configured_default_variant,
         },
         "recommendations": recommendations,
         "proposal_plan": proposal_plan,
@@ -6119,8 +6163,13 @@ def render(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    parsed_formats = _parse_formats(formats) or resolved.outputs
+    parsed_formats = normalize_output_formats(_parse_formats(formats) or resolved.outputs)
+    if parsed_formats is None:
+        typer.echo("ERROR: No output formats selected", err=True)
+        raise typer.Exit(code=1)
     filters_path = filters_dir()
+    resolved_filter_paths = resolve_filter_paths(filters_path)
+    render_requests: list[RenderRequest] = []
     output_files: dict[str, Path] = {}
     for fmt in parsed_formats:
         output_file = output_path(dist_dir, resolved, fmt)
@@ -6133,19 +6182,33 @@ def render(
             )
             if fmt == "html":
                 plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
-            render_document(
-                canonical,
-                output_file,
-                resolved,
-                filters_path,
-                fmt,
-                pdf_engine,
-                plan,
+            render_requests.append(
+                RenderRequest(
+                    input_path=canonical,
+                    output_path=output_file,
+                    variant=resolved,
+                    filters_dir=filters_path,
+                    output_format=fmt,
+                    pdf_engine=pdf_engine,
+                    render_plan=plan,
+                )
             )
         except (RenderError, ThemeError) as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
-        output_files[fmt] = output_file
+
+    def _record_render_success(request: RenderRequest) -> None:
+        output_files[request.output_format] = request.output_path
+
+    try:
+        render_documents(
+            render_requests,
+            filter_paths=resolved_filter_paths,
+            after_each_success=_record_render_success,
+        )
+    except RenderError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     _print_render_summary(canonical, resolved.id, dist_dir, output_files)
 
 
@@ -6198,6 +6261,13 @@ def dev_serve(
         typer.Option(
             "--once",
             help="Build once and exit without starting the preview server",
+        ),
+    ] = False,
+    with_pdf: Annotated[
+        bool,
+        typer.Option(
+            "--with-pdf",
+            help="With --once, also render a PDF alongside HTML",
         ),
     ] = False,
     plain: Annotated[
@@ -6257,6 +6327,7 @@ def dev_serve(
         except SotVersionError:
             sot_base = resolved
 
+    one_shot = once or os.environ.get("CVW_DEV_ONCE") == "1"
     session_id = uuid.uuid4().hex
     try:
         controller = preview.PreviewController(
@@ -6265,7 +6336,7 @@ def dev_serve(
             variant_id=resolved_variant,
             theme_id=resolved_theme,
             style_preset=resolved_preset,
-            auto_pdf=True,
+            auto_pdf=(not one_shot) or with_pdf,
             project_dir=project_spec.project_dir if project_spec else None,
             project_sot_override=sot_base if project_spec and sot_path is not None else None,
             session_id=session_id,
@@ -6287,7 +6358,7 @@ def dev_serve(
     if idle_timeout_seconds < 0:
         typer.echo("ERROR: CVW_DEV_IDLE_TIMEOUT_SECONDS must be >= 0", err=True)
         raise typer.Exit(code=1)
-    if once or os.environ.get("CVW_DEV_ONCE") == "1":
+    if one_shot:
         try:
             state = controller.build_once()
         except preview.PreviewError as exc:
@@ -6529,6 +6600,13 @@ def preview(
             help="Build once and exit without starting the preview server",
         ),
     ] = False,
+    with_pdf: Annotated[
+        bool,
+        typer.Option(
+            "--with-pdf",
+            help="With --once, also render a PDF alongside HTML",
+        ),
+    ] = False,
     plain: Annotated[
         bool,
         typer.Option(
@@ -6552,6 +6630,7 @@ def preview(
         theme=theme,
         style_preset=style_preset,
         once=once,
+        with_pdf=with_pdf,
         plain=plain,
         json_output=json_output,
     )

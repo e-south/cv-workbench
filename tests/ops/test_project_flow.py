@@ -25,11 +25,17 @@ from cvworkbench.ops.projects import (
     append_replace_project_summary_operation,
     create_project_from_file,
     create_project_from_url,
+    discard_project_workspace,
     load_project,
     load_project_patch,
     prepare_project_sot,
+    retarget_project_variant,
 )
-from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, register_variant
+from cvworkbench.ops.variant_lifecycle import (
+    VariantLifecycleError,
+    list_variant_inbox,
+    register_variant,
+)
 
 
 def _write_config(root: Path) -> Path:
@@ -129,6 +135,103 @@ def test_create_project_from_file(tmp_path: Path) -> None:
     assert diff == ""
 
     apply_project_patch(project_dir=project_dir, sot_path=sot_path)
+
+
+def test_retarget_project_variant_updates_project_manifest_and_preserves_proposal_id(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path)
+    variants_dir = config_path.parent / "variants"
+    (variants_dir / "focus.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "variant": {
+                    "id": "focus",
+                    "outputs": ["md"],
+                    "document_type": "cover-letter",
+                    "include_tags": ["leadership"],
+                }
+            },
+            sort_keys=False,
+        )
+    )
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    spec = retarget_project_variant(
+        project_dir=result.project_dir,
+        base_variant_id="focus",
+        config_path=config_path,
+    )
+
+    assert spec.base_variant_id == "focus"
+    variant_payload = yaml.safe_load(spec.variant_path.read_text())
+    assert variant_payload["variant"]["id"] == "proposal-orbit"
+    assert variant_payload["variant"]["document_type"] == "cover-letter"
+    assert variant_payload["variant"]["include_tags"] == ["leadership"]
+
+
+def test_discard_project_workspace_removes_project_and_clears_inbox(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    assert len(list_variant_inbox(config_path)) == 1
+    discard_project_workspace(project_dir=result.project_dir, config_path=config_path)
+
+    assert not result.project_dir.exists()
+    assert list_variant_inbox(config_path) == []
+
+
+def test_discard_project_workspace_still_removes_project_when_registry_cleanup_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    def _boom(**kwargs) -> None:
+        raise VariantLifecycleError("registry unavailable")
+
+    monkeypatch.setattr("cvworkbench.ops.projects.discard_variant", _boom)
+
+    with pytest.raises(ProjectError, match="registry unavailable"):
+        discard_project_workspace(project_dir=result.project_dir, config_path=config_path)
+
+    assert not result.project_dir.exists()
 
 
 def test_create_project_from_file_rolls_back_on_variant_registration_failure(

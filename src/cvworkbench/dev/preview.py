@@ -216,6 +216,7 @@ class PreviewController:
                     variant_path_override=variant_path_override,
                     run_dir=run_dir,
                     dist_dir=run_dir if self._project_dir is not None else None,
+                    write_audit_artifacts=False,
                 )
             except (ValueError, ThemeError) as exc:
                 message = str(exc)

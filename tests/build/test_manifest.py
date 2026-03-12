@@ -160,3 +160,20 @@ def test_run_manifest_matches_dist_manifest_except_created_at(tmp_path: Path) ->
 
     assert isinstance(created_at, str)
     assert run_manifest == dist_manifest
+
+
+def test_build_normalizes_duplicate_format_requests(tmp_path: Path) -> None:
+    config_path = _write_build_config(tmp_path)
+
+    result = build_documents(
+        sot_path=Path("sot.sample"),
+        config_path=config_path,
+        variant_id="base",
+        formats=["md", "md", "pdf", "md"],
+        run_dir=tmp_path / "var" / "runs" / "single",
+    )
+
+    assert result.formats == ["md", "pdf"]
+    manifest = json.loads((result.dist_dir / "manifest.json").read_text())
+    assert manifest["formats"] == ["md", "pdf"]
+    assert manifest["outputs"] == {"md": "cv.md", "pdf": "cv.pdf"}

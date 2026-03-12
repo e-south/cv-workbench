@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import importlib
 import json
 import shlex
 from pathlib import Path
@@ -19,6 +20,7 @@ import yaml
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from cvworkbench.ops.variant_lifecycle import list_variant_inbox
 
 
 def _default_config_path() -> Path:
@@ -89,38 +91,7 @@ def _write_config(root: Path) -> Path:
     return config_path
 
 
-def test_project_guide_creates_project_and_recommends_variants(tmp_path: Path) -> None:
-    config_path = _write_config(tmp_path)
-    job_path = tmp_path / "job.txt"
-    job_path.write_text("Leadership and reliability focus.\n")
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        [
-            "project",
-            "guide",
-            "--job-file",
-            str(job_path),
-            "--sot-path",
-            "sot.sample",
-            "--config",
-            str(config_path),
-            "--json",
-        ],
-    )
-
-    assert result.exit_code == 0
-    payload = json.loads(result.stdout)
-    assert payload["command"] == "project.guide"
-    assert payload["project"]["project_dir"].endswith("var/projects/job")
-    assert payload["proposal"]["variant_id"] == "proposal-job"
-    assert payload["recommendations"]
-    assert payload["proposal_plan"]["path"].endswith("proposal-plan.json")
-    assert Path(payload["proposal_plan"]["path"]).exists()
-
-
-def test_project_guide_ranks_variants_with_weighted_signal_evidence(tmp_path: Path) -> None:
+def _write_ranked_project_guide_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
     variants_dir.mkdir(parents=True, exist_ok=True)
@@ -183,6 +154,42 @@ def test_project_guide_ranks_variants_with_weighted_signal_evidence(tmp_path: Pa
     )
     job_path = tmp_path / "job.txt"
     job_path.write_text("Reliability reliability reliability and leadership.\n")
+    return config_path, sot_path, job_path
+
+
+def test_project_guide_creates_project_and_recommends_variants(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Leadership and reliability focus.\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-file",
+            str(job_path),
+            "--sot-path",
+            "sot.sample",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "project.guide"
+    assert payload["project"]["project_dir"].endswith("var/projects/job")
+    assert payload["proposal"]["variant_id"] == "proposal-job"
+    assert payload["recommendations"]
+    assert payload["proposal_plan"]["path"].endswith("proposal-plan.json")
+    assert Path(payload["proposal_plan"]["path"]).exists()
+
+
+def test_project_guide_ranks_variants_with_weighted_signal_evidence(tmp_path: Path) -> None:
+    config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -209,12 +216,166 @@ def test_project_guide_ranks_variants_with_weighted_signal_evidence(tmp_path: Pa
     assert recommendations[0]["rationale"]
     assert recommendations[-1]["variant_id"] == "blocked"
     assert recommendations[-1]["eligible"] is False
+    assert payload["project"]["base_variant"] == "ops"
+    assert payload["variants"]["default"] == "base"
     assert payload["proposal_plan"]["selected_variant"] == "ops"
+    assert payload["proposal_plan"]["applied_variant"] == "ops"
+    assert payload["proposal_plan"]["selection_mode"] == "recommended"
     assert payload["proposal_plan"]["status"] == "targeted"
     plan_path = Path(payload["proposal_plan"]["path"])
     assert plan_path.exists()
     stored_plan = json.loads(plan_path.read_text())
     assert stored_plan["selected_variant"] == "ops"
+    assert stored_plan["applied_variant"] == "ops"
+    project_dir = Path(payload["project"]["project_dir"])
+    project_payload = yaml.safe_load((project_dir / "project.yaml").read_text())
+    assert project_payload["project"]["base_variant"] == "ops"
+    proposal_variant = yaml.safe_load((project_dir / "proposals" / "variant.yaml").read_text())
+    assert proposal_variant["variant"]["id"] == "proposal-job"
+    assert proposal_variant["variant"]["include_tags"] == ["reliability"]
+
+
+def test_project_guide_explicit_variant_preserves_requested_scaffold(tmp_path: Path) -> None:
+    config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-file",
+            str(job_path),
+            "--variant",
+            "cover",
+            "--sot-path",
+            str(sot_path),
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["project"]["base_variant"] == "cover"
+    assert payload["variants"]["default"] == "base"
+    assert payload["proposal_plan"]["selected_variant"] == "ops"
+    assert payload["proposal_plan"]["applied_variant"] == "cover"
+    assert payload["proposal_plan"]["selection_mode"] == "explicit"
+    default_variant = next(
+        item for item in payload["recommendations"] if item["variant_id"] == "base"
+    )
+    assert default_variant["default"] is True
+    project_dir = Path(payload["project"]["project_dir"])
+    project_payload = yaml.safe_load((project_dir / "project.yaml").read_text())
+    assert project_payload["project"]["base_variant"] == "cover"
+    proposal_variant = yaml.safe_load((project_dir / "proposals" / "variant.yaml").read_text())
+    assert proposal_variant["variant"]["id"] == "proposal-job"
+    assert proposal_variant["variant"]["include_tags"] == ["leadership"]
+
+
+def test_project_guide_rolls_back_project_when_retargeting_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    def _boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
+        raise app_module.ProjectError("retarget failed")
+
+    monkeypatch.setattr(app_module, "retarget_project_variant", _boom)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-file",
+            str(job_path),
+            "--sot-path",
+            str(sot_path),
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    project_dir = tmp_path / "var" / "projects" / "job"
+    assert not project_dir.exists()
+    assert list_variant_inbox(config_path) == []
+
+
+def test_project_guide_rolls_back_project_when_retargeting_raises_value_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    def _boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
+        raise ValueError("retarget failed")
+
+    monkeypatch.setattr(app_module, "retarget_project_variant", _boom)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-file",
+            str(job_path),
+            "--sot-path",
+            str(sot_path),
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "retarget failed" in result.output
+    project_dir = tmp_path / "var" / "projects" / "job"
+    assert not project_dir.exists()
+    assert list_variant_inbox(config_path) == []
+
+
+def test_project_guide_reports_cleanup_failure_without_leaking_exception(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    def _retarget_boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
+        raise ValueError("retarget failed")
+
+    def _cleanup_boom(*, project_dir: Path, config_path: Path) -> None:
+        raise OSError("cleanup failed")
+
+    monkeypatch.setattr(app_module, "retarget_project_variant", _retarget_boom)
+    monkeypatch.setattr(app_module, "discard_project_workspace", _cleanup_boom)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-file",
+            str(job_path),
+            "--sot-path",
+            str(sot_path),
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "retarget failed" in result.output
+    assert "cleanup failed" in result.output
 
 
 def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> None:
@@ -240,8 +401,9 @@ def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> 
 
     assert result.exit_code == 0
     assert result.stdout.count("project_dir:") == 1
-    assert "base_variant: base" in result.stdout
+    assert result.stdout.count("base_variant:") == 1
     assert "proposal_variant: proposal-job" in result.stdout
+    assert result.stdout.count("selection_mode:") == 1
     assert result.stdout.count("preview_step:") == 1
 
 

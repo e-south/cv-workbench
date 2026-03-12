@@ -194,6 +194,16 @@ def test_build_reports_unsupported_format_without_traceback() -> None:
     assert "Traceback" not in (result.stderr or "")
 
 
+def test_parse_formats_dedupes_preserving_first_seen_order() -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+
+    assert app_module._parse_formats(["md,pdf", "md", " docx , pdf "]) == [
+        "md",
+        "pdf",
+        "docx",
+    ]
+
+
 def test_cli_module_entrypoint() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "cvworkbench.cli", "--help"],

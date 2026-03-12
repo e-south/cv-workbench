@@ -25,8 +25,9 @@ Fields:
 
 ## One-shot preview
 
-`uv run cvw preview --once` builds the preview outputs once and exits without starting
-the server. No session file is written in this mode. With `--project`, the
+`uv run cvw preview --once` builds the HTML preview output once and exits
+without starting the server. No session file is written in this mode. Pass
+`--with-pdf` when you also need a one-shot `cv.pdf`. With `--project`, the
 rendered files stay under `var/runs/preview/<project-id>/`. When `--sot-path`
 points at a concrete version directory, preview uses that exact directory
 instead of following `ACTIVE`.

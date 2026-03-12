@@ -56,7 +56,8 @@ uv run python -c "import pstats; s = pstats.Stats('build.prof'); s.sort_stats('c
 ## What to compare
 
 - `build --format md`: parser, selection, manifest, and render-planning overhead
-- `preview --once`: full render path plus Pandoc/PDF subprocess cost
+- `preview --once`: default HTML-only render path; add `--with-pdf` when you
+  want the extra PDF subprocess cost in the profile
 - `context --json --compact`: workspace scan and run-catalog read cost
 - `project show --json`: project metadata plus latest project-run resolution cost
 

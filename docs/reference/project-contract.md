@@ -7,9 +7,13 @@ explicitly apply a patch.
 URL ingestion is intentionally strict: only public `https` targets are valid
 for `--job-url`. Internal or local content must be passed via `--job-file`.
 
-`project guide` ranks variants, records deterministic evidence-backed rationale
-in `job/proposal-plan.json`, and scaffolds proposal artifacts. It does not
-perform free-form NL rewriting of your SoT.
+`project guide` ranks variants, auto-applies the top eligible recommendation to
+the scaffolded project when `--variant` is omitted, records deterministic
+evidence-backed rationale in `job/proposal-plan.json`, and scaffolds proposal
+artifacts. If you pass `--variant`, that explicit lane is preserved. The
+command does not perform free-form NL rewriting of your SoT. If the
+auto-retarget step fails, the command aborts and removes the partial project
+workspace instead of leaving a half-created proposal behind.
 
 ## Commands
 

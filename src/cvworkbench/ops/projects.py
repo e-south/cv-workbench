@@ -30,7 +30,7 @@ from cvworkbench.ingestion.ingest import IngestError, fetch_and_extract
 from cvworkbench.ingestion.registry import load_registry_settings
 from cvworkbench.ingestion.signals import build_signals
 from cvworkbench.ops.patches import PatchError, apply_patch_text
-from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, register_variant
+from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, discard_variant, register_variant
 from cvworkbench.text import slugify
 from cvworkbench.variants import load_variant
 
@@ -239,6 +239,59 @@ def create_project_from_file(
             _cleanup_project_dir(final_dir)
 
 
+def retarget_project_variant(
+    *,
+    project_dir: Path,
+    base_variant_id: str,
+    config_path: Path,
+) -> ProjectSpec:
+    spec = load_project(project_dir)
+    project_file = project_dir / "project.yaml"
+    raw_project = yaml.safe_load(project_file.read_text())
+    if not isinstance(raw_project, dict):
+        raise ProjectError("Project manifest must be a mapping")
+    project_data = raw_project.get("project")
+    if not isinstance(project_data, dict):
+        raise ProjectError("Project manifest is invalid")
+
+    proposal_variant_id = load_variant(spec.variant_path).id
+    variant_payload = _build_project_variant_payload(
+        base_variant_id=base_variant_id,
+        proposal_variant_id=proposal_variant_id,
+        config_path=config_path,
+    )
+    spec.variant_path.write_text(yaml.safe_dump(variant_payload, sort_keys=False))
+
+    project_data["base_variant"] = base_variant_id
+    project_file.write_text(yaml.safe_dump(raw_project, sort_keys=False))
+    return load_project(project_dir)
+
+
+def discard_project_workspace(*, project_dir: Path, config_path: Path) -> None:
+    errors: list[str] = []
+    try:
+        spec = load_project(project_dir)
+    except ProjectError as exc:
+        spec = None
+        errors.append(str(exc))
+    if spec is not None:
+        try:
+            discard_variant(
+                variant_path=spec.variant_path,
+                config_path=config_path,
+                confirm=True,
+            )
+        except VariantLifecycleError as exc:
+            errors.append(str(exc))
+    if project_dir.exists():
+        try:
+            shutil.rmtree(project_dir)
+        except OSError as exc:
+            errors.append(f"Failed to remove project workspace: {exc}")
+    if errors:
+        raise ProjectError("; ".join(errors))
+
+
 def _write_project_files(
     *,
     project_dir: Path,
@@ -254,19 +307,14 @@ def _write_project_files(
     proposals_dir = project_dir / "proposals"
     proposals_dir.mkdir(parents=True, exist_ok=True)
 
-    variant_source_path = resolve_variant_path(base_variant_id, config_path)
-    if not variant_source_path.exists():
-        raise ProjectError(f"Base variant not found: {base_variant_id}")
     variant_path = proposals_dir / "variant.yaml"
     proposal_variant_id = suggest_project_variant_id(project_id=project_id, config_path=config_path)
-    raw_variant = yaml.safe_load(variant_source_path.read_text())
-    if not isinstance(raw_variant, dict):
-        raise ProjectError(f"Variant file must be a mapping: {variant_source_path}")
-    variant_data = raw_variant.get("variant")
-    if not isinstance(variant_data, dict):
-        raise ProjectError(f"Variant file is invalid: {variant_source_path}")
-    variant_data["id"] = proposal_variant_id
-    variant_path.write_text(yaml.safe_dump(raw_variant, sort_keys=False))
+    variant_payload = _build_project_variant_payload(
+        base_variant_id=base_variant_id,
+        proposal_variant_id=proposal_variant_id,
+        config_path=config_path,
+    )
+    variant_path.write_text(yaml.safe_dump(variant_payload, sort_keys=False))
 
     patch_path = proposals_dir / "patch.yaml"
     patch_payload = {
@@ -300,6 +348,25 @@ def _write_project_files(
     project_file.write_text(yaml.safe_dump(project_payload, sort_keys=False))
 
     return None
+
+
+def _build_project_variant_payload(
+    *,
+    base_variant_id: str,
+    proposal_variant_id: str,
+    config_path: Path,
+) -> dict[str, Any]:
+    variant_source_path = resolve_variant_path(base_variant_id, config_path)
+    if not variant_source_path.exists():
+        raise ProjectError(f"Base variant not found: {base_variant_id}")
+    raw_variant = yaml.safe_load(variant_source_path.read_text())
+    if not isinstance(raw_variant, dict):
+        raise ProjectError(f"Variant file must be a mapping: {variant_source_path}")
+    variant_data = raw_variant.get("variant")
+    if not isinstance(variant_data, dict):
+        raise ProjectError(f"Variant file is invalid: {variant_source_path}")
+    variant_data["id"] = proposal_variant_id
+    return raw_variant
 
 
 def load_project(project_dir: Path) -> ProjectSpec:
