@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 from dataclasses import dataclass
@@ -135,7 +136,7 @@ def build_documents(
             "style_hash": plan.style_hash,
         }
 
-    manifest = build_manifest(
+    dist_manifest = build_manifest(
         variant=variant,
         variant_path=variant_path,
         sot_path=sot_path,
@@ -151,24 +152,11 @@ def build_documents(
             "formats": render_details,
         },
     )
-    write_manifest(dist_dir / "manifest.json", manifest)
-    run_manifest = build_manifest(
-        variant=variant,
-        variant_path=variant_path,
-        sot_path=sot_path,
-        formats=selected_formats,
-        output_paths=output_paths,
-        resume_path=resume_path,
-        pdf_engine=pdf_engine,
-        repo_root=config_path.parent.parent,
-        render={
-            "theme": theme_obj.id,
-            "theme_hash": theme_hash,
-            "style_preset": preset,
-            "formats": render_details,
-        },
-        created_at=datetime.now(timezone.utc).isoformat(),
-    )
+    write_manifest(dist_dir / "manifest.json", dist_manifest)
+
+    # Reuse the deterministic manifest payload so build metadata is computed once.
+    run_manifest = copy.deepcopy(dist_manifest)
+    run_manifest["created_at"] = datetime.now(timezone.utc).isoformat()
     write_manifest(run_dir / "manifest.json", run_manifest)
 
     return BuildResult(
