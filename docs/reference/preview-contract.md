@@ -39,6 +39,13 @@ instead of following `ACTIVE`.
 - `variant`, `theme`, `style_preset`
 - `themes`, `presets`, `variants`, `projects`, `project`
 - `format`, `auto_pdf`, `build_id`, `last_error`
+- `project_context` (when preview was started with `--project`):
+  `proposal_document_type`, `patch_status`, `patch_operations`,
+  `render_warning`, plus any `proposal-plan.json` guidance fields that were
+  available (`recommended_variant`, `recommendation_status`,
+  `recommendation_summary`, `job_keywords_missing`, `steps`). If preview can
+  still render the project patch but detailed project metadata is incomplete,
+  `project_context_error` is returned instead of silently omitting the failure.
 - `outputs` (format -> filename)
 
 `POST /api/render` rebuilds with optional overrides:
@@ -66,7 +73,7 @@ Browser automation should target the stable `data-cvw-*` hooks:
 - `data-cvw-format="html|pdf|md|ats"` on each format button
 - `data-cvw-active="true|false"` + `aria-pressed` on the active format button
 - `data-cvw-action="rebuild|stop"`
-- `data-cvw-status="status|error|summary|run-list|controller-pill|build-pill"`
+- `data-cvw-status="status|error|summary|project-guidance|project-warning|run-list|controller-pill|build-pill"`
 - `data-cvw-build-id` on `<body>` (updated on successful rebuild)
 - `data-cvw-session-id` on `<body>` (current preview lease id)
 - `data-cvw-controller-state="active|passive|stopped|disconnected"` on `<body>`
@@ -74,8 +81,13 @@ Browser automation should target the stable `data-cvw-*` hooks:
 
 The project selector is read-only and displays the active project (if the
 preview was started with `--project`); otherwise it shows `none` instead of a
-disabled list of unrelated projects. The preview UI is a render-control surface,
-not a content editor.
+disabled list of unrelated projects. For project-scoped preview, the sidebar
+also mirrors the current proposal lane via `project-guidance` and
+`project-warning`, including any cover-letter visibility warning when
+`project-ops` target resume-only content. If project guidance metadata cannot
+be loaded, the sidebar warns explicitly instead of silently collapsing to a
+project-id-only payload. The preview UI is a render-control surface, not a
+content editor.
 
 ## Interaction semantics
 

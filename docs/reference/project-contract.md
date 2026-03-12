@@ -22,12 +22,20 @@ workspace instead of leaving a half-created proposal behind.
 - `uv run cvw project new --job-url <url>` or `--job-file <path>`: create a project
   without generating guidance output.
 - `uv run cvw project show <slug>`: inspect the project proposal, patch status,
-  latest project run, review readiness, and ready-to-run next commands without
-  mutating the SoT.
+  latest project run, review readiness, ready-to-run next commands, the
+  `proposal-plan.json` guidance summary (recommended variant, missing job
+  keywords, next steps), and any proposal-visibility warning when
+  `project-ops` target resume content that the selected proposal variant does
+  not render, without mutating the SoT.
 - `uv run cvw preview --project <slug> [--sot-path <path>]`: preview with project patch
   applied in-memory, optionally against an explicit SoT override. Project preview
   renders stay inside `var/runs/preview/<slug>/`. When `--sot-path` points at a
-  concrete version directory, preview stays pinned to that exact directory.
+  concrete version directory, preview stays pinned to that exact directory. The
+  preview sidebar mirrors project guidance and patch visibility so operators can
+  see whether `project-ops` target content that the current proposal document
+  type will not render. If the preview can render but project guidance metadata
+  is incomplete, the sidebar reports that failure explicitly instead of hiding
+  it.
 - `uv run cvw reviewpack --project <slug>`: package the latest review-ready
   project-scoped run for review. Use `project show <slug>` after building to
   get the pinned `--run` command for the current immutable run.
@@ -83,8 +91,8 @@ Use:
 - Project builds write rendered artifacts into `var/runs/projects/<slug>/<run-id>/`
   instead of overwriting shared `var/dist/<variant>/`.
 - `uv run cvw project show <slug>` reports the current proposal variant id,
-  patch status, job source, latest project run, and replayable
-  preview/build/apply/keep/discard commands.
+  patch status, proposal-plan guidance, job source, latest project run, and
+  replayable preview/build/apply/keep/discard commands.
 - When the latest project run is review-ready, `project show` emits a pinned
   `reviewpack --project <slug> --run <run-id>` command. Otherwise it reports
   `review.status=build_required` and points back to

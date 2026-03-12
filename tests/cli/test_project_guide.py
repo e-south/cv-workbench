@@ -464,8 +464,27 @@ def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> N
     job_dir.mkdir(parents=True, exist_ok=True)
     signals_path = job_dir / "signals.json"
     extracted_path = job_dir / "extracted.txt"
+    proposal_plan_path = job_dir / "proposal-plan.json"
     signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
     extracted_path.write_text("Leadership role.\n")
+    proposal_plan_path.write_text(
+        json.dumps(
+            {
+                "selected_variant": "proposal-cover-letter",
+                "selection_mode": "recommended",
+                "status": "targeted",
+                "summary": "matched include tags: leadership",
+                "job_keywords_missing_in_sot": ["stakeholder-management"],
+                "steps": [
+                    "Inspect `project show job` and preview the proposal variant.",
+                    "Capture supported SoT edits as project-ops before exporting review artifacts.",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
     (project_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -547,8 +566,27 @@ def test_project_show_surfaces_invalid_proposal_plan_without_failing(tmp_path: P
     job_dir.mkdir(parents=True, exist_ok=True)
     signals_path = job_dir / "signals.json"
     extracted_path = job_dir / "extracted.txt"
+    proposal_plan_path = job_dir / "proposal-plan.json"
     signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
     extracted_path.write_text("Leadership role.\n")
+    proposal_plan_path.write_text(
+        json.dumps(
+            {
+                "selected_variant": "proposal-cover-letter",
+                "selection_mode": "recommended",
+                "status": "targeted",
+                "summary": "matched include tags: leadership",
+                "job_keywords_missing_in_sot": ["stakeholder-management"],
+                "steps": [
+                    "Inspect `project show job` and preview the proposal variant.",
+                    "Capture supported SoT edits as project-ops before exporting review artifacts.",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
     (job_dir / "proposal-plan.json").write_text("{not json}\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
@@ -736,10 +774,137 @@ def test_project_show_reports_project_ops_patch_metadata(tmp_path: Path) -> None
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
+    assert payload["proposal"]["document_type"] == "resume"
     assert payload["patch"]["format"] == "project-ops"
     assert payload["patch"]["is_empty"] is False
     assert payload["patch"]["line_count"] == 1
+    assert payload["patch"]["operations"] == ["replace-experience-bullet"]
+    assert payload["patch"]["render_warning"] is None
     assert payload["patch"]["status"] == "1 op"
+
+
+def test_project_show_warns_when_resume_patch_is_hidden_by_cover_letter_variant(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    job_dir = project_dir / "job"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    signals_path = job_dir / "signals.json"
+    extracted_path = job_dir / "extracted.txt"
+    proposal_plan_path = job_dir / "proposal-plan.json"
+    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    extracted_path.write_text("Leadership role.\n")
+    proposal_plan_path.write_text(
+        json.dumps(
+            {
+                "selected_variant": "proposal-cover-letter",
+                "selection_mode": "recommended",
+                "status": "targeted",
+                "summary": "matched include tags: leadership",
+                "job_keywords_missing_in_sot": ["stakeholder-management"],
+                "steps": [
+                    "Inspect `project show job` and preview the proposal variant.",
+                    "Capture supported SoT edits as project-ops before exporting review artifacts.",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: cover-letter-focused",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+                "  job:",
+                "    source:",
+                "      type: file",
+                f"      value: {tmp_path / 'job.txt'}",
+                "    extracted_path: job/extracted.txt",
+                "    extracted_hash: deadbeef",
+                "    raw_path: null",
+                "  signals:",
+                "    path: job/signals.json",
+                "    hash: cafebabe",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: proposal-cover-letter",
+                "  document_type: cover-letter",
+                "  letter_id: default-cover-letter",
+                "  outputs: [md]",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "patch.yaml").write_text(
+        "\n".join(
+            [
+                "patch:",
+                "  format: project-ops",
+                "  operations:",
+                "    - op: replace-project-summary",
+                "      project_id: project-1",
+                "      old_text: Example summary.",
+                "      new_text: Tailored summary.",
+            ]
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "show",
+            "job",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "proposal_document_type" in result.stdout
+    assert "patch_ops" in result.stdout
+    assert "recommended_variant" in result.stdout
+    assert "job_keywords_missing" in result.stdout
+    assert "proposal_steps" in result.stdout
+    assert "cover-letter preview/build output" in result.stdout
+
+    json_result = runner.invoke(
+        app,
+        [
+            "project",
+            "show",
+            "job",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert json_result.exit_code == 0
+    payload = json.loads(json_result.stdout)
+    assert payload["proposal"]["document_type"] == "cover-letter"
+    assert payload["patch"]["operations"] == ["replace-project-summary"]
+    assert payload["patch"]["render_warning"] == (
+        "project-ops target resume content and will not appear in "
+        "cover-letter preview/build output"
+    )
+    assert payload["proposal_plan"]["selected_variant"] == "proposal-cover-letter"
+    assert payload["proposal_plan"]["job_keywords_missing_in_sot"] == ["stakeholder-management"]
 
 
 def test_project_patch_replace_experience_bullet_appends_validated_op(tmp_path: Path) -> None:

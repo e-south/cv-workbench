@@ -31,6 +31,8 @@ def test_preview_contract_selectors_present() -> None:
         'data-cvw-status="controller-pill"',
         'data-cvw-status="build-pill"',
         'data-cvw-status="summary"',
+        'data-cvw-status="project-guidance"',
+        'data-cvw-status="project-warning"',
         'data-cvw-view="preview-frame"',
     ]
     for marker in markers:
@@ -140,6 +142,14 @@ def test_preview_page_html_syncs_summary_incrementally() -> None:
     assert "summarySignature" in html
     assert "syncSummary" in html
     assert "buildPill" in html
+
+
+def test_preview_page_html_syncs_project_guidance_incrementally() -> None:
+    html = _preview_page_html()
+    assert "projectGuidanceSignature" in html
+    assert "syncProjectGuidance" in html
+    assert "project_context" in html
+    assert "project_context_error" in html
 
 
 def test_preview_page_html_normalizes_shortcuts_and_ignores_modified_keys() -> None:

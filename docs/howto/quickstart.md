@@ -240,6 +240,11 @@ to the top eligible recommendation it computed from job signals and SoT tags.
 If you already know the lane you want, pass `--variant <id>` and the explicit
 choice is preserved while the recommendation report remains advisory.
 
+`project show` now repeats the proposal-plan summary directly in the CLI:
+recommended variant, recommendation status, missing job keywords in the current
+SoT, and the next guided steps. Use that output before preview/build so the
+intended patch lane is explicit.
+
 After the review-ready build completes, `project show` prints the pinned
 `reviewpack --project <project-id> --run projects/<project-id>/<run-id>`
 command for the latest immutable project run.
@@ -308,6 +313,10 @@ This appends a `project-ops` entry to `var/projects/<project-id>/proposals/patch
 If you omit `--old-text`, the command snapshots the current SoT source text for
 that bullet or project summary. `preview --project`, `build --project`, and
 `project apply` all reuse the same compare-and-set contract.
+
+The preview sidebar mirrors that project guidance. In particular, if a
+cover-letter proposal carries `project-ops` that only affect resume content,
+preview shows a visibility warning instead of leaving the edit lane implicit.
 
 When reviewed DOCX edits stay on supported resume surfaces, `import-docx` now
 writes `var/drafts/import-*/patch.yaml` using the same `project-ops` schema.

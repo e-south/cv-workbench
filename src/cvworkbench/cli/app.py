@@ -86,6 +86,8 @@ from cvworkbench.ops.projects import (
     load_project_details,
     load_project_patch_payload,
     prepare_project_sot,
+    project_patch_render_warning,
+    project_patch_status,
     retarget_project_variant,
     resolve_project_dir,
     suggest_project_variant_id,
@@ -191,13 +193,14 @@ def serve_preview(*args, **kwargs):
 
 
 def _parse_formats(values: list[str] | None) -> list[str] | None:
-    if not values:
+    if values is None:
         return None
     formats: list[str] = []
     for value in values:
         parts = [part.strip() for part in value.split(",") if part.strip()]
         formats.extend(parts)
-    return normalize_output_formats(formats)
+    normalized = normalize_output_formats(formats)
+    return [] if normalized is None else normalized
 
 
 def _print_build_summary(result: BuildResult) -> None:
@@ -2174,6 +2177,34 @@ def _build_proposal_plan(
     }
 
 
+def _proposal_plan_summary_rows(
+    proposal_plan: dict[str, Any] | None,
+    *,
+    prefix: str = "",
+) -> list[tuple[str, str]]:
+    if not proposal_plan:
+        return []
+    step_values = proposal_plan.get("steps")
+    steps: list[str] = []
+    if isinstance(step_values, list):
+        steps = [str(item).strip() for item in step_values if isinstance(item, str) and item.strip()]
+    missing_values = proposal_plan.get("job_keywords_missing_in_sot")
+    missing_keywords: list[str] = []
+    if isinstance(missing_values, list):
+        missing_keywords = [
+            str(item).strip() for item in missing_values if isinstance(item, str) and item.strip()
+        ]
+    rows = [
+        (f"{prefix}recommended_variant", str(proposal_plan.get("selected_variant") or "none")),
+        (f"{prefix}selection_mode", str(proposal_plan.get("selection_mode") or "unknown")),
+        (f"{prefix}recommendation_status", str(proposal_plan.get("status") or "unknown")),
+        (f"{prefix}recommendation_summary", str(proposal_plan.get("summary") or "none")),
+        (f"{prefix}job_keywords_missing", ", ".join(missing_keywords) or "none"),
+        (f"{prefix}proposal_steps", "\n".join(steps) or "none"),
+    ]
+    return rows
+
+
 def _load_review_summaries(config_path: Path) -> list[dict[str, Any]]:
     reviews_root = resolve_reviews_path(config_path)
     if not reviews_root.exists():
@@ -2909,7 +2940,9 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         ("created_at", summary["project"]["created_at"]),
         ("base_variant", summary["project"]["base_variant"]),
         ("proposal_variant", summary["proposal"]["variant_id"]),
+        ("proposal_document_type", summary["proposal"]["document_type"]),
         ("patch_status", summary["patch"]["status"]),
+        ("patch_ops", ",".join(summary["patch"]["operations"]) or "none"),
         ("job_source", summary["job"]["source"]),
         ("next_step", summary["commands"]["preview"]),
         ("build_step", summary["commands"]["build"]),
@@ -2919,8 +2952,13 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         ("keep_step", summary["commands"]["keep"]),
         ("discard_step", summary["commands"]["discard"]),
     ]
+    rows.extend(_proposal_plan_summary_rows(summary.get("proposal_plan")))
+    if summary["patch"]["render_warning"]:
+        rows.append(("patch_note", summary["patch"]["render_warning"]))
     if summary["review"]["run_id"]:
         rows.append(("review_run", summary["review"]["run_id"]))
+    if "proposal_plan_error" in summary:
+        rows.append(("proposal_plan_error", summary["proposal_plan_error"]))
     print_summary("project.show", rows)
 
 
@@ -5125,14 +5163,15 @@ def project_show(
         review_run_id=review["run_id"] if review["review_ready"] else None,
     )
     review["next_command"] = commands.get("reviewpack", commands["build"])
-    if details.patch_is_empty:
-        patch_status = "empty"
-    elif details.patch_format == "project-ops":
-        patch_status = f"{details.patch_line_count} op"
-        if details.patch_line_count != 1:
-            patch_status += "s"
-    else:
-        patch_status = f"{details.patch_line_count} lines"
+    render_warning = project_patch_render_warning(
+        proposal_document_type=details.proposal_document_type,
+        patch_operations=details.patch_operations,
+    )
+    patch_status = project_patch_status(
+        patch_format=details.patch_format,
+        patch_is_empty=details.patch_is_empty,
+        patch_line_count=details.patch_line_count,
+    )
     proposal_plan_path = details.signals_path.parent / "proposal-plan.json"
     proposal_plan, proposal_plan_error = _load_optional_json(proposal_plan_path)
     summary = {
@@ -5146,6 +5185,7 @@ def project_show(
         "proposal": {
             "variant_id": details.proposal_variant_id,
             "variant_path": str(details.spec.variant_path),
+            "document_type": details.proposal_document_type,
         },
         "job": {
             "source_type": details.job_source_type,
@@ -5161,6 +5201,8 @@ def project_show(
             "format": details.patch_format,
             "is_empty": details.patch_is_empty,
             "line_count": details.patch_line_count,
+            "operations": list(details.patch_operations),
+            "render_warning": render_warning,
             "status": patch_status,
         },
         "review": review,
@@ -6163,8 +6205,10 @@ def render(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    parsed_formats = normalize_output_formats(_parse_formats(formats) or resolved.outputs)
-    if parsed_formats is None:
+    parsed_formats = _parse_formats(formats)
+    selected_formats = resolved.outputs if parsed_formats is None else parsed_formats
+    parsed_formats = normalize_output_formats(selected_formats)
+    if not parsed_formats:
         typer.echo("ERROR: No output formats selected", err=True)
         raise typer.Exit(code=1)
     filters_path = filters_dir()

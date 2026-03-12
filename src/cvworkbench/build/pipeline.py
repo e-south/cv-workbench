@@ -74,7 +74,8 @@ def build_documents(
         resolved_variant = variant_id or resolve_default_variant(config_path)
         variant_path = resolve_variant_path(resolved_variant, config_path)
         variant = load_variant(variant_path)
-    selected_formats = normalize_output_formats(formats or variant.outputs)
+    selected_formats = formats if formats is not None else variant.outputs
+    selected_formats = normalize_output_formats(selected_formats)
     if not selected_formats:
         raise ValueError("No output formats selected")
 

@@ -72,9 +72,11 @@ class ProjectDetails:
     signals_path: Path
     signals_hash: str
     proposal_variant_id: str
+    proposal_document_type: str
     patch_format: str
     patch_is_empty: bool
     patch_line_count: int
+    patch_operations: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,12 @@ class ProjectPatch:
 _PROJECT_PATCH_FORMAT_OPS = "project-ops"
 _PROJECT_OP_REPLACE_EXPERIENCE_BULLET = "replace-experience-bullet"
 _PROJECT_OP_REPLACE_PROJECT_SUMMARY = "replace-project-summary"
+_PROJECT_OPS_RESUME_SURFACE = frozenset(
+    {
+        _PROJECT_OP_REPLACE_EXPERIENCE_BULLET,
+        _PROJECT_OP_REPLACE_PROJECT_SUMMARY,
+    }
+)
 _PROJECT_PATCH_MUTEXES: dict[str, Lock] = {}
 _PROJECT_PATCH_MUTEXES_GUARD = Lock()
 
@@ -96,6 +104,35 @@ def resolve_project_dir(project: str, config_path: Path) -> Path:
     if candidate.is_absolute() or candidate.exists():
         return candidate
     return resolve_projects_path(config_path) / project
+
+
+def project_patch_status(
+    *,
+    patch_format: str,
+    patch_is_empty: bool,
+    patch_line_count: int,
+) -> str:
+    if patch_is_empty:
+        return "empty"
+    if patch_format == _PROJECT_PATCH_FORMAT_OPS:
+        suffix = "op" if patch_line_count == 1 else "ops"
+        return f"{patch_line_count} {suffix}"
+    return f"{patch_line_count} lines"
+
+
+def project_patch_render_warning(
+    *,
+    proposal_document_type: str,
+    patch_operations: tuple[str, ...],
+) -> str | None:
+    if proposal_document_type != "cover-letter":
+        return None
+    if not any(operation in _PROJECT_OPS_RESUME_SURFACE for operation in patch_operations):
+        return None
+    return (
+        "project-ops target resume content and will not appear in "
+        "cover-letter preview/build output"
+    )
 
 
 def create_project_from_url(
@@ -443,13 +480,17 @@ def load_project_details(project_dir: Path) -> ProjectDetails:
         raise ProjectError("Project signals hash is required")
 
     try:
-        proposal_variant_id = load_variant(spec.variant_path).id
+        proposal_variant = load_variant(spec.variant_path)
     except ValueError as exc:
         raise ProjectError(str(exc)) from exc
+    proposal_variant_id = proposal_variant.id
 
     patch = _load_project_patch_model(project_dir)
     patch_is_empty = len(patch.operations) == 0
     patch_line_count = len(patch.operations)
+    patch_operations = tuple(
+        str(operation.get("op", "")).strip() or "<missing-op>" for operation in patch.operations
+    )
 
     return ProjectDetails(
         spec=spec,
@@ -461,9 +502,11 @@ def load_project_details(project_dir: Path) -> ProjectDetails:
         signals_path=signals_path,
         signals_hash=signals_hash,
         proposal_variant_id=proposal_variant_id,
+        proposal_document_type=proposal_variant.document_type,
         patch_format=patch.format,
         patch_is_empty=patch_is_empty,
         patch_line_count=patch_line_count,
+        patch_operations=patch_operations,
     )
 
 

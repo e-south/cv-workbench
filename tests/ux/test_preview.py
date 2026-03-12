@@ -23,6 +23,7 @@ from cvworkbench.dev.preview import (
     PreviewController,
     PreviewIdleWatchdog,
     _make_handler,
+    _load_project_context,
     _preview_page_html,
 )
 
@@ -157,6 +158,223 @@ def test_preview_controller_state_payload_includes_session_id() -> None:
     payload = controller.state_payload()
 
     assert payload["session_id"] == "session-123"
+
+
+def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md, pdf, html]",
+            ]
+        )
+        + "\n"
+    )
+    config_path = config_dir / "workbench.yaml"
+    themes_dir = Path(__file__).resolve().parents[2] / "build" / "themes"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "  projects: ../var/projects",
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {themes_dir}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+    sot_path = tmp_path / "sot.sample"
+    sot_path.mkdir(parents=True, exist_ok=True)
+    (sot_path / "person.yaml").write_text("id: sample\nname: Sample\n")
+    (sot_path / "experience.yaml").write_text(
+        "roles:\n  - id: role\n    company: Co\n    title: Title\n    start: 2020\n    bullets:\n      - id: b1\n        text: Did work\n        tags: [core]\n"
+    )
+    (sot_path / "projects.yaml").write_text(
+        "projects:\n  - id: p1\n    name: Project\n    summary: Summary\n    tags: [core]\n"
+    )
+    (sot_path / "skills.yaml").write_text(
+        "skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n"
+    )
+    (sot_path / "education.yaml").write_text(
+        "education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [core]\n"
+    )
+    (sot_path / "letters.yaml").write_text(
+        "letters:\n  - id: base\n    title: Base\n    salutation: Hello\n    closing: Thanks\n    sections:\n      - id: intro\n        text: Text\n        tags: [core]\n"
+    )
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    job_dir = project_dir / "job"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "extracted.txt").write_text("Leadership role.\n")
+    (job_dir / "signals.json").write_text("{\"keywords\": [\"leadership\"]}\n")
+    (job_dir / "proposal-plan.json").write_text(
+        "\n".join(
+            [
+                "{",
+                '  "selected_variant": "project-focus",',
+                '  "status": "targeted",',
+                '  "summary": "matched include tags: leadership",',
+                '  "job_keywords_missing_in_sot": ["stakeholder-management"],',
+                '  "steps": [',
+                '    "Inspect `project show job` and preview the proposal variant.",',
+                '    "Capture supported SoT edits as project-ops before exporting review artifacts."',
+                "  ]",
+                "}",
+            ]
+        )
+        + "\n"
+    )
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-12T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {sot_path}",
+                "  job:",
+                "    source:",
+                "      type: file",
+                f"      value: {tmp_path / 'job.txt'}",
+                "    extracted_path: job/extracted.txt",
+                "    extracted_hash: deadbeef",
+                "    raw_path: null",
+                "  signals:",
+                "    path: job/signals.json",
+                "    hash: cafebabe",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: project-focus",
+                "  document_type: cover-letter",
+                "  letter_id: base",
+                "  outputs: [md, html]",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "patch.yaml").write_text(
+        "\n".join(
+            [
+                "patch:",
+                "  format: project-ops",
+                "  operations:",
+                "    - op: replace-project-summary",
+                "      project_id: p1",
+                "      old_text: Summary",
+                "      new_text: Tailored summary",
+            ]
+        )
+        + "\n"
+    )
+
+    controller = PreviewController(
+        sot_base=sot_path,
+        config_path=config_path,
+        variant_id="project-focus",
+        theme_id="default",
+        style_preset="modern",
+        auto_pdf=False,
+        project_dir=project_dir,
+    )
+
+    controller.build_once()
+    payload = controller.state_payload()
+
+    assert payload["project"] == "job"
+    assert payload["project_context"] == {
+        "project_id": "job",
+        "proposal_document_type": "cover-letter",
+        "patch_status": "1 op",
+        "patch_operations": ["replace-project-summary"],
+        "render_warning": (
+            "project-ops target resume content and will not appear in "
+            "cover-letter preview/build output"
+        ),
+        "recommended_variant": "project-focus",
+        "recommendation_status": "targeted",
+        "recommendation_summary": "matched include tags: leadership",
+        "job_keywords_missing": ["stakeholder-management"],
+        "steps": [
+            "Inspect `project show job` and preview the proposal variant.",
+            "Capture supported SoT edits as project-ops before exporting review artifacts.",
+        ],
+    }
+
+
+def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    job_dir = project_dir / "job"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "signals.json").write_text("{\"keywords\": [\"leadership\"]}\n")
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-12T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+                "  job:",
+                "    source:",
+                "      type: file",
+                f"      value: {tmp_path / 'job.txt'}",
+                "    extracted_path: job/extracted.txt",
+                "    extracted_hash: deadbeef",
+                "    raw_path: null",
+                "  signals:",
+                "    path: job/signals.json",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: project-focus",
+                "  document_type: cover-letter",
+                "  letter_id: base",
+                "  outputs: [md, html]",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "patch.yaml").write_text(
+        "\n".join(
+            [
+                "patch:",
+                "  format: project-ops",
+                "  operations: []",
+            ]
+        )
+        + "\n"
+    )
+
+    payload = _load_project_context(project_dir)
+
+    assert payload == {
+        "project_id": "job",
+        "project_context_error": "Project signals hash is required",
+    }
 
 
 def test_preview_page_html_contains_controls() -> None:

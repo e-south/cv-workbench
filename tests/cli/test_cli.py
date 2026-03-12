@@ -202,6 +202,109 @@ def test_parse_formats_dedupes_preserving_first_seen_order() -> None:
         "pdf",
         "docx",
     ]
+    assert app_module._parse_formats(["   "]) == []
+
+
+def test_build_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md, pdf]",
+            ]
+        )
+        + "\n"
+    )
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {Path('build/themes').resolve()}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "build",
+            "--variant",
+            "base",
+            "--format",
+            "   ",
+            "--sot-path",
+            "sot.sample",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "No output formats selected" in (result.stderr or "")
+
+
+def test_render_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md, pdf]",
+            ]
+        )
+        + "\n"
+    )
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {Path('build/themes').resolve()}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+    canonical = tmp_path / "canonical.md"
+    canonical.write_text("# Example\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render",
+            "--canonical",
+            str(canonical),
+            "--variant",
+            "base",
+            "--format",
+            "   ",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "No output formats selected" in (result.stderr or "")
 
 
 def test_cli_module_entrypoint() -> None:
