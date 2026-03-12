@@ -166,7 +166,9 @@ def test_context_reports_missing_sot_and_recipes(tmp_path: Path) -> None:
         assert "stop_conditions" in recipe
         assert recipe["steps"]
         assert "command" in recipe["steps"][0]
-    repair_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "repair.sot_path")
+    repair_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "repair.sot_path"
+    )
     assert repair_recipe["steps"][0]["command"] == _recipe_command(
         "validate --sot-path <path-to-sot>",
         config_path=config_path,
@@ -186,7 +188,9 @@ def test_context_omits_sot_path_in_recipes_when_configured_sot_is_ready(tmp_path
     (sot_path / "projects.yaml").write_text(
         "projects:\n  - id: p1\n    name: Project\n    summary: Summary\n    tags: [core]\n"
     )
-    (sot_path / "skills.yaml").write_text("skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n")
+    (sot_path / "skills.yaml").write_text(
+        "skills:\n  - id: s1\n    name: Skill\n    keywords: [one]\n"
+    )
     (sot_path / "education.yaml").write_text(
         "education:\n  - id: e1\n    institution: Inst\n    area: Area\n    tags: [core]\n"
     )
@@ -205,13 +209,17 @@ def test_context_omits_sot_path_in_recipes_when_configured_sot_is_ready(tmp_path
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    baseline = next(recipe for recipe in payload["recipes"] if recipe["id"] == "baseline.build_preview")
+    baseline = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "baseline.build_preview"
+    )
     assert baseline["steps"][0]["command"] == _recipe_command("status", config_path=config_path)
     assert baseline["steps"][1]["command"] == _recipe_command(
         "build --variant base --format md,pdf",
         config_path=config_path,
     )
-    automation = next(recipe for recipe in payload["recipes"] if recipe["id"] == "automation.verify")
+    automation = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "automation.verify"
+    )
     assert automation["steps"][2]["command"] == _recipe_command(
         "preview --variant base --once",
         config_path=config_path,
@@ -262,7 +270,9 @@ def test_context_recipe_steps_expose_machine_actionable_metadata(tmp_path: Path)
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    repair_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "repair.sot_path")
+    repair_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "repair.sot_path"
+    )
     repair_validate_step = repair_recipe["steps"][0]
     repair_edit_step = repair_recipe["steps"][1]
 
@@ -373,7 +383,9 @@ def test_context_compact_matches_full_shared_fields(tmp_path: Path) -> None:
 
     runner = CliRunner()
     full_result = runner.invoke(app, ["context", "--json", "--config", str(config_path)])
-    compact_result = runner.invoke(app, ["context", "--json", "--compact", "--config", str(config_path)])
+    compact_result = runner.invoke(
+        app, ["context", "--json", "--compact", "--config", str(config_path)]
+    )
 
     assert full_result.exit_code == 0
     assert compact_result.exit_code == 0
@@ -392,7 +404,10 @@ def test_context_compact_matches_full_shared_fields(tmp_path: Path) -> None:
     assert compact_payload["runs"]["invalid_summary"] == full_payload["runs"]["invalid_summary"]
     assert compact_payload["projects"]["count"] == full_payload["projects"]["count"]
     assert compact_payload["projects"]["summary"] == full_payload["projects"]["summary"]
-    assert compact_payload["projects"]["invalid_summary"] == full_payload["projects"]["invalid_summary"]
+    assert (
+        compact_payload["projects"]["invalid_summary"]
+        == full_payload["projects"]["invalid_summary"]
+    )
     assert compact_payload["reviews"]["count"] == full_payload["reviews"]["count"]
     assert compact_payload["reviews"]["summary"] == full_payload["reviews"]["summary"]
     assert compact_payload["recommended_workflows"] == full_payload["recommended_workflows"]
@@ -553,7 +568,9 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
 
-    baseline = next(recipe for recipe in payload["recipes"] if recipe["id"] == "baseline.build_preview")
+    baseline = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "baseline.build_preview"
+    )
     assert baseline["steps"][0]["command"] == _recipe_command(
         "status",
         config_path=config_path,
@@ -565,7 +582,9 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         sot_path=sot_path,
     )
 
-    automation = next(recipe for recipe in payload["recipes"] if recipe["id"] == "automation.verify")
+    automation = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "automation.verify"
+    )
     assert automation["steps"][2]["command"] == _recipe_command(
         "preview --variant base --once",
         config_path=config_path,
@@ -588,7 +607,9 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         sot_path=sot_path,
     )
 
-    project_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide")
+    project_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide"
+    )
     assert project_recipe["steps"][0]["command"] == _recipe_command(
         "project guide --job-file <job-file>",
         config_path=config_path,
@@ -609,7 +630,9 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         sot_path=sot_path,
     )
 
-    inspect_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.inspect")
+    inspect_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "project.inspect"
+    )
     assert inspect_recipe["steps"][0]["command"] == _recipe_command(
         "project show <project-id>",
         config_path=config_path,
@@ -620,14 +643,18 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         sot_path=sot_path,
     )
 
-    refresh_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "context.refresh")
+    refresh_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "context.refresh"
+    )
     assert refresh_recipe["steps"][0]["command"] == _recipe_command(
         "context --json",
         config_path=config_path,
         sot_path=sot_path,
     )
 
-    variant_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "variant.manage")
+    variant_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "variant.manage"
+    )
     assert variant_recipe["steps"][1]["command"] == _recipe_command(
         "variant keep --project <project-id> --id <variant-id>",
         config_path=config_path,
@@ -662,7 +689,9 @@ def test_context_project_recipe_keeps_placeholder_project_id(tmp_path: Path) -> 
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    project_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide")
+    project_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide"
+    )
     assert project_recipe["steps"][1]["command"] == _recipe_command(
         "project show <project-id>",
         config_path=config_path,
@@ -688,9 +717,8 @@ def test_context_compact_recommends_sample_bootstrap_when_sample_exists(tmp_path
     payload = json.loads(result.stdout)
     assert payload["sot"]["status"] == "missing"
     assert payload["recommended_workflows"][0]["id"] == "bootstrap.sample_workspace"
-    assert (
-        payload["recommended_workflows"][0]["command"]
-        == _workflow_command("bootstrap.sample_workspace", config_path=config_path)
+    assert payload["recommended_workflows"][0]["command"] == _workflow_command(
+        "bootstrap.sample_workspace", config_path=config_path
     )
 
 
@@ -719,7 +747,9 @@ def test_context_includes_sample_bootstrap_recipe_when_sample_exists(tmp_path: P
     )
 
 
-def test_context_compact_recommends_local_bootstrap_when_local_sot_is_missing(tmp_path: Path) -> None:
+def test_context_compact_recommends_local_bootstrap_when_local_sot_is_missing(
+    tmp_path: Path,
+) -> None:
     config_path = _write_config(tmp_path)
     config_path.write_text(
         config_path.read_text().replace(
@@ -729,7 +759,9 @@ def test_context_compact_recommends_local_bootstrap_when_local_sot_is_missing(tm
     )
 
     runner = CliRunner()
-    compact_result = runner.invoke(app, ["context", "--json", "--compact", "--config", str(config_path)])
+    compact_result = runner.invoke(
+        app, ["context", "--json", "--compact", "--config", str(config_path)]
+    )
     full_result = runner.invoke(app, ["context", "--json", "--config", str(config_path)])
 
     assert compact_result.exit_code == 0
@@ -742,7 +774,9 @@ def test_context_compact_recommends_local_bootstrap_when_local_sot_is_missing(tm
         "bootstrap.local_workspace",
         config_path=config_path,
     )
-    local_recipe = next(recipe for recipe in full_payload["recipes"] if recipe["id"] == "bootstrap.local_workspace")
+    local_recipe = next(
+        recipe for recipe in full_payload["recipes"] if recipe["id"] == "bootstrap.local_workspace"
+    )
     assert local_recipe["steps"][0]["command"] == _init_command(
         sample_default=False,
         workspace_root=tmp_path,
@@ -780,7 +814,9 @@ def test_context_recipes_preserve_external_config_for_review_and_project(tmp_pat
         "apply --draft <draft-dir>",
         sot_path=sot_path,
     )
-    project_recipe = next(recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide")
+    project_recipe = next(
+        recipe for recipe in payload["recipes"] if recipe["id"] == "project.guide"
+    )
     assert project_recipe["steps"][0]["command"] == _recipe_command(
         "project guide --job-file <job-file>",
         config_path=config_path,
@@ -871,7 +907,7 @@ def test_context_recommended_workflows_ignore_review_ready_nondefault_variants(
     (base_run_dir / "cv.md").write_text("# cv\n")
     cover_run_dir = tmp_path / "var" / "runs" / "2026-03-11T00-00-00Z"
     cover_run_dir.mkdir(parents=True, exist_ok=True)
-    (cover_run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (cover_run_dir / "selection.json").write_text('{"items": []}\n')
     (cover_run_dir / "cv.md").write_text("# cover\n")
     (cover_run_dir / "cv.pdf").write_bytes(b"pdf")
     (cover_run_dir / "cv.docx").write_bytes(b"docx")
@@ -907,7 +943,7 @@ def test_run_is_review_ready_rejects_outputs_outside_run_dir(tmp_path: Path) -> 
     outside_dir.mkdir(parents=True, exist_ok=True)
     (outside_dir / "cv.pdf").write_bytes(b"pdf")
     (outside_dir / "cv.docx").write_bytes(b"docx")
-    (run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (run_dir / "selection.json").write_text('{"items": []}\n')
 
     assert (
         app_module._run_is_review_ready(
@@ -931,7 +967,7 @@ def test_context_variant_run_inventory_ignores_newer_project_runs(tmp_path: Path
     )
     variant_run_dir = tmp_path / "var" / "runs" / "2026-03-09T00-00-00Z"
     variant_run_dir.mkdir(parents=True, exist_ok=True)
-    (variant_run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (variant_run_dir / "selection.json").write_text('{"items": []}\n')
     (variant_run_dir / "cv.md").write_text("# cv\n")
     (variant_run_dir / "cv.pdf").write_bytes(b"pdf")
     (variant_run_dir / "cv.docx").write_bytes(b"docx")

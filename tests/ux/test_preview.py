@@ -22,8 +22,8 @@ from cvworkbench.dev.preview import (
     ClientActivity,
     PreviewController,
     PreviewIdleWatchdog,
-    _make_handler,
     _load_project_context,
+    _make_handler,
     _preview_page_html,
 )
 
@@ -217,7 +217,7 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
     proposals_dir.mkdir(parents=True, exist_ok=True)
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / "extracted.txt").write_text("Leadership role.\n")
-    (job_dir / "signals.json").write_text("{\"keywords\": [\"leadership\"]}\n")
+    (job_dir / "signals.json").write_text('{"keywords": ["leadership"]}\n')
     (job_dir / "proposal-plan.json").write_text(
         "\n".join(
             [
@@ -324,7 +324,7 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
     job_dir = project_dir / "job"
     proposals_dir.mkdir(parents=True, exist_ok=True)
     job_dir.mkdir(parents=True, exist_ok=True)
-    (job_dir / "signals.json").write_text("{\"keywords\": [\"leadership\"]}\n")
+    (job_dir / "signals.json").write_text('{"keywords": ["leadership"]}\n')
     (project_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -412,7 +412,7 @@ def test_preview_keyboard_shortcuts_ignore_interactive_controls() -> None:
     html = _preview_page_html()
 
     assert "['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A']" in html
-    assert "button,select,input,textarea,a,[role=\"button\"],[role=\"tab\"]" in html
+    assert 'button,select,input,textarea,a,[role="button"],[role="tab"]' in html
 
 
 class _StubState:

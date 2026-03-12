@@ -11,9 +11,9 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import ipaddress
 import socket
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 
@@ -53,9 +53,7 @@ def validate_public_https_url(url: str) -> str:
         raise IngestError("URL host did not resolve to any addresses")
     for address in addresses:
         if not address.is_global:
-            raise IngestError(
-                f"URL host resolves to a non-public address: {parts.hostname}"
-            )
+            raise IngestError(f"URL host resolves to a non-public address: {parts.hostname}")
     return candidate
 
 

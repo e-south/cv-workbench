@@ -159,7 +159,9 @@ def _load_project_context(project_dir: Path) -> dict[str, Any]:
         missing_values = proposal_plan.get("job_keywords_missing_in_sot")
         if isinstance(missing_values, list):
             payload["job_keywords_missing"] = [
-                str(item).strip() for item in missing_values if isinstance(item, str) and item.strip()
+                str(item).strip()
+                for item in missing_values
+                if isinstance(item, str) and item.strip()
             ]
         step_values = proposal_plan.get("steps")
         if isinstance(step_values, list):

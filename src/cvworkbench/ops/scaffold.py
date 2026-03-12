@@ -173,7 +173,9 @@ def _ensure_precommit_hooks(root: Path, statuses: dict[str, str]) -> None:
         return
 
     statuses["pre_commit_hooks"] = "error"
-    statuses["pre_commit_hooks_detail"] = "pre-commit install exited successfully but did not create .git/hooks/pre-commit"
+    statuses["pre_commit_hooks_detail"] = (
+        "pre-commit install exited successfully but did not create .git/hooks/pre-commit"
+    )
 
 
 def _resolve_git_hooks_dir(root: Path) -> Path | None:

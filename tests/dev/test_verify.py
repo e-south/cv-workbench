@@ -54,7 +54,9 @@ def test_run_verify_writes_machine_readable_summary_on_success(tmp_path: Path) -
 
 def test_run_verify_fails_fast_when_expected_artifact_is_missing(tmp_path: Path) -> None:
     workspace_root = tmp_path / "verify"
-    summary = verify_module.run_verify(REPO_ROOT, workspace_root, runner=_missing_preview_artifact_runner)
+    summary = verify_module.run_verify(
+        REPO_ROOT, workspace_root, runner=_missing_preview_artifact_runner
+    )
 
     assert summary["status"] == "failed"
     assert "preview output missing" in str(summary["error"])
@@ -84,7 +86,9 @@ def _success_runner(step: VerifyStep, workspace: VerifyWorkspace) -> CommandExec
     return _emit_success(step, workspace, preview_html=True)
 
 
-def _missing_preview_artifact_runner(step: VerifyStep, workspace: VerifyWorkspace) -> CommandExecution:
+def _missing_preview_artifact_runner(
+    step: VerifyStep, workspace: VerifyWorkspace
+) -> CommandExecution:
     return _emit_success(step, workspace, preview_html=step.id != "preview.once")
 
 
@@ -114,7 +118,10 @@ def _emit_success(
             json.dumps(
                 {
                     "command": "context",
-                    "config": {"path": str(workspace.config_path), "project": {"name": "cv-workbench"}},
+                    "config": {
+                        "path": str(workspace.config_path),
+                        "project": {"name": "cv-workbench"},
+                    },
                     "sot": {
                         "configured_path": str(workspace.sot_path),
                         "path": str(workspace.sot_path),
@@ -244,7 +251,8 @@ def _emit_success(
         draft_dir.mkdir(parents=True, exist_ok=True)
         for path, content in {
             draft_dir / "patch.diff": "--- canonical.md\n+++ imported.md\n",
-            draft_dir / "draft.json": "{\"apply_status\": \"review_diff_only\", \"patch_path\": \"patch.diff\"}\n",
+            draft_dir
+            / "draft.json": '{"apply_status": "review_diff_only", "patch_path": "patch.diff"}\n',
             draft_dir / "notes.md": "# Notes\n",
             draft_dir / "imported.md": "after\n",
         }.items():

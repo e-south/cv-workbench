@@ -17,8 +17,8 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from difflib import unified_diff
 from datetime import datetime, timezone
+from difflib import unified_diff
 from pathlib import Path
 from typing import Any
 
@@ -532,7 +532,7 @@ def _build_supported_project_patch(
     if len(canonical_tokens) != len(imported_tokens):
         return None
 
-    for canonical_token, imported_token in zip(canonical_tokens, imported_tokens):
+    for canonical_token, imported_token in zip(canonical_tokens, imported_tokens, strict=False):
         if (
             canonical_token.kind != imported_token.kind
             or canonical_token.section != imported_token.section
@@ -541,9 +541,9 @@ def _build_supported_project_patch(
             return None
         if canonical_token.text == imported_token.text:
             continue
-        if _normalize_noneditable_token_text(canonical_token.text) == _normalize_noneditable_token_text(
-            imported_token.text
-        ):
+        if _normalize_noneditable_token_text(
+            canonical_token.text
+        ) == _normalize_noneditable_token_text(imported_token.text):
             continue
         if canonical_token.kind == "bullet" and canonical_token.section == "Experience":
             continue
@@ -561,10 +561,14 @@ def _build_supported_project_patch(
     if bullet_refs is None or project_refs is None:
         return None
     canonical_experience = [
-        token for token in canonical_tokens if token.kind == "bullet" and token.section == "Experience"
+        token
+        for token in canonical_tokens
+        if token.kind == "bullet" and token.section == "Experience"
     ]
     imported_experience = [
-        token for token in imported_tokens if token.kind == "bullet" and token.section == "Experience"
+        token
+        for token in imported_tokens
+        if token.kind == "bullet" and token.section == "Experience"
     ]
     canonical_projects = [
         token
@@ -583,13 +587,13 @@ def _build_supported_project_patch(
     if canonical_experience:
         if len(canonical_experience) != len(bullet_refs):
             return None
-        for canonical_token, ref in zip(canonical_experience, bullet_refs):
+        for canonical_token, ref in zip(canonical_experience, bullet_refs, strict=False):
             if canonical_token.heading != ref.heading or canonical_token.text != ref.rendered_text:
                 return None
     if canonical_projects:
         if len(canonical_projects) != len(project_refs):
             return None
-        for canonical_token, ref in zip(canonical_projects, project_refs):
+        for canonical_token, ref in zip(canonical_projects, project_refs, strict=False):
             if canonical_token.heading != ref.heading or canonical_token.text != ref.rendered_text:
                 return None
 
@@ -598,6 +602,7 @@ def _build_supported_project_patch(
         canonical_experience,
         imported_experience,
         bullet_refs,
+        strict=False,
     ):
         if canonical_token.text == imported_token.text:
             continue
@@ -610,7 +615,9 @@ def _build_supported_project_patch(
                 "new_text": imported_token.text,
             }
         )
-    for canonical_token, imported_token, ref in zip(canonical_projects, imported_projects, project_refs):
+    for canonical_token, imported_token, ref in zip(
+        canonical_projects, imported_projects, project_refs, strict=False
+    ):
         if canonical_token.text == imported_token.text:
             continue
         operations.append(
@@ -640,9 +647,7 @@ def _selected_experience_bullets(
     included = {
         (str(item.get("role_id")), str(item.get("id")))
         for item in selection.get("items", [])
-        if isinstance(item, dict)
-        and item.get("type") == "bullet"
-        and item.get("included") is True
+        if isinstance(item, dict) and item.get("type") == "bullet" and item.get("included") is True
     }
     refs: list[_ExperienceBulletRef] = []
     experience = sot.get("experience", {})
@@ -760,12 +765,16 @@ def _tokenize_markdown(markdown: str) -> list[_MarkdownToken]:
             flush_paragraph()
             section = _normalize_markdown_text(line[3:])
             heading = None
-            tokens.append(_MarkdownToken(kind="section", section=section, heading=None, text=section))
+            tokens.append(
+                _MarkdownToken(kind="section", section=section, heading=None, text=section)
+            )
             continue
         if line.startswith("### "):
             flush_paragraph()
             heading = _normalize_markdown_text(line[4:])
-            tokens.append(_MarkdownToken(kind="heading", section=section, heading=heading, text=heading))
+            tokens.append(
+                _MarkdownToken(kind="heading", section=section, heading=heading, text=heading)
+            )
             continue
         if line.startswith("- "):
             flush_paragraph()
@@ -841,7 +850,12 @@ def _apply_project_patch_to_bullet_refs(
         bullet_id = slugify(operation.get("bullet_id", ""))
         old_text = operation.get("old_text")
         new_text = operation.get("new_text")
-        if not role_id or not bullet_id or not isinstance(old_text, str) or not isinstance(new_text, str):
+        if (
+            not role_id
+            or not bullet_id
+            or not isinstance(old_text, str)
+            or not isinstance(new_text, str)
+        ):
             return None
         target = (role_id, bullet_id)
         ref = refs_by_target.get(target)
@@ -929,4 +943,6 @@ def _create_import_draft_dir(drafts_root: Path) -> Path:
         except FileExistsError:
             continue
         return candidate
-    raise ReviewError(f"Could not allocate unique import draft directory for timestamp: {base_name}")
+    raise ReviewError(
+        f"Could not allocate unique import draft directory for timestamp: {base_name}"
+    )

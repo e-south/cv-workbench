@@ -181,7 +181,9 @@ def _rasterize_pdf(pdf_path: Path, out_dir: Path, *, dpi: int) -> tuple[Path, ..
     return pages
 
 
-def _build_page_diffs(images_a: tuple[Path, ...], images_b: tuple[Path, ...]) -> tuple[PageVisualDiff, ...]:
+def _build_page_diffs(
+    images_a: tuple[Path, ...], images_b: tuple[Path, ...]
+) -> tuple[PageVisualDiff, ...]:
     pages: list[PageVisualDiff] = []
     for index in range(max(len(images_a), len(images_b))):
         image_a = images_a[index] if index < len(images_a) else None

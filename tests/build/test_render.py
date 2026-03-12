@@ -19,8 +19,8 @@ import pytest
 from typer.testing import CliRunner
 
 import cvworkbench.build.rendering as rendering_module
-from cvworkbench.cli import app
 from cvworkbench.build.rendering import RenderError, RenderRequest, render_documents
+from cvworkbench.cli import app
 from cvworkbench.variants import DEFAULT_ORDER, Variant
 from tests.utils import strip_ansi
 

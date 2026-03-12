@@ -67,7 +67,9 @@ def collect_manifest_metadata(
         git_commit=git_commit_future.result(),
         pandoc_version=pandoc_version_future.result(),
         pdf_engine=pdf_engine,
-        pdf_engine_version=pdf_engine_version_future.result() if pdf_engine_version_future else None,
+        pdf_engine_version=pdf_engine_version_future.result()
+        if pdf_engine_version_future
+        else None,
     )
 
 

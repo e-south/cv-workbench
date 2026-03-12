@@ -117,7 +117,9 @@ def register_variant(
         existing = _find_entry(registry["entries"], key)
         if existing:
             if existing["status"] != "ephemeral":
-                raise VariantLifecycleError(f"Variant is not eligible for registration: {variant_path}")
+                raise VariantLifecycleError(
+                    f"Variant is not eligible for registration: {variant_path}"
+                )
             existing["variant_id"] = variant_id
             existing["cleanup_path"] = cleanup_key
             existing["source"] = source
@@ -346,7 +348,15 @@ def _unlock_registry_handle(handle: Any) -> None:
 def _validate_entry(entry: Any) -> None:
     if not isinstance(entry, dict):
         raise VariantLifecycleError("Variant registry entry is invalid")
-    for key in ("variant_id", "variant_path", "cleanup_path", "source", "status", "created_at", "expires_at"):
+    for key in (
+        "variant_id",
+        "variant_path",
+        "cleanup_path",
+        "source",
+        "status",
+        "created_at",
+        "expires_at",
+    ):
         if key not in entry:
             raise VariantLifecycleError("Variant registry entry is invalid")
         if not isinstance(entry[key], str) or not entry[key].strip():

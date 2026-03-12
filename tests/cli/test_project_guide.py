@@ -95,9 +95,7 @@ def _write_ranked_project_guide_fixture(tmp_path: Path) -> tuple[Path, Path, Pat
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
     variants_dir.mkdir(parents=True, exist_ok=True)
-    (variants_dir / "base.yaml").write_text(
-        "variant:\n  id: base\n  outputs: [md, pdf]\n"
-    )
+    (variants_dir / "base.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf]\n")
     (variants_dir / "cover.yaml").write_text(
         "variant:\n  id: cover\n  outputs: [md]\n  include_tags: [leadership]\n"
     )
@@ -465,7 +463,7 @@ def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> N
     signals_path = job_dir / "signals.json"
     extracted_path = job_dir / "extracted.txt"
     proposal_plan_path = job_dir / "proposal-plan.json"
-    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    signals_path.write_text('{"keywords": ["leadership"]}\n')
     extracted_path.write_text("Leadership role.\n")
     proposal_plan_path.write_text(
         json.dumps(
@@ -567,7 +565,7 @@ def test_project_show_surfaces_invalid_proposal_plan_without_failing(tmp_path: P
     signals_path = job_dir / "signals.json"
     extracted_path = job_dir / "extracted.txt"
     proposal_plan_path = job_dir / "proposal-plan.json"
-    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    signals_path.write_text('{"keywords": ["leadership"]}\n')
     extracted_path.write_text("Leadership role.\n")
     proposal_plan_path.write_text(
         json.dumps(
@@ -651,7 +649,7 @@ def test_project_show_suggests_safe_keep_id_for_legacy_base_proposal(tmp_path: P
     job_dir.mkdir(parents=True, exist_ok=True)
     signals_path = job_dir / "signals.json"
     extracted_path = job_dir / "extracted.txt"
-    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    signals_path.write_text('{"keywords": ["leadership"]}\n')
     extracted_path.write_text("Leadership role.\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
@@ -709,7 +707,7 @@ def test_project_show_reports_project_ops_patch_metadata(tmp_path: Path) -> None
     job_dir.mkdir(parents=True, exist_ok=True)
     signals_path = job_dir / "signals.json"
     extracted_path = job_dir / "extracted.txt"
-    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    signals_path.write_text('{"keywords": ["leadership"]}\n')
     extracted_path.write_text("Leadership role.\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
@@ -783,7 +781,9 @@ def test_project_show_reports_project_ops_patch_metadata(tmp_path: Path) -> None
     assert payload["patch"]["status"] == "1 op"
 
 
-def test_project_show_warns_when_resume_patch_is_hidden_by_cover_letter_variant(tmp_path: Path) -> None:
+def test_project_show_warns_when_resume_patch_is_hidden_by_cover_letter_variant(
+    tmp_path: Path,
+) -> None:
     config_path = _write_config(tmp_path)
     project_dir = tmp_path / "var" / "projects" / "job"
     proposals_dir = project_dir / "proposals"
@@ -793,7 +793,7 @@ def test_project_show_warns_when_resume_patch_is_hidden_by_cover_letter_variant(
     signals_path = job_dir / "signals.json"
     extracted_path = job_dir / "extracted.txt"
     proposal_plan_path = job_dir / "proposal-plan.json"
-    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    signals_path.write_text('{"keywords": ["leadership"]}\n')
     extracted_path.write_text("Leadership role.\n")
     proposal_plan_path.write_text(
         json.dumps(
@@ -943,9 +943,7 @@ def test_project_patch_replace_experience_bullet_appends_validated_op(tmp_path: 
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
-    (proposals_dir / "patch.yaml").write_text(
-        "patch:\n  format: project-ops\n  operations: []\n"
-    )
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -1026,9 +1024,7 @@ def test_project_patch_replace_project_summary_appends_validated_op(tmp_path: Pa
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
-    (proposals_dir / "patch.yaml").write_text(
-        "patch:\n  format: project-ops\n  operations: []\n"
-    )
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -1113,9 +1109,7 @@ def test_project_patch_followup_commands_include_override_sot_path(tmp_path: Pat
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
-    (proposals_dir / "patch.yaml").write_text(
-        "patch:\n  format: project-ops\n  operations: []\n"
-    )
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -1152,7 +1146,9 @@ def test_project_patch_followup_commands_include_override_sot_path(tmp_path: Pat
     )
 
 
-def test_project_patch_replace_experience_bullet_rejects_legacy_patch_format(tmp_path: Path) -> None:
+def test_project_patch_replace_experience_bullet_rejects_legacy_patch_format(
+    tmp_path: Path,
+) -> None:
     config_path = _write_config(tmp_path)
     sot_path = tmp_path / "local" / "sot"
     sot_path.mkdir(parents=True, exist_ok=True)
@@ -1188,7 +1184,7 @@ def test_project_patch_replace_experience_bullet_rejects_legacy_patch_format(tmp
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: proposal-job\n  outputs: [md]\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text('patch:\n  format: unified-diff\n  diff: ""\n')
 
     runner = CliRunner()
     result = runner.invoke(
@@ -1214,7 +1210,9 @@ def test_project_patch_replace_experience_bullet_rejects_legacy_patch_format(tmp
     assert "requires format=project-ops" in (result.stderr or "")
 
 
-def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready(tmp_path: Path) -> None:
+def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready(
+    tmp_path: Path,
+) -> None:
     config_path = _write_config(tmp_path)
     project_dir = tmp_path / "var" / "projects" / "job"
     proposals_dir = project_dir / "proposals"
@@ -1223,7 +1221,7 @@ def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready
     proposals_dir.mkdir(parents=True, exist_ok=True)
     job_dir.mkdir(parents=True, exist_ok=True)
     run_dir.mkdir(parents=True, exist_ok=True)
-    (job_dir / "signals.json").write_text("{\"keywords\": [\"leadership\"]}\n")
+    (job_dir / "signals.json").write_text('{"keywords": ["leadership"]}\n')
     (job_dir / "extracted.txt").write_text("Leadership role.\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
@@ -1247,11 +1245,13 @@ def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready
         )
         + "\n"
     )
-    (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf, docx]\n")
+    (proposals_dir / "variant.yaml").write_text(
+        "variant:\n  id: base\n  outputs: [md, pdf, docx]\n"
+    )
     (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
     (run_dir / "cv.docx").write_bytes(b"docx")
     (run_dir / "cv.pdf").write_bytes(b"pdf")
-    (run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (run_dir / "selection.json").write_text('{"items": []}\n')
     (run_dir / "canonical.md").write_text("base\n")
     (run_dir / "manifest.json").write_text(
         json.dumps(
@@ -1298,7 +1298,7 @@ def test_project_show_requires_review_artifact_files_for_ready_status(tmp_path: 
     proposals_dir.mkdir(parents=True, exist_ok=True)
     job_dir.mkdir(parents=True, exist_ok=True)
     run_dir.mkdir(parents=True, exist_ok=True)
-    (job_dir / "signals.json").write_text("{\"keywords\": [\"leadership\"]}\n")
+    (job_dir / "signals.json").write_text('{"keywords": ["leadership"]}\n')
     (job_dir / "extracted.txt").write_text("Leadership role.\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
@@ -1322,9 +1322,11 @@ def test_project_show_requires_review_artifact_files_for_ready_status(tmp_path: 
         )
         + "\n"
     )
-    (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf, docx]\n")
+    (proposals_dir / "variant.yaml").write_text(
+        "variant:\n  id: base\n  outputs: [md, pdf, docx]\n"
+    )
     (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
-    (run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (run_dir / "selection.json").write_text('{"items": []}\n')
     (run_dir / "canonical.md").write_text("base\n")
     (run_dir / "manifest.json").write_text(
         json.dumps(

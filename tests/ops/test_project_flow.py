@@ -20,9 +20,9 @@ import yaml
 from cvworkbench.ingestion.ingest import ExtractResult
 from cvworkbench.ops.projects import (
     ProjectError,
-    apply_project_patch,
     append_replace_experience_bullet_operation,
     append_replace_project_summary_operation,
+    apply_project_patch,
     create_project_from_file,
     create_project_from_url,
     discard_project_workspace,
@@ -290,7 +290,7 @@ def test_load_project_patch_rejects_legacy_unified_diff_payload(tmp_path: Path) 
         sot_path=sot_path,
         store_raw=False,
     )
-    result.patch_path.write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    result.patch_path.write_text('patch:\n  format: unified-diff\n  diff: ""\n')
 
     with pytest.raises(ProjectError, match="project-ops"):
         load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
@@ -598,7 +598,9 @@ def test_append_project_operations_serializes_concurrent_writers(
     )
 
     barrier = threading.Barrier(2)
-    projects_module = __import__("cvworkbench.ops.projects", fromlist=["_load_project_patch_authoring_state"])
+    projects_module = __import__(
+        "cvworkbench.ops.projects", fromlist=["_load_project_patch_authoring_state"]
+    )
     original_loader = projects_module._load_project_patch_authoring_state
 
     def _delayed_loader(project_dir: Path):

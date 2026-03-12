@@ -282,7 +282,9 @@ def test_build_rejects_formats_that_normalize_to_empty() -> None:
         )
 
 
-def test_build_render_failure_does_not_wait_for_manifest_metadata(tmp_path: Path, monkeypatch) -> None:
+def test_build_render_failure_does_not_wait_for_manifest_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
     metadata_started = threading.Event()
     metadata_release = threading.Event()
     metadata_finished = threading.Event()
@@ -302,7 +304,9 @@ def test_build_render_failure_does_not_wait_for_manifest_metadata(tmp_path: Path
         assert metadata_started.wait(timeout=0.2)
         raise RenderError("render failed")
 
-    monkeypatch.setattr(pipeline_module, "collect_manifest_metadata", fake_collect_manifest_metadata)
+    monkeypatch.setattr(
+        pipeline_module, "collect_manifest_metadata", fake_collect_manifest_metadata
+    )
     monkeypatch.setattr(pipeline_module, "render_documents", fake_render_documents)
 
     start = time.monotonic()
@@ -428,7 +432,9 @@ def test_build_project_applies_project_ops_without_mutating_base_sot(tmp_path: P
     assert "Delivered measurable outcomes" not in (sot_path / "experience.yaml").read_text()
 
 
-def test_build_project_applies_project_summary_ops_without_mutating_base_sot(tmp_path: Path) -> None:
+def test_build_project_applies_project_summary_ops_without_mutating_base_sot(
+    tmp_path: Path,
+) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
     variants_dir.mkdir(parents=True, exist_ok=True)

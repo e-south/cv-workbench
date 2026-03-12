@@ -30,7 +30,11 @@ from cvworkbench.ingestion.ingest import IngestError, fetch_and_extract
 from cvworkbench.ingestion.registry import load_registry_settings
 from cvworkbench.ingestion.signals import build_signals
 from cvworkbench.ops.patches import PatchError, apply_patch_text
-from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, discard_variant, register_variant
+from cvworkbench.ops.variant_lifecycle import (
+    VariantLifecycleError,
+    discard_variant,
+    register_variant,
+)
 from cvworkbench.text import slugify
 from cvworkbench.variants import load_variant
 
@@ -522,7 +526,11 @@ def suggest_project_variant_id(
     preferred_id: str | None = None,
 ) -> str:
     candidate = (preferred_id or "").strip()
-    if candidate and candidate != "base" and not resolve_variant_path(candidate, config_path).exists():
+    if (
+        candidate
+        and candidate != "base"
+        and not resolve_variant_path(candidate, config_path).exists()
+    ):
         return candidate
     base = _slugify(f"proposal-{project_id}") or "proposal"
     for suffix in range(0, 1000):
@@ -613,9 +621,7 @@ def append_replace_experience_bullet_operation(
         bullet_id=resolved_bullet_id,
     )
     resolved_old_text = (
-        current_text
-        if old_text is None
-        else _require_project_text(old_text, field_name="old_text")
+        current_text if old_text is None else _require_project_text(old_text, field_name="old_text")
     )
     if resolved_old_text == resolved_new_text:
         raise ProjectError("Project op replacement text must differ from source text")
@@ -647,9 +653,7 @@ def append_replace_project_summary_operation(
         project_id=resolved_project_id,
     )
     resolved_old_text = (
-        current_text
-        if old_text is None
-        else _require_project_text(old_text, field_name="old_text")
+        current_text if old_text is None else _require_project_text(old_text, field_name="old_text")
     )
     if resolved_old_text == resolved_new_text:
         raise ProjectError("Project op replacement text must differ from source text")
@@ -740,8 +744,7 @@ def _compile_project_operations(
             new_text = _require_operation_text(operation, "new_text", index=index)
             if project_id in seen_project_targets:
                 raise ProjectError(
-                    "Duplicate project op target for project summary: "
-                    f"project_id={project_id}"
+                    "Duplicate project op target for project summary: " f"project_id={project_id}"
                 )
             seen_project_targets.add(project_id)
             if project_id in duplicate_projects:
@@ -752,8 +755,7 @@ def _compile_project_operations(
             project_entry = project_index.get(project_id)
             if project_entry is None:
                 raise ProjectError(
-                    "Project op target not found in projects.yaml: "
-                    f"project_id={project_id}"
+                    "Project op target not found in projects.yaml: " f"project_id={project_id}"
                 )
             current_summary = project_entry.get("summary")
             if not isinstance(current_summary, str) or not current_summary.strip():
@@ -901,14 +903,12 @@ def _read_project_summary_text(
     project_entry = project_index.get(project_id)
     if project_entry is None:
         raise ProjectError(
-            "Project op target not found in projects.yaml: "
-            f"project_id={project_id}"
+            "Project op target not found in projects.yaml: " f"project_id={project_id}"
         )
     current_summary = project_entry.get("summary")
     if not isinstance(current_summary, str) or not current_summary.strip():
         raise ProjectError(
-            "Project summary text is invalid for project op target: "
-            f"project_id={project_id}"
+            "Project summary text is invalid for project op target: " f"project_id={project_id}"
         )
     return current_summary.strip()
 

@@ -205,7 +205,9 @@ def test_preview_session_conflict_treats_reused_live_pid_without_preview_port_as
     monkeypatch,
 ) -> None:
     app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "_preview_api_reachable", lambda *_: (False, "connection refused"))
+    monkeypatch.setattr(
+        app_module, "_preview_api_reachable", lambda *_: (False, "connection refused")
+    )
     monkeypatch.setattr(app_module, "_preview_pid_is_live", lambda *_: True)
     monkeypatch.setattr(app_module, "_port_is_open", lambda *_: False)
 

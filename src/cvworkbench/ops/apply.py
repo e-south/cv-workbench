@@ -38,7 +38,9 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
         raise ApplyError(f"SoT path not found: {sot_path}")
 
     metadata = _load_draft_metadata(draft_dir / "draft.json")
-    if metadata is None and ((draft_dir / "imported.md").exists() or (draft_dir / "notes.md").exists()):
+    if metadata is None and (
+        (draft_dir / "imported.md").exists() or (draft_dir / "notes.md").exists()
+    ):
         raise ApplyError(f"Import draft metadata not found: {draft_dir / 'draft.json'}")
     apply_status = _metadata_text(metadata, "apply_status")
     if apply_status == "review_diff_only":

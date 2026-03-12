@@ -51,6 +51,7 @@ def _write_png(path: Path, color: tuple[int, int, int]) -> None:
     width = 1
     height = 1
     raw = b"\x00" + bytes(color)
+
     def chunk(tag: bytes, payload: bytes) -> bytes:
         return (
             struct.pack(">I", len(payload))
@@ -130,9 +131,9 @@ def test_compare_rendered_pdfs_requires_pdf_output(tmp_path: Path) -> None:
 def test_compare_rendered_pdfs_preserves_project_run_id_for_relative_paths(
     tmp_path: Path, monkeypatch
 ) -> None:
-    config_path = _write_config(tmp_path)
-    run_a = _write_run(tmp_path, "2026-03-12T00-00-00Z")
-    run_b = _write_run(tmp_path, "projects/job/2026-03-12T00-05-00Z")
+    _write_config(tmp_path)
+    _write_run(tmp_path, "2026-03-12T00-00-00Z")
+    _write_run(tmp_path, "projects/job/2026-03-12T00-05-00Z")
 
     def _fake_rasterize(pdf_path: Path, out_dir: Path, *, dpi: int) -> tuple[Path, ...]:
         out_dir.mkdir(parents=True, exist_ok=False)

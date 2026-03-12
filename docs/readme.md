@@ -1,6 +1,6 @@
 # Documentation Index
 
-**Owner:** cv-workbench maintainers  
+**Owner:** cv-workbench maintainers
 **Last verified:** 2026-03-12
 
 This is the central route map for `cv-workbench` workflows, command contracts,
@@ -14,6 +14,13 @@ task instead of browsing the whole docs tree.
 3. Use [Command and contract docs](#command-and-contract-docs) when scripting or building agent prompts.
 4. Use [Guides by audience](#guides-by-audience) when you need a role-specific entry point.
 5. Return here as the canonical docs map; keep the root [README](../README.md) lightweight.
+
+## Most Common Routes
+
+- First local build: [howto/quickstart.md](howto/quickstart.md) -> [reference/preview-contract.md](reference/preview-contract.md)
+- Job tailoring and project preview: [howto/ingestion.md](howto/ingestion.md) -> [reference/project-contract.md](reference/project-contract.md)
+- Review/import loop: [reference/project-contract.md](reference/project-contract.md) -> [reference/variant-lifecycle.md](reference/variant-lifecycle.md)
+- Automation/bootstrap: [reference/context-contract.md](reference/context-contract.md) -> [reference/verify-contract.md](reference/verify-contract.md)
 
 ## Usage Flows
 

@@ -96,9 +96,7 @@ def _write_project_manifest(root: Path, project_id: str, variant_id: str = "base
         )
         + "\n"
     )
-    (proposals_dir / "patch.yaml").write_text(
-        "patch:\n  format: project-ops\n  operations: []\n"
-    )
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
     return project_dir
 
 

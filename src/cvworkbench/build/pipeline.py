@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from cvworkbench.build.formats import normalize_output_formats
 from cvworkbench.build.manifest import build_manifest, collect_manifest_metadata, write_manifest
 from cvworkbench.build.markdown import build_markdown
-from cvworkbench.build.formats import normalize_output_formats
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.rendering import RenderRequest, render_documents, resolve_filter_paths
 from cvworkbench.build.resume import build_resume, write_resume

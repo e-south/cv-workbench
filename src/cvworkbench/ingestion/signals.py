@@ -34,11 +34,7 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _keywords(tokens: list[str], limit: int) -> list[str]:
-    filtered = [
-        token
-        for token in tokens
-        if len(token) >= 3 and token not in _STOPWORDS
-    ]
+    filtered = [token for token in tokens if len(token) >= 3 and token not in _STOPWORDS]
     counts = Counter(filtered)
     return [word for word, _ in counts.most_common(limit)]
 

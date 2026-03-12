@@ -145,9 +145,7 @@ def test_gc_variants_expires_ephemeral_entries(tmp_path: Path) -> None:
 
     registry_path = tmp_path / "var" / "variants" / "registry.json"
     raw = json.loads(registry_path.read_text())
-    raw["entries"][0]["expires_at"] = (
-        datetime.now(timezone.utc) - timedelta(days=1)
-    ).isoformat()
+    raw["entries"][0]["expires_at"] = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     registry_path.write_text(json.dumps(raw, indent=2))
 
     summary = gc_variants(config_path=config_path, confirm=True)
