@@ -951,11 +951,11 @@ def _build_context_recipes(
                         sot_path=None,
                         configured_sot_path=configured_sot_path,
                     ),
-                    "description": "Generate an import draft plus notes describing whether patch.yaml or patch.diff is applyable to SoT.",
+                    "description": "Generate an import draft plus machine metadata describing whether patch.yaml or patch.diff is applyable to SoT.",
                 },
                 {
                     "command": "edit var/drafts/import-*/notes.md",
-                    "description": "Review notes.md to confirm whether the drafted patch payload is applyable or still review_diff_only.",
+                    "description": "Review notes.md for operator context; draft.json is the authoritative apply_status record.",
                 },
                 {
                     "command": shlex.join(
@@ -968,19 +968,20 @@ def _build_context_recipes(
                             str((sot_path or Path("<path-to-sot>"))),
                         ]
                     ),
-                    "description": "Apply the imported patch after explicit approval when notes.md reports apply_status: ready. If it reports ready_no_changes, no SoT mutation is needed.",
+                    "description": "Apply the imported patch after explicit approval when draft.json reports apply_status: ready. If it reports ready_no_changes, no SoT mutation is needed.",
                 },
             ],
             "outputs": [
                 "var/reviews/<variant>/cv.docx",
                 "var/drafts/import-*/patch.yaml",
                 "var/drafts/import-*/patch.diff",
+                "var/drafts/import-*/draft.json",
                 "var/drafts/import-*/notes.md",
             ],
             "stop_conditions": [
                 "If no runs exist, run the baseline build recipe first.",
                 "Use reviewpack --run <run-id> when you need a pinned review pack in a multi-run workspace.",
-                "If notes.md reports review_diff_only, author a real SoT patch manually instead of applying the draft patch payload.",
+                "If draft.json reports review_diff_only, author a real SoT patch manually instead of applying the draft patch payload.",
             ],
         },
         {
@@ -1871,13 +1872,16 @@ def _load_job_signals(signals_path: Path) -> dict[str, Any]:
     return raw
 
 
-def _load_optional_json(path: Path) -> dict[str, Any] | None:
+def _load_optional_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not path.exists():
-        return None
-    raw = json.loads(path.read_text())
+        return None, None
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON at {path}: {exc.msg}"
     if not isinstance(raw, dict):
-        return None
-    return raw
+        return None, f"Optional JSON payload must be an object: {path}"
+    return raw, None
 
 
 def _normalize_keywords(values: list[str]) -> list[str]:
@@ -5056,7 +5060,7 @@ def project_show(
     else:
         patch_status = f"{details.patch_line_count} lines"
     proposal_plan_path = details.signals_path.parent / "proposal-plan.json"
-    proposal_plan = _load_optional_json(proposal_plan_path)
+    proposal_plan, proposal_plan_error = _load_optional_json(proposal_plan_path)
     summary = {
         "project": {
             "project_id": details.spec.project_id,
@@ -5090,6 +5094,8 @@ def project_show(
     }
     if proposal_plan is not None:
         summary["proposal_plan"] = proposal_plan
+    if proposal_plan_error is not None:
+        summary["proposal_plan_error"] = proposal_plan_error
 
     if get_output_mode() == OutputMode.JSON:
         typer.echo(json.dumps({"command": "project.show", **summary}, indent=2, sort_keys=True))
@@ -5845,16 +5851,17 @@ def import_docx(
     summary = {
         "draft_dir": result.draft_dir,
         "patch": result.patch_path,
+        "metadata": result.metadata_path,
         "notes": result.notes_path,
         "imported_markdown": result.imported_path,
         "run_id": result.run_id,
         "apply_status": result.apply_status,
         "next_step": (
-            f"Review notes.md, then apply {result.patch_path.name} after explicit approval"
+            f"Review notes.md, then apply {result.patch_path.name} after explicit approval if draft.json reports ready"
             if result.apply_status == "ready"
-            else "Review notes.md; the normalized patch is a verified no-op"
+            else "Review notes.md; draft.json records a verified no-op"
             if result.apply_status == "ready_no_changes"
-            else "Review notes.md and author a real SoT patch manually"
+            else "Review notes.md and author a real SoT patch manually; draft.json records review_diff_only"
         ),
     }
     _print_import_summary(summary)

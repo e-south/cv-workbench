@@ -17,6 +17,8 @@ This command:
 - Fetches and extracts readable text from the URL.
 - Stores source metadata and extracted markdown.
 - Generates deterministic signals and a draft `strategy.yaml`.
+- Rejects non-public or non-`https` URLs; save local or internal content to a
+  file and use `--job-file` instead.
 
 ## Registry layout
 
@@ -93,6 +95,9 @@ registry:
 
 - Ingestion is generic. Use it for job listings, product pages, blog posts, or
   any context you want to mine for signals.
+- URL ingestion is intentionally strict: only public `https` targets are
+  accepted. Loopback, RFC1918/private, link-local, localhost, and non-default
+  ports fail fast.
 - Registry ids are keyed from the exact URL string. If a job board adds
   tracking query params and you want stable dedupe, prefer the canonical
   listing URL or save the text locally and use `--job-file`.

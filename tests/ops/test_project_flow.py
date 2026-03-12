@@ -14,6 +14,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+import pytest
 import yaml
 
 from cvworkbench.ingestion.ingest import ExtractResult
@@ -28,6 +29,7 @@ from cvworkbench.ops.projects import (
     load_project_patch,
     prepare_project_sot,
 )
+from cvworkbench.ops.variant_lifecycle import VariantLifecycleError, register_variant
 
 
 def _write_config(root: Path) -> Path:
@@ -127,6 +129,68 @@ def test_create_project_from_file(tmp_path: Path) -> None:
     assert diff == ""
 
     apply_project_patch(project_dir=project_dir, sot_path=sot_path)
+
+
+def test_create_project_from_file_rolls_back_on_variant_registration_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    def _boom(**kwargs) -> None:
+        raise VariantLifecycleError("registry unavailable")
+
+    monkeypatch.setattr("cvworkbench.ops.projects.register_variant", _boom)
+
+    with pytest.raises(ProjectError, match="registry unavailable"):
+        create_project_from_file(
+            job_path=job_path,
+            slug="orbit",
+            base_variant_id="base",
+            config_path=config_path,
+            sot_path=sot_path,
+            store_raw=False,
+        )
+
+    project_dir = tmp_path / "var" / "projects" / "orbit"
+    assert not project_dir.exists()
+    assert not any(path.name.startswith(".orbit.tmp-") for path in project_dir.parent.iterdir())
+
+    monkeypatch.setattr("cvworkbench.ops.projects.register_variant", register_variant)
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    assert result.project_dir == project_dir
+
+
+def test_load_project_patch_rejects_legacy_unified_diff_payload(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+    result.patch_path.write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+
+    with pytest.raises(ProjectError, match="project-ops"):
+        load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
 
 
 def test_project_ops_replace_experience_bullet_prepare_and_apply(tmp_path: Path) -> None:

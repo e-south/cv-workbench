@@ -582,6 +582,7 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         config_path=config_path,
     )
     assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
+    assert "var/drafts/import-*/draft.json" in review_recipe["outputs"]
     assert review_recipe["steps"][4]["command"] == _recipe_command(
         "apply --draft <draft-dir>",
         sot_path=sot_path,
@@ -654,7 +655,7 @@ def test_context_project_recipe_keeps_placeholder_project_id(tmp_path: Path) -> 
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: demo\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(app, ["context", "--json", "--config", str(config_path)])
@@ -774,6 +775,7 @@ def test_context_recipes_preserve_external_config_for_review_and_project(tmp_pat
         config_path=config_path,
     )
     assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
+    assert "var/drafts/import-*/draft.json" in review_recipe["outputs"]
     assert review_recipe["steps"][4]["command"] == _recipe_command(
         "apply --draft <draft-dir>",
         sot_path=sot_path,

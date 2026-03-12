@@ -122,6 +122,15 @@ def test_apply_rejects_review_diff_only_drafts(tmp_path: Path) -> None:
 
     draft_dir = tmp_path / "draft"
     draft_dir.mkdir()
+    (draft_dir / "draft.json").write_text(
+        json.dumps(
+            {
+                "apply_status": "review_diff_only",
+                "patch_path": "patch.diff",
+            }
+        )
+        + "\n"
+    )
     (draft_dir / "notes.md").write_text(
         "# Import Notes\n\n- apply_status: review_diff_only\n",
     )
@@ -146,6 +155,33 @@ def test_apply_rejects_review_diff_only_drafts(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert "review_diff_only" in (result.stderr or "")
     assert "Sample User" in (sot_path / "person.yaml").read_text()
+
+
+def test_apply_rejects_import_draft_without_metadata(tmp_path: Path) -> None:
+    sot_path = tmp_path / "sot"
+    sot_path.mkdir()
+    _write_minimal_sot(sot_path)
+
+    draft_dir = tmp_path / "draft"
+    draft_dir.mkdir()
+    (draft_dir / "imported.md").write_text("# Imported\n")
+    (draft_dir / "notes.md").write_text("# Import Notes\n")
+    (draft_dir / "patch.diff").write_text("")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "apply",
+            "--draft",
+            str(draft_dir),
+            "--sot-path",
+            str(sot_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "draft.json" in (result.stderr or "")
 
 
 def test_apply_accepts_project_ops_patch_yaml(tmp_path: Path) -> None:

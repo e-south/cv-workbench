@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -70,6 +71,7 @@ class ReviewPack:
 class ImportResult:
     draft_dir: Path
     patch_path: Path
+    metadata_path: Path
     notes_path: Path
     imported_path: Path
     run_id: str
@@ -170,6 +172,27 @@ def import_docx_review(
     patch_path = draft_dir / patch_name
     patch_path.write_text(patch_text)
 
+    metadata_path = draft_dir / "draft.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "source": "import-docx",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "run_id": run_id,
+                "variant_id": resolution.variant.id,
+                "review_dir": str(resolution.review_dir),
+                "canonical_path": str(canonical_path),
+                "canonical_hash": _hash_file(canonical_path),
+                "imported_path": str(imported_path),
+                "patch_path": patch_name,
+                "apply_status": apply_status,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
     notes_path = draft_dir / "notes.md"
     notes_path.write_text(
         "\n".join(
@@ -189,6 +212,7 @@ def import_docx_review(
     return ImportResult(
         draft_dir=draft_dir,
         patch_path=patch_path,
+        metadata_path=metadata_path,
         notes_path=notes_path,
         imported_path=imported_path,
         run_id=run_id,
@@ -804,8 +828,6 @@ def _apply_project_patch_to_bullet_refs(
 ) -> list[_ExperienceBulletRef] | None:
     if project_patch is None:
         return refs
-    if project_patch.format == "unified-diff":
-        return refs if not project_patch.diff.strip() else None
 
     refs_by_target = {(ref.role_id, ref.bullet_id): ref for ref in refs}
     rendered_text = {target: ref.rendered_text for target, ref in refs_by_target.items()}
@@ -845,8 +867,6 @@ def _apply_project_patch_to_project_refs(
 ) -> list[_ProjectSummaryRef] | None:
     if project_patch is None:
         return refs
-    if project_patch.format == "unified-diff":
-        return refs if not project_patch.diff.strip() else None
 
     refs_by_target = {ref.project_id: ref for ref in refs}
     rendered_text = {project_id: ref.rendered_text for project_id, ref in refs_by_target.items()}
@@ -888,6 +908,14 @@ def _which(command: str) -> str | None:
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+
+
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _create_import_draft_dir(drafts_root: Path) -> Path:

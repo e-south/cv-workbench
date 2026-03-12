@@ -195,7 +195,9 @@ def _emit_success(
         (project_dir / "proposals").mkdir(parents=True, exist_ok=True)
         (project_dir / "project.yaml").write_text("project:\n  id: job\n")
         (project_dir / "proposals" / "variant.yaml").write_text("variant:\n  id: base\n")
-        (project_dir / "proposals" / "patch.yaml").write_text("patch:\n  format: unified-diff\n")
+        (project_dir / "proposals" / "patch.yaml").write_text(
+            "patch:\n  format: project-ops\n  operations: []\n"
+        )
         return CommandExecution(
             0,
             json.dumps(
@@ -242,6 +244,7 @@ def _emit_success(
         draft_dir.mkdir(parents=True, exist_ok=True)
         for path, content in {
             draft_dir / "patch.diff": "--- canonical.md\n+++ imported.md\n",
+            draft_dir / "draft.json": "{\"apply_status\": \"review_diff_only\", \"patch_path\": \"patch.diff\"}\n",
             draft_dir / "notes.md": "# Notes\n",
             draft_dir / "imported.md": "after\n",
         }.items():
@@ -254,6 +257,7 @@ def _emit_success(
                     "data": {
                         "draft_dir": str(draft_dir),
                         "patch": str(draft_dir / "patch.diff"),
+                        "metadata": str(draft_dir / "draft.json"),
                         "notes": str(draft_dir / "notes.md"),
                         "imported_markdown": str(draft_dir / "imported.md"),
                         "run_id": "2026-01-02T00-00-00Z",

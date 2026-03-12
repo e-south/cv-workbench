@@ -219,7 +219,7 @@ def test_preview_once_allows_project_with_explicit_sot_path(tmp_path: Path) -> N
     (proposals_dir / "variant.yaml").write_text(
         "variant:\n  id: base\n  outputs: [md, pdf, html]\n"
     )
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -550,7 +550,7 @@ def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_
     (proposals_dir / "variant.yaml").write_text(
         "variant:\n  id: base\n  outputs: [md, pdf, html]\n"
     )
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(

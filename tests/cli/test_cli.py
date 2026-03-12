@@ -383,7 +383,7 @@ def test_variant_keep_resolves_project_variant_path(tmp_path: Path, monkeypatch)
     proposals_dir.mkdir(parents=True, exist_ok=True)
     variant_path = proposals_dir / "variant.yaml"
     variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -440,7 +440,7 @@ def test_variant_discard_resolves_project_variant_path(tmp_path: Path, monkeypat
     proposals_dir.mkdir(parents=True, exist_ok=True)
     variant_path = proposals_dir / "variant.yaml"
     variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -492,7 +492,7 @@ def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, mo
     variant_path = proposals_dir / "variant.yaml"
     patch_path = proposals_dir / "patch.yaml"
     variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
-    patch_path.write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    patch_path.write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     entry = type(
         "_Entry",
@@ -540,7 +540,7 @@ def test_variant_inbox_json_flags_expired_entries_and_gc_hint(tmp_path: Path, mo
     variant_path = proposals_dir / "variant.yaml"
     patch_path = proposals_dir / "patch.yaml"
     variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
-    patch_path.write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    patch_path.write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     entry = type(
         "_Entry",

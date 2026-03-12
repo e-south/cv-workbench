@@ -129,7 +129,7 @@ def test_preview_catalog_uses_project_proposal_variant_id(tmp_path: Path) -> Non
     (proposals_dir / "variant.yaml").write_text(
         "variant:\n  id: project-focus\n  output_name: cv\n  outputs: [md, pdf, html]\n"
     )
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     controller = PreviewController(
         sot_base=sot_path,

@@ -126,3 +126,16 @@ def test_performance_docs_cover_preview_and_read_path_profiling() -> None:
     assert "context.prof" in performance
     assert "project-show.prof" in performance
     assert "project show \\" in performance
+
+
+def test_docs_surface_strict_url_intake_and_import_metadata() -> None:
+    ingestion = (REPO_ROOT / "docs" / "howto" / "ingestion.md").read_text()
+    quickstart = (REPO_ROOT / "docs" / "howto" / "quickstart.md").read_text()
+    contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
+    verify = (REPO_ROOT / "docs" / "reference" / "verify-contract.md").read_text()
+
+    assert "public `https`" in ingestion
+    assert "--job-file" in ingestion
+    assert "draft.json" in quickstart
+    assert "draft.json" in contract
+    assert "draft.json" in verify

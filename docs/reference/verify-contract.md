@@ -65,8 +65,8 @@ Required artifact assertions:
   `proposals/patch.yaml` exist
 - `reviewpack`: `cv.docx`, `cv.pdf`, and `review.md` exist and resolve the same
   run id created by `build`
-- `import-docx`: `patch.diff`, `notes.md`, and `imported.md` exist and resolve
-  the same latest run id as `reviewpack`
+- `import-docx`: `patch.diff` or `patch.yaml`, `draft.json`, `notes.md`, and
+  `imported.md` exist and resolve the same latest run id as `reviewpack`
 
 ## Failure contract
 

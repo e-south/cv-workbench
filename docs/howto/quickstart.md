@@ -303,7 +303,10 @@ that bullet or project summary. `preview --project`, `build --project`, and
 
 When reviewed DOCX edits stay on supported resume surfaces, `import-docx` now
 writes `var/drafts/import-*/patch.yaml` using the same `project-ops` schema.
-Formatting-only normalized imports report `apply_status: ready_no_changes`.
+Every import draft also writes `var/drafts/import-*/draft.json`; that file is
+the authoritative applyability record, while `notes.md` is an operator-facing
+summary. Formatting-only normalized imports report `apply_status:
+ready_no_changes`.
 Unsupported edits still fall back to `patch.diff` plus `apply_status:
 review_diff_only`.
 

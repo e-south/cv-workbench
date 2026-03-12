@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ from difflib import unified_diff
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from uuid import uuid4
 
 import yaml
 
@@ -82,7 +84,6 @@ class ProjectPatch:
     operations: tuple[dict[str, Any], ...]
 
 
-_PROJECT_PATCH_FORMAT_UNIFIED_DIFF = "unified-diff"
 _PROJECT_PATCH_FORMAT_OPS = "project-ops"
 _PROJECT_OP_REPLACE_EXPERIENCE_BULLET = "replace-experience-bullet"
 _PROJECT_OP_REPLACE_PROJECT_SUMMARY = "replace-project-summary"
@@ -122,45 +123,55 @@ def create_project_from_url(
     if not project_id:
         raise ProjectError("Project id could not be derived from URL")
 
-    project_dir = _prepare_project_dir(project_id, config_path)
-    job_dir = project_dir / "job"
-    job_dir.mkdir(parents=True, exist_ok=True)
+    final_dir, staging_dir = _prepare_project_dir(project_id, config_path)
+    committed = False
+    try:
+        job_dir = staging_dir / "job"
+        job_dir.mkdir(parents=True, exist_ok=True)
 
-    source_path = job_dir / "source.url"
-    source_path.write_text(url.strip() + "\n")
+        source_path = job_dir / "source.url"
+        source_path.write_text(url.strip() + "\n")
 
-    extracted_path = job_dir / "extracted.txt"
-    extracted_path.write_text(extract.text.strip() + "\n")
+        extracted_path = job_dir / "extracted.txt"
+        extracted_path.write_text(extract.text.strip() + "\n")
 
-    raw_path = None
-    if store_raw:
-        if extract.raw_html is None:
-            raise ProjectError("Raw HTML was requested but is unavailable")
-        raw_path = job_dir / "raw.html"
-        raw_path.write_text(extract.raw_html)
+        raw_path = None
+        if store_raw:
+            if extract.raw_html is None:
+                raise ProjectError("Raw HTML was requested but is unavailable")
+            raw_path = job_dir / "raw.html"
+            raw_path.write_text(extract.raw_html)
 
-    signals_path = job_dir / "signals.json"
-    signals = build_signals(
-        extract.text,
-        {
-            "type": "url",
-            "value": url,
-            "retrieved_at": _now_iso(),
-        },
-    )
-    signals_path.write_text(json.dumps(signals, indent=2, sort_keys=True) + "\n")
+        signals_path = job_dir / "signals.json"
+        signals = build_signals(
+            extract.text,
+            {
+                "type": "url",
+                "value": url,
+                "retrieved_at": _now_iso(),
+            },
+        )
+        signals_path.write_text(json.dumps(signals, indent=2, sort_keys=True) + "\n")
 
-    return _write_project_files(
-        project_dir=project_dir,
-        project_id=project_id,
-        base_variant_id=base_variant_id,
-        sot_path=sot_path,
-        job_source={"type": "url", "value": url},
-        extracted_path=extracted_path,
-        raw_path=raw_path,
-        signals_path=signals_path,
-        config_path=config_path,
-    )
+        _write_project_files(
+            project_dir=staging_dir,
+            project_id=project_id,
+            base_variant_id=base_variant_id,
+            sot_path=sot_path,
+            job_source={"type": "url", "value": url},
+            extracted_path=extracted_path,
+            raw_path=raw_path,
+            signals_path=signals_path,
+            config_path=config_path,
+        )
+        staging_dir.rename(final_dir)
+        _register_project_variant(final_dir=final_dir, config_path=config_path, label=project_id)
+        committed = True
+        return _project_paths(final_dir)
+    finally:
+        if not committed:
+            _cleanup_project_dir(staging_dir)
+            _cleanup_project_dir(final_dir)
 
 
 def create_project_from_file(
@@ -184,38 +195,48 @@ def create_project_from_file(
     if not project_id:
         raise ProjectError("Project id could not be derived from job file")
 
-    project_dir = _prepare_project_dir(project_id, config_path)
-    job_dir = project_dir / "job"
-    job_dir.mkdir(parents=True, exist_ok=True)
+    final_dir, staging_dir = _prepare_project_dir(project_id, config_path)
+    committed = False
+    try:
+        job_dir = staging_dir / "job"
+        job_dir.mkdir(parents=True, exist_ok=True)
 
-    source_path = job_dir / "source.path"
-    source_path.write_text(str(job_path) + "\n")
+        source_path = job_dir / "source.path"
+        source_path.write_text(str(job_path) + "\n")
 
-    extracted_path = job_dir / "extracted.txt"
-    extracted_path.write_text(job_path.read_text().strip() + "\n")
+        extracted_path = job_dir / "extracted.txt"
+        extracted_path.write_text(job_path.read_text().strip() + "\n")
 
-    signals_path = job_dir / "signals.json"
-    signals = build_signals(
-        extracted_path.read_text(),
-        {
-            "type": "file",
-            "value": str(job_path),
-            "retrieved_at": _now_iso(),
-        },
-    )
-    signals_path.write_text(json.dumps(signals, indent=2, sort_keys=True) + "\n")
+        signals_path = job_dir / "signals.json"
+        signals = build_signals(
+            extracted_path.read_text(),
+            {
+                "type": "file",
+                "value": str(job_path),
+                "retrieved_at": _now_iso(),
+            },
+        )
+        signals_path.write_text(json.dumps(signals, indent=2, sort_keys=True) + "\n")
 
-    return _write_project_files(
-        project_dir=project_dir,
-        project_id=project_id,
-        base_variant_id=base_variant_id,
-        sot_path=sot_path,
-        job_source={"type": "file", "value": str(job_path)},
-        extracted_path=extracted_path,
-        raw_path=None,
-        signals_path=signals_path,
-        config_path=config_path,
-    )
+        _write_project_files(
+            project_dir=staging_dir,
+            project_id=project_id,
+            base_variant_id=base_variant_id,
+            sot_path=sot_path,
+            job_source={"type": "file", "value": str(job_path)},
+            extracted_path=extracted_path,
+            raw_path=None,
+            signals_path=signals_path,
+            config_path=config_path,
+        )
+        staging_dir.rename(final_dir)
+        _register_project_variant(final_dir=final_dir, config_path=config_path, label=project_id)
+        committed = True
+        return _project_paths(final_dir)
+    finally:
+        if not committed:
+            _cleanup_project_dir(staging_dir)
+            _cleanup_project_dir(final_dir)
 
 
 def _write_project_files(
@@ -229,7 +250,7 @@ def _write_project_files(
     raw_path: Path | None,
     signals_path: Path,
     config_path: Path,
-) -> ProjectPaths:
+) -> None:
     proposals_dir = project_dir / "proposals"
     proposals_dir.mkdir(parents=True, exist_ok=True)
 
@@ -278,27 +299,7 @@ def _write_project_files(
     }
     project_file.write_text(yaml.safe_dump(project_payload, sort_keys=False))
 
-    try:
-        register_variant(
-            variant_path=variant_path,
-            cleanup_path=proposals_dir,
-            source="project",
-            config_path=config_path,
-            label=project_id,
-        )
-    except VariantLifecycleError as exc:
-        raise ProjectError(str(exc)) from exc
-
-    return ProjectPaths(
-        project_dir=project_dir,
-        project_file=project_file,
-        job_dir=project_dir / "job",
-        extracted_path=extracted_path,
-        signals_path=signals_path,
-        raw_path=raw_path,
-        variant_path=variant_path,
-        patch_path=patch_path,
-    )
+    return None
 
 
 def load_project(project_dir: Path) -> ProjectSpec:
@@ -380,12 +381,8 @@ def load_project_details(project_dir: Path) -> ProjectDetails:
         raise ProjectError(str(exc)) from exc
 
     patch = _load_project_patch_model(project_dir)
-    if patch.format == _PROJECT_PATCH_FORMAT_UNIFIED_DIFF:
-        patch_is_empty = patch.diff.strip() == ""
-        patch_line_count = len(patch.diff.splitlines())
-    else:
-        patch_is_empty = len(patch.operations) == 0
-        patch_line_count = len(patch.operations)
+    patch_is_empty = len(patch.operations) == 0
+    patch_line_count = len(patch.operations)
 
     return ProjectDetails(
         spec=spec,
@@ -440,11 +437,6 @@ def load_project_patch_payload(patch_path: Path) -> ProjectPatch:
     if not isinstance(patch_data, dict):
         raise ProjectError("Project patch file is invalid")
     fmt = patch_data.get("format")
-    if fmt == _PROJECT_PATCH_FORMAT_UNIFIED_DIFF:
-        diff = patch_data.get("diff")
-        if not isinstance(diff, str):
-            raise ProjectError("Project patch diff must be a string")
-        return ProjectPatch(format=fmt, diff=diff, operations=())
     if fmt == _PROJECT_PATCH_FORMAT_OPS:
         operations = patch_data.get("operations")
         if not isinstance(operations, list):
@@ -456,12 +448,10 @@ def load_project_patch_payload(patch_path: Path) -> ProjectPatch:
             diff="",
             operations=tuple(dict(item) for item in operations),
         )
-    raise ProjectError("Project patch format must be unified-diff or project-ops")
+    raise ProjectError("Project patch format must be project-ops")
 
 
 def compile_project_patch(*, patch: ProjectPatch, sot_path: Path | None = None) -> str:
-    if patch.format == _PROJECT_PATCH_FORMAT_UNIFIED_DIFF:
-        return patch.diff
     if len(patch.operations) == 0:
         return ""
     if sot_path is None:
@@ -986,13 +976,49 @@ def _require_operation_slug(
     return normalized
 
 
-def _prepare_project_dir(project_id: str, config_path: Path) -> Path:
+def _prepare_project_dir(project_id: str, config_path: Path) -> tuple[Path, Path]:
     projects_root = resolve_projects_path(config_path)
+    projects_root.mkdir(parents=True, exist_ok=True)
     project_dir = projects_root / project_id
     if project_dir.exists():
         raise ProjectError(f"Project already exists: {project_dir}")
-    project_dir.mkdir(parents=True, exist_ok=False)
-    return project_dir
+    staging_dir = projects_root / f".{project_id}.tmp-{uuid4().hex[:8]}"
+    if staging_dir.exists():
+        raise ProjectError(f"Project staging directory already exists: {staging_dir}")
+    staging_dir.mkdir(parents=True, exist_ok=False)
+    return project_dir, staging_dir
+
+
+def _project_paths(project_dir: Path) -> ProjectPaths:
+    raw_path = project_dir / "job" / "raw.html"
+    return ProjectPaths(
+        project_dir=project_dir,
+        project_file=project_dir / "project.yaml",
+        job_dir=project_dir / "job",
+        extracted_path=project_dir / "job" / "extracted.txt",
+        signals_path=project_dir / "job" / "signals.json",
+        raw_path=raw_path if raw_path.exists() else None,
+        variant_path=project_dir / "proposals" / "variant.yaml",
+        patch_path=project_dir / "proposals" / "patch.yaml",
+    )
+
+
+def _register_project_variant(*, final_dir: Path, config_path: Path, label: str) -> None:
+    try:
+        register_variant(
+            variant_path=final_dir / "proposals" / "variant.yaml",
+            cleanup_path=final_dir / "proposals",
+            source="project",
+            config_path=config_path,
+            label=label,
+        )
+    except VariantLifecycleError as exc:
+        raise ProjectError(str(exc)) from exc
+
+
+def _cleanup_project_dir(project_dir: Path) -> None:
+    if project_dir.exists():
+        shutil.rmtree(project_dir, ignore_errors=True)
 
 
 def _relative_path(root: Path, target: Path | None) -> Path | None:

@@ -4,6 +4,9 @@ Projects are local, private workspaces for job tailoring. They keep job context,
 signals, and proposal drafts without mutating the Source of Truth unless you
 explicitly apply a patch.
 
+URL ingestion is intentionally strict: only public `https` targets are valid
+for `--job-url`. Internal or local content must be passed via `--job-file`.
+
 `project guide` ranks variants, records deterministic evidence-backed rationale
 in `job/proposal-plan.json`, and scaffolds proposal artifacts. It does not
 perform free-form NL rewriting of your SoT.
@@ -156,12 +159,14 @@ cleanly back to SoT ids. Canonical markdown now follows the same variant
 selection gates as rendered review artifacts, so filtered project imports no
 longer fall back to `review_diff_only` just because hidden items were present
 in the unrendered canonical source. Formatting-only normalized imports report
-`apply_status: ready_no_changes`. Unsupported edits still fall back to
-`var/drafts/import-*/patch.diff` with `apply_status: review_diff_only`.
+`apply_status: ready_no_changes`. Every import draft also writes
+`var/drafts/import-*/draft.json`; that metadata is the authoritative
+applyability contract, while `notes.md` is informational. Unsupported edits
+still fall back to `var/drafts/import-*/patch.diff` with
+`apply_status: review_diff_only`.
 
-Legacy project proposal artifacts may still carry a `unified-diff` payload in
-`proposals/patch.yaml`, and project apply/preview continue to accept that
-format.
+Project proposal artifacts must use `project-ops`. Unsupported legacy patch
+formats fail fast instead of being interpreted heuristically.
 
 Project-scoped review packs default to `var/reviews/projects/<slug>/` so they do
 not collide with variant-level review packs.

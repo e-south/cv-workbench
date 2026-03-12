@@ -245,6 +245,54 @@ def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> 
     assert result.stdout.count("preview_step:") == 1
 
 
+def test_project_guide_rejects_unsafe_job_url(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "guide",
+            "--job-url",
+            "http://127.0.0.1/jobs/role",
+            "--sot-path",
+            "sot.sample",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "https" in (result.stderr or "")
+
+
+def test_project_new_rejects_unsafe_job_url(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "new",
+            "--job-url",
+            "http://127.0.0.1/jobs/role",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "https" in (result.stderr or "")
+
+
 def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     project_dir = tmp_path / "var" / "projects" / "job"
@@ -288,7 +336,7 @@ def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> N
         )
         + "\n"
     )
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -328,6 +376,72 @@ def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> N
     )
 
 
+def test_project_show_surfaces_invalid_proposal_plan_without_failing(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    project_dir = tmp_path / "var" / "projects" / "job"
+    proposals_dir = project_dir / "proposals"
+    job_dir = project_dir / "job"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    signals_path = job_dir / "signals.json"
+    extracted_path = job_dir / "extracted.txt"
+    signals_path.write_text("{\"keywords\": [\"leadership\"]}\n")
+    extracted_path.write_text("Leadership role.\n")
+    (job_dir / "proposal-plan.json").write_text("{not json}\n")
+    (project_dir / "project.yaml").write_text(
+        "\n".join(
+            [
+                "project:",
+                "  id: job",
+                "  created_at: 2026-03-10T12:00:00+00:00",
+                "  base_variant: base",
+                f"  sot_path: {tmp_path / 'sot.sample'}",
+                "  job:",
+                "    source:",
+                "      type: file",
+                f"      value: {tmp_path / 'job.txt'}",
+                "    extracted_path: job/extracted.txt",
+                "    extracted_hash: deadbeef",
+                "    raw_path: null",
+                "  signals:",
+                "    path: job/signals.json",
+                "    hash: cafebabe",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "variant.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: proposal-focus",
+                "  outputs: [md, pdf]",
+            ]
+        )
+        + "\n"
+    )
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "show",
+            "job",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["project"]["project_id"] == "job"
+    assert "proposal_plan" not in payload
+    assert "proposal_plan_error" in payload
+
+
 def test_project_show_suggests_safe_keep_id_for_legacy_base_proposal(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     project_dir = tmp_path / "var" / "projects" / "job"
@@ -362,7 +476,7 @@ def test_project_show_suggests_safe_keep_id_for_legacy_base_proposal(tmp_path: P
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf]\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -807,7 +921,7 @@ def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf, docx]\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
     (run_dir / "cv.docx").write_bytes(b"docx")
     (run_dir / "cv.pdf").write_bytes(b"pdf")
     (run_dir / "selection.json").write_text("{\"items\": []}\n")
@@ -882,7 +996,7 @@ def test_project_show_requires_review_artifact_files_for_ready_status(tmp_path: 
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf, docx]\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
     (run_dir / "selection.json").write_text("{\"items\": []}\n")
     (run_dir / "canonical.md").write_text("base\n")
     (run_dir / "manifest.json").write_text(

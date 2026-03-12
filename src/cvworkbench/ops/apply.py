@@ -11,8 +11,10 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from cvworkbench.ops.patches import PatchError, apply_patch_file
 from cvworkbench.ops.projects import ProjectError, compile_project_patch, load_project_patch_payload
@@ -35,15 +37,25 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
     if not sot_path.exists():
         raise ApplyError(f"SoT path not found: {sot_path}")
 
-    apply_status = _load_apply_status(draft_dir / "notes.md")
+    metadata = _load_draft_metadata(draft_dir / "draft.json")
+    if metadata is None and ((draft_dir / "imported.md").exists() or (draft_dir / "notes.md").exists()):
+        raise ApplyError(f"Import draft metadata not found: {draft_dir / 'draft.json'}")
+    apply_status = _metadata_text(metadata, "apply_status")
     if apply_status == "review_diff_only":
         raise ApplyError(
-            "Draft notes mark apply_status: review_diff_only; inspect notes.md and "
+            "Draft metadata marks apply_status: review_diff_only; inspect notes.md and "
             "author an explicit SoT patch instead of applying this draft"
         )
 
     patch_payload_path = draft_dir / "patch.yaml"
     patch_path = draft_dir / "patch.diff"
+    metadata_patch_name = _metadata_text(metadata, "patch_path")
+    if metadata_patch_name:
+        expected_patch = draft_dir / metadata_patch_name
+        if patch_payload_path.exists() and expected_patch != patch_payload_path:
+            raise ApplyError("Draft metadata patch_path does not match patch.yaml")
+        if patch_path.exists() and expected_patch != patch_path:
+            raise ApplyError("Draft metadata patch_path does not match patch.diff")
     if patch_payload_path.exists():
         try:
             patch = load_project_patch_payload(patch_payload_path)
@@ -94,14 +106,24 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
     )
 
 
-def _load_apply_status(notes_path: Path) -> str | None:
-    if not notes_path.exists():
+def _load_draft_metadata(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
         return None
-    prefix = "- apply_status:"
-    for line in notes_path.read_text().splitlines():
-        stripped = line.strip()
-        if not stripped.startswith(prefix):
-            continue
-        value = stripped[len(prefix) :].strip()
-        return value or None
-    return None
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ApplyError(f"Draft metadata is invalid JSON: {path}") from exc
+    if not isinstance(raw, dict):
+        raise ApplyError(f"Draft metadata must be an object: {path}")
+    return raw
+
+
+def _metadata_text(metadata: dict[str, Any] | None, key: str) -> str | None:
+    if metadata is None:
+        return None
+    value = metadata.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ApplyError(f"Draft metadata field '{key}' must be a string")
+    return value.strip() or None
