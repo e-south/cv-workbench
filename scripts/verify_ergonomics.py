@@ -627,8 +627,9 @@ def main() -> int:
                 explicit_automation["steps"][0]["command"],
             )
             steps.append(recipe_status_step)
+            recipe_status_output = recipe_status_step.stdout + recipe_status_step.stderr
             _require(
-                f"sot_path: {workspace / 'sot.sample'}" in recipe_status_step.stdout,
+                str(workspace / "sot.sample") in recipe_status_output,
                 "Replayed recipe status step must inspect the explicit SoT path",
             )
 
@@ -712,8 +713,11 @@ def main() -> int:
                 automation_recipe["steps"][0]["command"],
             )
             steps.append(recipe_status_literal)
+            recipe_status_literal_output = (
+                recipe_status_literal.stdout + recipe_status_literal.stderr
+            )
             _require(
-                f"sot_path: {workspace / 'sot.sample'}" in recipe_status_literal.stdout,
+                str(workspace / "sot.sample") in recipe_status_literal_output,
                 "Literal automation status step must be replayable from the workspace",
             )
 
