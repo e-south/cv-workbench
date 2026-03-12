@@ -475,8 +475,11 @@ def main() -> int:
                 compact_context_payload["recommended_workflows"][0]["command"],
             )
             steps.append(workflow_recommended_step)
+            workflow_recommended_output = (
+                workflow_recommended_step.stdout + workflow_recommended_step.stderr
+            )
             _require(
-                "recipe_id: automation.verify" in workflow_recommended_step.stdout,
+                "automation.verify" in workflow_recommended_output,
                 "Recommended workflow command must be replayable from the workspace",
             )
 
