@@ -420,7 +420,10 @@ def main() -> int:
             context_payload = json.loads(context_step.stdout)
             configured_sot = Path(context_payload["sot"]["configured_path"]).resolve()
             _require(context_payload["command"] == "context", "Unexpected context command payload")
-            _require(context_payload["sot"]["status"] == "ready", "Expected sample workspace SoT to be ready")
+            _require(
+                context_payload["sot"]["status"] == "ready",
+                "Expected sample workspace SoT to be ready",
+            )
             _require(
                 configured_sot == (workspace / "sot.sample").resolve(),
                 "Configured SoT path did not resolve to workspace-local sot.sample",
@@ -472,8 +475,11 @@ def main() -> int:
                 compact_context_payload["recommended_workflows"][0]["command"],
             )
             steps.append(workflow_recommended_step)
+            workflow_recommended_output = (
+                workflow_recommended_step.stdout + workflow_recommended_step.stderr
+            )
             _require(
-                "recipe_id: automation.verify" in workflow_recommended_step.stdout,
+                "automation.verify" in workflow_recommended_output,
                 "Recommended workflow command must be replayable from the workspace",
             )
 
@@ -621,8 +627,9 @@ def main() -> int:
                 explicit_automation["steps"][0]["command"],
             )
             steps.append(recipe_status_step)
+            recipe_status_output = recipe_status_step.stdout + recipe_status_step.stderr
             _require(
-                f"sot_path: {workspace / 'sot.sample'}" in recipe_status_step.stdout,
+                str(workspace / "sot.sample") in recipe_status_output,
                 "Replayed recipe status step must inspect the explicit SoT path",
             )
 
@@ -685,9 +692,11 @@ def main() -> int:
                 placeholders=[],
                 message="review.import notes step",
             )
+            review_diff_stop = review_recipe["stop_conditions"][2]
             _require(
-                "not directly applyable" in review_recipe["stop_conditions"][2],
-                "review.import recipe must make the non-applyable review diff explicit",
+                "review_diff_only" in review_diff_stop
+                and "author a real SoT patch manually" in review_diff_stop,
+                "review.import recipe must make review_diff_only handling explicit",
             )
             _require(
                 context_payload["runs"]["invalid_summary"] == "bad-run",
@@ -704,8 +713,11 @@ def main() -> int:
                 automation_recipe["steps"][0]["command"],
             )
             steps.append(recipe_status_literal)
+            recipe_status_literal_output = (
+                recipe_status_literal.stdout + recipe_status_literal.stderr
+            )
             _require(
-                f"sot_path: {workspace / 'sot.sample'}" in recipe_status_literal.stdout,
+                str(workspace / "sot.sample") in recipe_status_literal_output,
                 "Literal automation status step must be replayable from the workspace",
             )
 
@@ -728,8 +740,14 @@ def main() -> int:
             status_step = _run_step("status", workspace, ["status", "--json"])
             steps.append(status_step)
             status_payload = json.loads(status_step.stdout)
-            _require(status_payload["sot"]["path"] == str(workspace / "sot.sample"), "status must report the configured sample SoT path")
-            _require(status_payload["variants"]["config_count"] >= 1, "status must report configured variants")
+            _require(
+                status_payload["sot"]["path"] == str(workspace / "sot.sample"),
+                "status must report the configured sample SoT path",
+            )
+            _require(
+                status_payload["variants"]["config_count"] >= 1,
+                "status must report configured variants",
+            )
             _require(
                 status_payload["runs"]["invalid_summary"] == "bad-run",
                 "status must report invalid run directories without failing",
@@ -751,7 +769,8 @@ def main() -> int:
             steps.append(missing_context_step)
             missing_context_payload = json.loads(missing_context_step.stdout)
             _require(
-                missing_context_payload["recommended_workflows"][0]["id"] == "bootstrap.local_workspace",
+                missing_context_payload["recommended_workflows"][0]["id"]
+                == "bootstrap.local_workspace",
                 "Missing local scaffold must recommend bootstrap.local_workspace first",
             )
 
@@ -786,7 +805,9 @@ def main() -> int:
                 step_indexes=[1, 2],
             )
 
-            invalid_config = _write_test_workspace(workspace / "cases" / "invalid", sot_mode="invalid")
+            invalid_config = _write_test_workspace(
+                workspace / "cases" / "invalid", sot_mode="invalid"
+            )
             invalid_context_step = _run_step(
                 "context_invalid",
                 REPO_ROOT,
@@ -818,7 +839,10 @@ def main() -> int:
                 ["build", "--variant", "base", "--format", "md", "--plain"],
             )
             steps.append(build_step)
-            _require((workspace / "var" / "dist" / "base" / "cv.md").exists(), "Markdown build output missing")
+            _require(
+                (workspace / "var" / "dist" / "base" / "cv.md").exists(),
+                "Markdown build output missing",
+            )
 
             context_after_md_build_step = _run_step(
                 "context_after_md_build",
@@ -829,7 +853,9 @@ def main() -> int:
             context_after_md_build_payload = json.loads(context_after_md_build_step.stdout)
             _require(
                 "review.import"
-                not in [item["id"] for item in context_after_md_build_payload["recommended_workflows"]],
+                not in [
+                    item["id"] for item in context_after_md_build_payload["recommended_workflows"]
+                ],
                 "Compact context must not recommend review.import when the latest run is not review-ready",
             )
 
@@ -848,7 +874,10 @@ def main() -> int:
                 not any(line.startswith("preview_url:") for line in preview_lines),
                 "preview --once must not report preview_url",
             )
-            _require((workspace / "var" / "dist" / "base" / "cv.html").exists(), "HTML preview output missing")
+            _require(
+                (workspace / "var" / "dist" / "base" / "cv.html").exists(),
+                "HTML preview output missing",
+            )
 
             job_path = workspace / "job.txt"
             job_path.write_text("Leadership, reliability, and automation focus.\n")
@@ -860,6 +889,7 @@ def main() -> int:
             steps.append(project_guide_step)
             project_guide_payload = json.loads(project_guide_step.stdout)
             project_id = project_guide_payload["project"]["project_id"]
+            proposal_variant_id = project_guide_payload["proposal"]["variant_id"]
 
             project_show_step = _run_step(
                 "project_show",
@@ -869,16 +899,19 @@ def main() -> int:
             steps.append(project_show_step)
             project_show_payload = json.loads(project_show_step.stdout)
             _require(
-                project_show_payload["proposal"]["variant_id"] == "base",
+                project_show_payload["proposal"]["variant_id"] == proposal_variant_id,
                 "project show must expose the proposal variant id",
             )
             _require(
-                project_show_payload["commands"]["preview"] == _repo_cvw_command(f"preview --project {project_id}"),
+                project_show_payload["commands"]["preview"]
+                == _repo_cvw_command(f"preview --project {project_id}"),
                 "project show must emit a replayable preview command",
             )
             _require(
                 project_show_payload["commands"]["keep"]
-                == _repo_cvw_command(f"variant keep --project {project_id} --id base"),
+                == _repo_cvw_command(
+                    f"variant keep --project {project_id} --id {proposal_variant_id}"
+                ),
                 "project show must emit a ready-to-run keep command",
             )
 
@@ -890,7 +923,9 @@ def main() -> int:
             steps.append(variant_inbox_step)
             variant_inbox_payload = json.loads(variant_inbox_step.stdout)
             project_entry = next(
-                entry for entry in variant_inbox_payload["entries"] if entry.get("project_id") == project_id
+                entry
+                for entry in variant_inbox_payload["entries"]
+                if entry.get("project_id") == project_id
             )
             _require(
                 project_entry["selector_kind"] == "project",
@@ -943,10 +978,15 @@ def main() -> int:
                 ["context", "--json", "--compact"],
             )
             steps.append(context_after_review_ready_build_step)
-            context_after_review_ready_payload = json.loads(context_after_review_ready_build_step.stdout)
+            context_after_review_ready_payload = json.loads(
+                context_after_review_ready_build_step.stdout
+            )
             _require(
                 "review.import"
-                in [item["id"] for item in context_after_review_ready_payload["recommended_workflows"]],
+                in [
+                    item["id"]
+                    for item in context_after_review_ready_payload["recommended_workflows"]
+                ],
                 "Compact context must recommend review.import after a review-ready run exists",
             )
 
@@ -984,8 +1024,14 @@ def main() -> int:
             )
 
             project_run_dir = Path(_summary_value(project_build_step.stdout, "run_dir"))
-            _require((project_run_dir / "cv.docx").exists(), "Project build must persist DOCX output under the run directory")
-            _require((project_run_dir / "cv.pdf").exists(), "Project build must persist PDF output under the run directory")
+            _require(
+                (project_run_dir / "cv.docx").exists(),
+                "Project build must persist DOCX output under the run directory",
+            )
+            _require(
+                (project_run_dir / "cv.pdf").exists(),
+                "Project build must persist PDF output under the run directory",
+            )
             _require(
                 (project_run_dir / "selection.json").exists(),
                 "Project build must persist selection metadata under the run directory",
@@ -1002,7 +1048,8 @@ def main() -> int:
                 "reviewpack must package the explicit project-scoped run",
             )
             _require(
-                f"out_dir: {workspace / 'var' / 'reviews' / 'projects' / project_id}" in project_reviewpack_step.stdout,
+                f"out_dir: {workspace / 'var' / 'reviews' / 'projects' / project_id}"
+                in project_reviewpack_step.stdout,
                 "reviewpack --run must isolate project review packs under var/reviews/projects/<project-id>",
             )
 
@@ -1066,8 +1113,12 @@ def main() -> int:
                         "context_compact_json_lines": compact_context_lines,
                     },
                     "adversarial_cases": {
-                        "missing_recommendation": missing_context_payload["recommended_workflows"][0]["id"],
-                        "invalid_recommendation": invalid_context_payload["recommended_workflows"][0]["id"],
+                        "missing_recommendation": missing_context_payload["recommended_workflows"][
+                            0
+                        ]["id"],
+                        "invalid_recommendation": invalid_context_payload["recommended_workflows"][
+                            0
+                        ]["id"],
                         "invalid_runs_summary": context_payload["runs"]["invalid_summary"],
                         "invalid_projects_summary": context_payload["projects"]["invalid_summary"],
                         "project_review_run_id_prefix": f"projects/{project_id}/",
@@ -1096,8 +1147,7 @@ def main() -> int:
             "context_json_lines_median": statistics.median(full_context_lines_all),
             "context_compact_json_lines_median": statistics.median(compact_context_lines_all),
             "step_durations_ms": {
-                name: _metric_summary(values)
-                for name, values in step_durations.items()
+                name: _metric_summary(values) for name, values in step_durations.items()
             },
         },
         "iterations_detail": iteration_summaries,

@@ -180,9 +180,7 @@ def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
     assert (root / "build/themes/default/theme.yaml").exists()
 
 
-def test_init_sample_default_points_config_to_workspace_sample(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_init_sample_default_points_config_to_workspace_sample(tmp_path: Path, monkeypatch) -> None:
     template_root = tmp_path / "template"
     template_root.mkdir()
     _write_minimal_sot_sample(template_root)

@@ -14,19 +14,27 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+import pytest
 import yaml
 
 from cvworkbench.ingestion.ingest import ExtractResult
 from cvworkbench.ops.projects import (
     ProjectError,
-    apply_project_patch,
     append_replace_experience_bullet_operation,
     append_replace_project_summary_operation,
+    apply_project_patch,
     create_project_from_file,
     create_project_from_url,
+    discard_project_workspace,
     load_project,
     load_project_patch,
     prepare_project_sot,
+    retarget_project_variant,
+)
+from cvworkbench.ops.variant_lifecycle import (
+    VariantLifecycleError,
+    list_variant_inbox,
+    register_variant,
 )
 
 
@@ -127,6 +135,165 @@ def test_create_project_from_file(tmp_path: Path) -> None:
     assert diff == ""
 
     apply_project_patch(project_dir=project_dir, sot_path=sot_path)
+
+
+def test_retarget_project_variant_updates_project_manifest_and_preserves_proposal_id(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path)
+    variants_dir = config_path.parent / "variants"
+    (variants_dir / "focus.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "variant": {
+                    "id": "focus",
+                    "outputs": ["md"],
+                    "document_type": "cover-letter",
+                    "include_tags": ["leadership"],
+                }
+            },
+            sort_keys=False,
+        )
+    )
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    spec = retarget_project_variant(
+        project_dir=result.project_dir,
+        base_variant_id="focus",
+        config_path=config_path,
+    )
+
+    assert spec.base_variant_id == "focus"
+    variant_payload = yaml.safe_load(spec.variant_path.read_text())
+    assert variant_payload["variant"]["id"] == "proposal-orbit"
+    assert variant_payload["variant"]["document_type"] == "cover-letter"
+    assert variant_payload["variant"]["include_tags"] == ["leadership"]
+
+
+def test_discard_project_workspace_removes_project_and_clears_inbox(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    assert len(list_variant_inbox(config_path)) == 1
+    discard_project_workspace(project_dir=result.project_dir, config_path=config_path)
+
+    assert not result.project_dir.exists()
+    assert list_variant_inbox(config_path) == []
+
+
+def test_discard_project_workspace_still_removes_project_when_registry_cleanup_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    def _boom(**kwargs) -> None:
+        raise VariantLifecycleError("registry unavailable")
+
+    monkeypatch.setattr("cvworkbench.ops.projects.discard_variant", _boom)
+
+    with pytest.raises(ProjectError, match="registry unavailable"):
+        discard_project_workspace(project_dir=result.project_dir, config_path=config_path)
+
+    assert not result.project_dir.exists()
+
+
+def test_create_project_from_file_rolls_back_on_variant_registration_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    def _boom(**kwargs) -> None:
+        raise VariantLifecycleError("registry unavailable")
+
+    monkeypatch.setattr("cvworkbench.ops.projects.register_variant", _boom)
+
+    with pytest.raises(ProjectError, match="registry unavailable"):
+        create_project_from_file(
+            job_path=job_path,
+            slug="orbit",
+            base_variant_id="base",
+            config_path=config_path,
+            sot_path=sot_path,
+            store_raw=False,
+        )
+
+    project_dir = tmp_path / "var" / "projects" / "orbit"
+    assert not project_dir.exists()
+    assert not any(path.name.startswith(".orbit.tmp-") for path in project_dir.parent.iterdir())
+
+    monkeypatch.setattr("cvworkbench.ops.projects.register_variant", register_variant)
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+
+    assert result.project_dir == project_dir
+
+
+def test_load_project_patch_rejects_legacy_unified_diff_payload(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    sot_path = tmp_path / "local" / "sot"
+    sot_path.mkdir(parents=True)
+    job_path = tmp_path / "job.txt"
+    job_path.write_text("Job description text")
+
+    result = create_project_from_file(
+        job_path=job_path,
+        slug="orbit",
+        base_variant_id="base",
+        config_path=config_path,
+        sot_path=sot_path,
+        store_raw=False,
+    )
+    result.patch_path.write_text('patch:\n  format: unified-diff\n  diff: ""\n')
+
+    with pytest.raises(ProjectError, match="project-ops"):
+        load_project_patch(project_dir=result.project_dir, sot_path=sot_path)
 
 
 def test_project_ops_replace_experience_bullet_prepare_and_apply(tmp_path: Path) -> None:
@@ -431,7 +598,9 @@ def test_append_project_operations_serializes_concurrent_writers(
     )
 
     barrier = threading.Barrier(2)
-    projects_module = __import__("cvworkbench.ops.projects", fromlist=["_load_project_patch_authoring_state"])
+    projects_module = __import__(
+        "cvworkbench.ops.projects", fromlist=["_load_project_patch_authoring_state"]
+    )
     original_loader = projects_module._load_project_patch_authoring_state
 
     def _delayed_loader(project_dir: Path):

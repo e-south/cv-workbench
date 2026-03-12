@@ -11,7 +11,6 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import ipaddress
 import json
 import os
@@ -21,10 +20,11 @@ import signal
 import socket
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from urllib import error as url_error
 from urllib import request as url_request
 
@@ -32,9 +32,15 @@ import typer
 import yaml
 
 from cvworkbench.build.explain import ExplainError, explain_item, load_selection
+from cvworkbench.build.formats import normalize_output_formats
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import BuildResult, build_documents, create_run_dir
-from cvworkbench.build.rendering import RenderError, render_document
+from cvworkbench.build.rendering import (
+    RenderError,
+    RenderRequest,
+    render_documents,
+    resolve_filter_paths,
+)
 from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, resolve_selection_path
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
@@ -60,17 +66,6 @@ from cvworkbench.config import (
     resolve_variant_path,
     resolve_variant_ttl_days,
 )
-from cvworkbench.dev.preview import (
-    PreviewController,
-    PreviewError,
-    PreviewSession,
-    clear_preview_session,
-    load_preview_session,
-    new_preview_session,
-    preview_session_path,
-    serve_preview,
-    write_preview_session,
-)
 from cvworkbench.ingestion.registry import RegistryError, add_url_context
 from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES, load_sot
 from cvworkbench.inputs.sot_versions import (
@@ -79,25 +74,28 @@ from cvworkbench.inputs.sot_versions import (
     resolve_versioned_root,
 )
 from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
-from cvworkbench.inputs.validation import inspect_sot, validate_sot
 from cvworkbench.ops.apply import ApplyError, apply_draft
 from cvworkbench.ops.clean import CleanError, clean_path
 from cvworkbench.ops.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
 from cvworkbench.ops.doctor import run_doctor
 from cvworkbench.ops.projects import (
     ProjectError,
-    apply_project_patch,
     append_replace_experience_bullet_operation,
     append_replace_project_summary_operation,
+    apply_project_patch,
     create_project_from_file,
     create_project_from_url,
+    discard_project_workspace,
     load_project,
     load_project_details,
-    load_project_patch_payload,
     prepare_project_sot,
+    project_patch_render_warning,
+    project_patch_status,
     resolve_project_dir,
+    retarget_project_variant,
     suggest_project_variant_id,
 )
+from cvworkbench.ops.render_compare import RenderCompareError, compare_rendered_pdfs
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.runs import (
     RunError,
@@ -135,6 +133,9 @@ from cvworkbench.themes import (
     resolve_theme,
 )
 from cvworkbench.variants import load_variant
+
+if TYPE_CHECKING:
+    from cvworkbench.dev.preview import PreviewSession
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 job_app = typer.Typer(no_args_is_help=True)
@@ -176,14 +177,37 @@ def _not_implemented(command: str) -> None:
     raise typer.Exit(code=2)
 
 
+def _inspect_sot(sot_path: Path):
+    from cvworkbench.inputs.validation import inspect_sot
+
+    return inspect_sot(sot_path)
+
+
+def _validate_sot(sot_path: Path) -> list[str]:
+    from cvworkbench.inputs.validation import validate_sot
+
+    return validate_sot(sot_path)
+
+
+def _preview_runtime():
+    from cvworkbench.dev import preview as preview_runtime
+
+    return preview_runtime
+
+
+def serve_preview(*args, **kwargs):
+    return _preview_runtime().serve_preview(*args, **kwargs)
+
+
 def _parse_formats(values: list[str] | None) -> list[str] | None:
-    if not values:
+    if values is None:
         return None
     formats: list[str] = []
     for value in values:
         parts = [part.strip() for part in value.split(",") if part.strip()]
         formats.extend(parts)
-    return formats
+    normalized = normalize_output_formats(formats)
+    return [] if normalized is None else normalized
 
 
 def _print_build_summary(result: BuildResult) -> None:
@@ -267,6 +291,25 @@ def _print_diff_summary(summary: dict[str, Any]) -> None:
         ("deletions", str(summary.get("deletions", ""))),
     ]
     print_summary("diff", rows)
+
+
+def _print_compare_summary(summary: dict[str, Any]) -> None:
+    run_a = summary.get("run_a", {})
+    run_b = summary.get("run_b", {})
+    rows: list[tuple[str, str | Path]] = [
+        ("run_a", str(run_a.get("run_id", ""))),
+        ("run_b", str(run_b.get("run_id", ""))),
+        ("pdf_a", str(run_a.get("pdf", ""))),
+        ("pdf_b", str(run_b.get("pdf", ""))),
+        ("status", str(summary.get("status", ""))),
+        ("page_count_a", str(summary.get("page_count_a", ""))),
+        ("page_count_b", str(summary.get("page_count_b", ""))),
+        ("identical_pages", str(summary.get("identical_pages", ""))),
+        ("different_pages", str(summary.get("different_pages", ""))),
+        ("report", str(summary.get("report", ""))),
+        ("summary_json", str(summary.get("summary_json", ""))),
+    ]
+    print_summary("compare", rows)
 
 
 def _print_doctor_summary(rows: list[tuple[str, str | Path]]) -> None:
@@ -353,9 +396,7 @@ def _print_context_summary(summary: dict[str, Any]) -> None:
         ),
         (
             "next_commands",
-            "\n".join(
-                [f"{workflow['id']}: {workflow['command']}" for workflow in recommended]
-            )
+            "\n".join([f"{workflow['id']}: {workflow['command']}" for workflow in recommended])
             or "none",
         ),
         ("recipes", ", ".join([recipe["id"] for recipe in summary["recipes"]])),
@@ -380,9 +421,7 @@ def _print_bootstrap_summary(summary: dict[str, Any]) -> None:
         ),
         (
             "next_commands",
-            "\n".join(
-                [f"{workflow['id']}: {workflow['command']}" for workflow in recommended]
-            )
+            "\n".join([f"{workflow['id']}: {workflow['command']}" for workflow in recommended])
             or "none",
         ),
     ]
@@ -466,9 +505,7 @@ def _cvw_recipe_command(
         if isinstance(sot_path, Path):
             resolved_sot = sot_path.resolve()
             configured_sot = (
-                Path(configured_sot_path).resolve()
-                if configured_sot_path is not None
-                else None
+                Path(configured_sot_path).resolve() if configured_sot_path is not None else None
             )
             if configured_sot != resolved_sot:
                 command.extend(["--sot-path", str(resolved_sot)])
@@ -676,7 +713,11 @@ def _build_context_recipes(
                 ],
             }
         )
-    if sot_status == "missing" and sample_sot_path is None and _is_local_scaffold_sot(configured_sot_path):
+    if (
+        sot_status == "missing"
+        and sample_sot_path is None
+        and _is_local_scaffold_sot(configured_sot_path)
+    ):
         recipes.append(
             {
                 "id": "bootstrap.local_workspace",
@@ -829,343 +870,346 @@ def _build_context_recipes(
                 ],
             }
         )
-    recipes.extend([
-        {
-            "id": "baseline.build_preview",
-            "title": "Baseline build and preview",
-            "preconditions": [
-                "sot.status == 'ready'",
-                "variants.default is available",
-            ],
-            "steps": [
-                {
-                    "command": _cvw_recipe_command(
-                        "status",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Summarize SoT sections, tags, and configured variants.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"build --variant {variant_label} --format md,pdf",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Generate markdown and PDF outputs for the default variant.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"preview --variant {variant_label}",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Start the local preview server for the default variant.",
-                },
-            ],
-            "outputs": [
-                "var/dist/<variant>/cv.md",
-                "var/dist/<variant>/cv.pdf",
-                "var/runs/<run-id>/manifest.json",
-                "var/runs/<run-id>/canonical.md",
-            ],
-            "stop_conditions": [
-                "If SoT is missing or invalid, ask for the correct --sot-path or config update.",
-            ],
-        },
-        {
-            "id": "automation.verify",
-            "title": "Automation-friendly smoke verification",
-            "preconditions": [
-                "sot.status == 'ready'",
-                "variants.default is available",
-            ],
-            "steps": [
-                {
-                    "command": _cvw_recipe_command(
-                        "status",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Capture the current workspace summary before running smoke checks.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"build --variant {variant_label} --format md",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Generate the lightweight markdown artifact for deterministic verification.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"preview --variant {variant_label} --once",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Render one-shot HTML output without starting a long-lived preview server.",
-                },
-            ],
-            "outputs": [
-                "var/dist/<variant>/cv.md",
-                "var/dist/<variant>/cv.html",
-                "var/runs/<run-id>/manifest.json",
-                "var/runs/<run-id>/canonical.md",
-            ],
-            "stop_conditions": [
-                "Use baseline.build_preview if you need PDF output or a live preview server.",
-            ],
-        },
-        {
-            "id": "review.import",
-            "title": "Review and import DOCX edits",
-            "preconditions": [
-                "runs.latest_by_variant includes the target variant",
-                "the selected run includes immutable cv.docx, cv.pdf, and selection.json artifacts",
-            ],
-            "steps": [
-                {
-                    "command": _cvw_recipe_command(
-                        f"reviewpack --variant {variant_label}",
-                        config_path=config_path,
-                        sot_path=None,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Create a review pack with DOCX/PDF plus checklist.",
-                },
-                {
-                    "command": "edit var/reviews/<variant>/cv.docx",
-                    "description": "Apply manual edits to the DOCX review file.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"import-docx --from var/reviews/{variant_label}/cv.docx "
-                        f"--variant {variant_label}",
-                        config_path=config_path,
-                        sot_path=None,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Generate an import draft plus notes describing whether patch.yaml or patch.diff is applyable to SoT.",
-                },
-                {
-                    "command": "edit var/drafts/import-*/notes.md",
-                    "description": "Review notes.md to confirm whether the drafted patch payload is applyable or still review_diff_only.",
-                },
-                {
-                    "command": shlex.join(
-                        [
-                            *_cvw_command_prefix(),
-                            "apply",
-                            "--draft",
-                            "<draft-dir>",
-                            "--sot-path",
-                            str((sot_path or Path("<path-to-sot>"))),
-                        ]
-                    ),
-                    "description": "Apply the imported patch after explicit approval when notes.md reports apply_status: ready. If it reports ready_no_changes, no SoT mutation is needed.",
-                },
-            ],
-            "outputs": [
-                "var/reviews/<variant>/cv.docx",
-                "var/drafts/import-*/patch.yaml",
-                "var/drafts/import-*/patch.diff",
-                "var/drafts/import-*/notes.md",
-            ],
-            "stop_conditions": [
-                "If no runs exist, run the baseline build recipe first.",
-                "Use reviewpack --run <run-id> when you need a pinned review pack in a multi-run workspace.",
-                "If notes.md reports review_diff_only, author a real SoT patch manually instead of applying the draft patch payload.",
-            ],
-        },
-        {
-            "id": "project.guide",
-            "title": "Job tailoring project",
-            "preconditions": [
-                "sot.status == 'ready'",
-                "job input (URL or file) provided",
-            ],
-            "steps": [
-                {
-                    "command": _cvw_recipe_command(
-                        "project guide --job-file <job-file>",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Ingest a local job description file and get variant recommendations. Use --job-url <job-url> for remote postings.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"project show {project_label}",
-                        config_path=config_path,
-                        sot_path=None,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Inspect the project proposal, patch status, and ready-to-run next commands.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"preview --project {project_label}",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
+    recipes.extend(
+        [
+            {
+                "id": "baseline.build_preview",
+                "title": "Baseline build and preview",
+                "preconditions": [
+                    "sot.status == 'ready'",
+                    "variants.default is available",
+                ],
+                "steps": [
+                    {
+                        "command": _cvw_recipe_command(
+                            "status",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
                         ),
-                    "description": "Preview with the project patch applied in-memory.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"project apply {project_label}",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Apply the project patch after explicit approval.",
-                },
-            ],
-            "outputs": [
-                "var/projects/<slug>/project.yaml",
-                "var/projects/<slug>/proposals/variant.yaml",
-                "var/projects/<slug>/proposals/patch.yaml",
-            ],
-            "stop_conditions": [
-                "If job input is missing, ask for a job URL or file.",
-                "Only apply project patches after explicit approval.",
-            ],
-        },
-        {
-            "id": "project.inspect",
-            "title": "Inspect project proposal",
-            "preconditions": [
-                "project workspace exists",
-            ],
-            "steps": [
-                {
-                    "command": _cvw_recipe_command(
-                        f"project show {project_label}",
-                        config_path=config_path,
-                        sot_path=None,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Summarize the proposal variant, patch status, job source, and next commands.",
-                },
-                {
-                    "command": _cvw_recipe_command(
-                        f"preview --project {project_label}",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Preview with the project patch applied in-memory.",
-                },
-            ],
-            "outputs": [
-                "project summary",
-                "var/projects/<slug>/project.yaml",
-                "var/projects/<slug>/proposals/variant.yaml",
-                "var/projects/<slug>/proposals/patch.yaml",
-            ],
-            "stop_conditions": [
-                "Only apply project patches after explicit approval.",
-            ],
-        },
-        {
-            "id": "context.refresh",
-            "title": "Refresh context",
-            "preconditions": [],
-            "steps": [
-                {
-                    "command": _cvw_recipe_command(
-                        "context --json",
-                        config_path=config_path,
-                        sot_path=sot_path,
-                        configured_sot_path=configured_sot_path,
-                    ),
-                    "description": "Re-scan workspace state for SoT, variants, runs, and projects.",
-                }
-            ],
-            "outputs": ["context payload (JSON)"],
-            "stop_conditions": [],
-        },
-        {
-            "id": "variant.manage",
-            "title": "Promote or discard variants",
-            "preconditions": [],
-            "steps": [
-                {
+                        "description": "Summarize SoT sections, tags, and configured variants.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"build --variant {variant_label} --format md,pdf",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Generate markdown and PDF outputs for the default variant.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"preview --variant {variant_label}",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Start the local preview server for the default variant.",
+                    },
+                ],
+                "outputs": [
+                    "var/dist/<variant>/cv.md",
+                    "var/dist/<variant>/cv.pdf",
+                    "var/runs/<run-id>/manifest.json",
+                    "var/runs/<run-id>/canonical.md",
+                ],
+                "stop_conditions": [
+                    "If SoT is missing or invalid, ask for the correct --sot-path or config update.",
+                ],
+            },
+            {
+                "id": "automation.verify",
+                "title": "Automation-friendly smoke verification",
+                "preconditions": [
+                    "sot.status == 'ready'",
+                    "variants.default is available",
+                ],
+                "steps": [
+                    {
+                        "command": _cvw_recipe_command(
+                            "status",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Capture the current workspace summary before running smoke checks.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"build --variant {variant_label} --format md",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Generate the lightweight markdown artifact for deterministic verification.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"preview --variant {variant_label} --once",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Render one-shot HTML output without starting a long-lived preview server.",
+                    },
+                ],
+                "outputs": [
+                    "var/dist/<variant>/cv.md",
+                    "var/dist/<variant>/cv.html",
+                    "var/runs/<run-id>/manifest.json",
+                    "var/runs/<run-id>/canonical.md",
+                ],
+                "stop_conditions": [
+                    "Use baseline.build_preview if you need PDF output or a live preview server.",
+                ],
+            },
+            {
+                "id": "review.import",
+                "title": "Review and import DOCX edits",
+                "preconditions": [
+                    "runs.latest_by_variant includes the target variant",
+                    "the selected run includes immutable cv.docx, cv.pdf, and selection.json artifacts",
+                ],
+                "steps": [
+                    {
+                        "command": _cvw_recipe_command(
+                            f"reviewpack --variant {variant_label}",
+                            config_path=config_path,
+                            sot_path=None,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Create a review pack with DOCX/PDF plus checklist.",
+                    },
+                    {
+                        "command": "edit var/reviews/<variant>/cv.docx",
+                        "description": "Apply manual edits to the DOCX review file.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"import-docx --from var/reviews/{variant_label}/cv.docx "
+                            f"--variant {variant_label}",
+                            config_path=config_path,
+                            sot_path=None,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Generate an import draft plus machine metadata describing whether patch.yaml or patch.diff is applyable to SoT.",
+                    },
+                    {
+                        "command": "edit var/drafts/import-*/notes.md",
+                        "description": "Review notes.md for operator context; draft.json is the authoritative apply_status record.",
+                    },
+                    {
+                        "command": shlex.join(
+                            [
+                                *_cvw_command_prefix(),
+                                "apply",
+                                "--draft",
+                                "<draft-dir>",
+                                "--sot-path",
+                                str((sot_path or Path("<path-to-sot>"))),
+                            ]
+                        ),
+                        "description": "Apply the imported patch after explicit approval when draft.json reports apply_status: ready. If it reports ready_no_changes, no SoT mutation is needed.",
+                    },
+                ],
+                "outputs": [
+                    "var/reviews/<variant>/cv.docx",
+                    "var/drafts/import-*/patch.yaml",
+                    "var/drafts/import-*/patch.diff",
+                    "var/drafts/import-*/draft.json",
+                    "var/drafts/import-*/notes.md",
+                ],
+                "stop_conditions": [
+                    "If no runs exist, run the baseline build recipe first.",
+                    "Use reviewpack --run <run-id> when you need a pinned review pack in a multi-run workspace.",
+                    "If draft.json reports review_diff_only, author a real SoT patch manually instead of applying the draft patch payload.",
+                ],
+            },
+            {
+                "id": "project.guide",
+                "title": "Job tailoring project",
+                "preconditions": [
+                    "sot.status == 'ready'",
+                    "job input (URL or file) provided",
+                ],
+                "steps": [
+                    {
+                        "command": _cvw_recipe_command(
+                            "project guide --job-file <job-file>",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Ingest a local job description file and get variant recommendations. Use --job-url <job-url> for remote postings.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"project show {project_label}",
+                            config_path=config_path,
+                            sot_path=None,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Inspect the project proposal, patch status, and ready-to-run next commands.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"preview --project {project_label}",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Preview with the project patch applied in-memory.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"project apply {project_label}",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Apply the project patch after explicit approval.",
+                    },
+                ],
+                "outputs": [
+                    "var/projects/<slug>/project.yaml",
+                    "var/projects/<slug>/proposals/variant.yaml",
+                    "var/projects/<slug>/proposals/patch.yaml",
+                ],
+                "stop_conditions": [
+                    "If job input is missing, ask for a job URL or file.",
+                    "Only apply project patches after explicit approval.",
+                ],
+            },
+            {
+                "id": "project.inspect",
+                "title": "Inspect project proposal",
+                "preconditions": [
+                    "project workspace exists",
+                ],
+                "steps": [
+                    {
+                        "command": _cvw_recipe_command(
+                            f"project show {project_label}",
+                            config_path=config_path,
+                            sot_path=None,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Summarize the proposal variant, patch status, job source, and next commands.",
+                    },
+                    {
+                        "command": _cvw_recipe_command(
+                            f"preview --project {project_label}",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Preview with the project patch applied in-memory.",
+                    },
+                ],
+                "outputs": [
+                    "project summary",
+                    "var/projects/<slug>/project.yaml",
+                    "var/projects/<slug>/proposals/variant.yaml",
+                    "var/projects/<slug>/proposals/patch.yaml",
+                ],
+                "stop_conditions": [
+                    "Only apply project patches after explicit approval.",
+                ],
+            },
+            {
+                "id": "context.refresh",
+                "title": "Refresh context",
+                "preconditions": [],
+                "steps": [
+                    {
+                        "command": _cvw_recipe_command(
+                            "context --json",
+                            config_path=config_path,
+                            sot_path=sot_path,
+                            configured_sot_path=configured_sot_path,
+                        ),
+                        "description": "Re-scan workspace state for SoT, variants, runs, and projects.",
+                    }
+                ],
+                "outputs": ["context payload (JSON)"],
+                "stop_conditions": [],
+            },
+            {
+                "id": "variant.manage",
+                "title": "Promote or discard variants",
+                "preconditions": [],
+                "steps": [
+                    {
                         "command": _cvw_recipe_command(
                             "variant inbox",
                             config_path=config_path,
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
-                    "description": "List ephemeral variants awaiting a keep/discard decision.",
-                },
-                {
+                        "description": "List ephemeral variants awaiting a keep/discard decision.",
+                    },
+                    {
                         "command": _cvw_recipe_command(
                             "variant keep --project <project-id> --id <variant-id>",
                             config_path=config_path,
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
-                    "description": (
-                        "Promote a project proposal into config/variants. "
-                        "Use --path <variant.yaml> for manual or draft variants."
-                    ),
-                },
-                {
+                        "description": (
+                            "Promote a project proposal into config/variants. "
+                            "Use --path <variant.yaml> for manual or draft variants."
+                        ),
+                    },
+                    {
                         "command": _cvw_recipe_command(
                             "variant discard --project <project-id> --yes",
                             config_path=config_path,
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
-                    "description": (
-                        "Discard a project proposal after explicit approval. "
-                        "Use --path <variant.yaml> for manual or draft variants."
-                    ),
-                },
-            ],
-            "outputs": ["config/variants/<variant-id>.yaml", "var/variants/registry.json"],
-            "stop_conditions": [
-                "Never discard without explicit approval.",
-            ],
-        },
-        {
-            "id": "runs.gc",
-            "title": "Prune older runs",
-            "preconditions": [],
-            "steps": [
-                {
+                        "description": (
+                            "Discard a project proposal after explicit approval. "
+                            "Use --path <variant.yaml> for manual or draft variants."
+                        ),
+                    },
+                ],
+                "outputs": ["config/variants/<variant-id>.yaml", "var/variants/registry.json"],
+                "stop_conditions": [
+                    "Never discard without explicit approval.",
+                ],
+            },
+            {
+                "id": "runs.gc",
+                "title": "Prune older runs",
+                "preconditions": [],
+                "steps": [
+                    {
                         "command": _cvw_recipe_command(
                             "runs gc --keep-latest 2",
                             config_path=config_path,
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
-                    "description": "See which runs would be removed (dry run).",
-                },
-                {
+                        "description": "See which runs would be removed (dry run).",
+                    },
+                    {
                         "command": _cvw_recipe_command(
                             "runs gc --keep-latest 2 --yes",
                             config_path=config_path,
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
-                    "description": "Delete runs older than the keep window after approval.",
-                },
-            ],
-            "outputs": ["var/runs/"],
-            "stop_conditions": [
-                "Never delete runs without explicit approval.",
-            ],
-        },
-    ])
+                        "description": "Delete runs older than the keep window after approval.",
+                    },
+                ],
+                "outputs": ["var/runs/"],
+                "stop_conditions": [
+                    "Never delete runs without explicit approval.",
+                ],
+            },
+        ]
+    )
     return _finalize_recipe_steps(recipes)
 
 
@@ -1174,6 +1218,7 @@ def _build_recommended_workflows(
     recipes: list[dict[str, Any]],
     sot_status: str,
     latest_runs: dict[str, list[dict[str, Any]]],
+    default_variant: str | None,
     config_path: Path,
     sot_path: Path | None,
 ) -> list[dict[str, str]]:
@@ -1242,11 +1287,11 @@ def _build_recommended_workflows(
         "baseline.build_preview",
         "Use when you need PDF output or a live preview server instead of one-shot HTML.",
     )
-    has_review_ready_runs = any(
-        _run_is_review_ready(run)
-        for runs in latest_runs.values()
-        for run in runs
-    )
+    if default_variant is not None:
+        candidate_runs = latest_runs.get(default_variant, [])
+    else:
+        candidate_runs = [run for runs in latest_runs.values() for run in runs]
+    has_review_ready_runs = any(_run_is_review_ready(run) for run in candidate_runs)
     if has_review_ready_runs:
         add(
             "review.import",
@@ -1301,15 +1346,26 @@ def _run_is_review_ready(run: RunInfo | Mapping[str, Any]) -> bool:
     else:
         return False
 
+    run_root = run_path.resolve()
     if not required_formats.issubset(set(outputs.keys())):
         return False
     for fmt in required_formats:
         output_path = outputs.get(fmt)
         if not isinstance(output_path, str) or not output_path.strip():
             return False
-        if not (run_path / output_path).exists():
+        resolved_output = (run_path / output_path).resolve()
+        try:
+            resolved_output.relative_to(run_root)
+        except ValueError:
             return False
-    return (run_path / "selection.json").exists()
+        if not resolved_output.exists():
+            return False
+    selection_path = (run_path / "selection.json").resolve()
+    try:
+        selection_path.relative_to(run_root)
+    except ValueError:
+        return False
+    return selection_path.exists()
 
 
 def _project_commands(
@@ -1421,15 +1477,16 @@ def _compact_context_payload(summary: dict[str, Any]) -> dict[str, Any]:
             "summary": summary["reviews"]["summary"],
         },
         "recipes": [
-            {"id": recipe["id"], "title": recipe["title"]}
-            for recipe in summary["recipes"]
+            {"id": recipe["id"], "title": recipe["title"]} for recipe in summary["recipes"]
         ],
         "recommended_workflows": summary["recommended_workflows"],
         "issues": summary["issues"],
     }
 
 
-def _compact_workflow_payload(summary: dict[str, Any], recipes: list[dict[str, Any]]) -> dict[str, Any]:
+def _compact_workflow_payload(
+    summary: dict[str, Any], recipes: list[dict[str, Any]]
+) -> dict[str, Any]:
     return {
         "config": summary["config"],
         "sot": {
@@ -1519,7 +1576,9 @@ def _summarize_sot_sections(payload: dict[str, Any]) -> dict[str, Any]:
     summary["projects"] = {"count": _count_list_section(payload, "projects", "projects")}
     summary["skills"] = {"count": _count_list_section(payload, "skills", "skills")}
     summary["education"] = {"count": _count_list_section(payload, "education", "education")}
-    summary["publications"] = {"count": _count_list_section(payload, "publications", "publications")}
+    summary["publications"] = {
+        "count": _count_list_section(payload, "publications", "publications")
+    }
     summary["honors"] = {"count": _count_list_section(payload, "honors", "honors")}
     summary["service"] = {"count": _count_list_section(payload, "service", "service")}
     summary["teaching"] = {"count": _count_list_section(payload, "teaching", "teaching")}
@@ -1617,9 +1676,7 @@ def _load_variants_from_config(config_path: Path) -> list[dict[str, Any]]:
 
 
 def _variants_summary_line(variants: list[dict[str, Any]]) -> str:
-    return ", ".join(
-        [f"{variant['id']} ({variant['document_type']})" for variant in variants]
-    )
+    return ", ".join([f"{variant['id']} ({variant['document_type']})" for variant in variants])
 
 
 def _parse_iso_timestamp(value: str) -> datetime | None:
@@ -1634,7 +1691,11 @@ def _parse_iso_timestamp(value: str) -> datetime | None:
 
 def _inbox_display_status(entry: Any) -> tuple[str, bool]:
     expires_at = _parse_iso_timestamp(entry.expires_at)
-    if entry.status == "ephemeral" and expires_at is not None and expires_at <= datetime.now(timezone.utc):
+    if (
+        entry.status == "ephemeral"
+        and expires_at is not None
+        and expires_at <= datetime.now(timezone.utc)
+    ):
         return "expired_pending_gc", True
     return entry.status, False
 
@@ -1855,13 +1916,16 @@ def _load_job_signals(signals_path: Path) -> dict[str, Any]:
     return raw
 
 
-def _load_optional_json(path: Path) -> dict[str, Any] | None:
+def _load_optional_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not path.exists():
-        return None
-    raw = json.loads(path.read_text())
+        return None, None
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON at {path}: {exc.msg}"
     if not isinstance(raw, dict):
-        return None
-    return raw
+        return None, f"Optional JSON payload must be an object: {path}"
+    return raw, None
 
 
 def _normalize_keywords(values: list[str]) -> list[str]:
@@ -1877,7 +1941,9 @@ def _normalize_keywords(values: list[str]) -> list[str]:
     return normalized
 
 
-def _job_keyword_overlap(job_keywords: list[str], tag_counts: dict[str, int]) -> dict[str, list[str]]:
+def _job_keyword_overlap(
+    job_keywords: list[str], tag_counts: dict[str, int]
+) -> dict[str, list[str]]:
     job_set = set(job_keywords)
     tag_set = set(tag_counts.keys())
     return {
@@ -2074,6 +2140,9 @@ def _build_proposal_plan(
     keyword_overlap: dict[str, list[str]],
     recommendations: list[dict[str, Any]],
     job_evidence: list[dict[str, Any]],
+    requested_variant: str,
+    applied_variant: str,
+    selection_mode: str,
 ) -> dict[str, Any]:
     selected = recommendations[0] if recommendations else None
     selected_variant = selected["variant_id"] if selected is not None else None
@@ -2104,7 +2173,10 @@ def _build_proposal_plan(
 
     return {
         "path": str(project_dir / "job" / "proposal-plan.json"),
+        "requested_variant": requested_variant,
         "selected_variant": selected_variant,
+        "applied_variant": applied_variant,
+        "selection_mode": selection_mode,
         "status": status,
         "summary": summary,
         "job_keywords": job_keywords,
@@ -2113,6 +2185,36 @@ def _build_proposal_plan(
         "recommendation": selected,
         "steps": steps,
     }
+
+
+def _proposal_plan_summary_rows(
+    proposal_plan: dict[str, Any] | None,
+    *,
+    prefix: str = "",
+) -> list[tuple[str, str]]:
+    if not proposal_plan:
+        return []
+    step_values = proposal_plan.get("steps")
+    steps: list[str] = []
+    if isinstance(step_values, list):
+        steps = [
+            str(item).strip() for item in step_values if isinstance(item, str) and item.strip()
+        ]
+    missing_values = proposal_plan.get("job_keywords_missing_in_sot")
+    missing_keywords: list[str] = []
+    if isinstance(missing_values, list):
+        missing_keywords = [
+            str(item).strip() for item in missing_values if isinstance(item, str) and item.strip()
+        ]
+    rows = [
+        (f"{prefix}recommended_variant", str(proposal_plan.get("selected_variant") or "none")),
+        (f"{prefix}selection_mode", str(proposal_plan.get("selection_mode") or "unknown")),
+        (f"{prefix}recommendation_status", str(proposal_plan.get("status") or "unknown")),
+        (f"{prefix}recommendation_summary", str(proposal_plan.get("summary") or "none")),
+        (f"{prefix}job_keywords_missing", ", ".join(missing_keywords) or "none"),
+        (f"{prefix}proposal_steps", "\n".join(steps) or "none"),
+    ]
+    return rows
 
 
 def _load_review_summaries(config_path: Path) -> list[dict[str, Any]]:
@@ -2467,7 +2569,7 @@ def _build_context_shared_state(
 
     sot_status = "missing"
     if resolved_sot is not None:
-        inspection = inspect_sot(resolved_sot)
+        inspection = _inspect_sot(resolved_sot)
         if inspection.errors:
             for error in inspection.errors:
                 _record_context_issue(error, issues, strict)
@@ -2699,6 +2801,7 @@ def _build_context_summary(
             recipes=recipes,
             sot_status=shared.sot_status,
             latest_runs=latest_payload,
+            default_variant=shared.default_variant,
             config_path=shared.config_path,
             sot_path=sot_path,
         ),
@@ -2815,6 +2918,7 @@ def _print_project_guide_summary(summary: dict[str, Any]) -> None:
         ("job_keywords_in_sot", ", ".join(summary["job"]["keywords_in_sot"]) or "none"),
         ("job_keywords_missing", ", ".join(summary["job"]["keywords_missing"]) or "none"),
         ("recommended_variant", summary["proposal_plan"]["selected_variant"] or "none"),
+        ("selection_mode", summary["proposal_plan"]["selection_mode"]),
         ("recommendation_status", summary["proposal_plan"]["status"]),
         ("recommendation_summary", summary["proposal_plan"]["summary"]),
         ("job_evidence", evidence_summary or "none"),
@@ -2848,7 +2952,9 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         ("created_at", summary["project"]["created_at"]),
         ("base_variant", summary["project"]["base_variant"]),
         ("proposal_variant", summary["proposal"]["variant_id"]),
+        ("proposal_document_type", summary["proposal"]["document_type"]),
         ("patch_status", summary["patch"]["status"]),
+        ("patch_ops", ",".join(summary["patch"]["operations"]) or "none"),
         ("job_source", summary["job"]["source"]),
         ("next_step", summary["commands"]["preview"]),
         ("build_step", summary["commands"]["build"]),
@@ -2858,8 +2964,13 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         ("keep_step", summary["commands"]["keep"]),
         ("discard_step", summary["commands"]["discard"]),
     ]
+    rows.extend(_proposal_plan_summary_rows(summary.get("proposal_plan")))
+    if summary["patch"]["render_warning"]:
+        rows.append(("patch_note", summary["patch"]["render_warning"]))
     if summary["review"]["run_id"]:
         rows.append(("review_run", summary["review"]["run_id"]))
+    if "proposal_plan_error" in summary:
+        rows.append(("proposal_plan_error", summary["proposal_plan_error"]))
     print_summary("project.show", rows)
 
 
@@ -2976,7 +3087,7 @@ def validate(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    errors = validate_sot(resolved)
+    errors = _validate_sot(resolved)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -3075,7 +3186,7 @@ def status(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    inspection = inspect_sot(resolved_sot)
+    inspection = _inspect_sot(resolved_sot)
     if inspection.errors:
         for error in inspection.errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -3520,14 +3631,18 @@ def quickstart(
         configured_sot = resolve_sot_path(None, resolved_config)
     except (FileNotFoundError, ValueError):
         configured_sot = None
-    if configured_sot is not None and configured_sot.exists() and configured_sot.name == "sot.sample":
+    if (
+        configured_sot is not None
+        and configured_sot.exists()
+        and configured_sot.name == "sot.sample"
+    ):
         sample_sot = configured_sot
         use_configured_sot = True
     if not sample_sot.exists():
         typer.echo(f"ERROR: Sample SoT not found: {sample_sot}", err=True)
         raise typer.Exit(code=1)
 
-    errors = validate_sot(sample_sot)
+    errors = _validate_sot(sample_sot)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -3625,7 +3740,10 @@ def theme_info(
     _print_theme_info_summary(resolved.id, resolved.description, routes, presets)
 
 
-@variant_app.command("promote", help="Legacy draft promotion path. Prefer `variant keep` for lifecycle-aware promotion.")
+@variant_app.command(
+    "promote",
+    help="Legacy draft promotion path. Prefer `variant keep` for lifecycle-aware promotion.",
+)
 def variant_promote(
     draft: Annotated[
         Path,
@@ -3770,7 +3888,9 @@ def variant_inbox(
     _print_variant_inbox(entries, config_path)
 
 
-@variant_app.command("keep", help="Promote an ephemeral draft or project proposal into config/variants.")
+@variant_app.command(
+    "keep", help="Promote an ephemeral draft or project proposal into config/variants."
+)
 def variant_keep(
     path: Annotated[
         Path | None,
@@ -3849,7 +3969,9 @@ def variant_keep(
     _print_variant_keep_summary(result.variant_id, result.variant_path, result.status)
 
 
-@variant_app.command("discard", help="Discard an ephemeral draft or project proposal after explicit approval.")
+@variant_app.command(
+    "discard", help="Discard an ephemeral draft or project proposal after explicit approval."
+)
 def variant_discard(
     path: Annotated[
         Path | None,
@@ -4836,7 +4958,8 @@ def project_guide(
 
     config_path = resolve_config_path(config)
     try:
-        base_variant = variant or resolve_default_variant(config_path)
+        configured_default_variant = resolve_default_variant(config_path)
+        requested_variant = variant or configured_default_variant
     except ValueError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -4847,7 +4970,7 @@ def project_guide(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    errors = validate_sot(resolved_sot)
+    errors = _validate_sot(resolved_sot)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -4868,7 +4991,7 @@ def project_guide(
             project_paths = create_project_from_url(
                 url=job_url,
                 slug=slug,
-                base_variant_id=base_variant,
+                base_variant_id=requested_variant,
                 config_path=config_path,
                 sot_path=resolved_sot,
                 store_raw=store_raw,
@@ -4878,7 +5001,7 @@ def project_guide(
             project_paths = create_project_from_file(
                 job_path=job_file or Path(),
                 slug=slug,
-                base_variant_id=base_variant,
+                base_variant_id=requested_variant,
                 config_path=config_path,
                 sot_path=resolved_sot,
                 store_raw=store_raw,
@@ -4918,9 +5041,43 @@ def project_guide(
         variants,
         job_keywords,
         counts,
-        base_variant,
+        configured_default_variant,
         signal_counts,
     )
+    applied_variant = requested_variant
+    selection_mode = "explicit" if variant else "requested"
+    selected_recommendation = recommendations[0] if recommendations else None
+    if (
+        variant is None
+        and selected_recommendation is not None
+        and selected_recommendation["eligible"]
+    ):
+        recommended_variant = selected_recommendation["variant_id"]
+        if recommended_variant != requested_variant:
+            try:
+                retarget_project_variant(
+                    project_dir=project_paths.project_dir,
+                    base_variant_id=recommended_variant,
+                    config_path=config_path,
+                )
+            except Exception as exc:
+                try:
+                    discard_project_workspace(
+                        project_dir=project_paths.project_dir,
+                        config_path=config_path,
+                    )
+                except Exception as rollback_exc:
+                    typer.echo(f"ERROR: {exc}", err=True)
+                    typer.echo(
+                        "ERROR: Failed to roll back the project workspace after guide retargeting failed: "
+                        f"{rollback_exc}",
+                        err=True,
+                    )
+                    raise typer.Exit(code=1) from exc
+                typer.echo(f"ERROR: {exc}", err=True)
+                raise typer.Exit(code=1) from exc
+        applied_variant = recommended_variant
+        selection_mode = "recommended"
     proposal_plan = _build_proposal_plan(
         project_id=project_paths.project_dir.name,
         project_dir=project_paths.project_dir,
@@ -4928,6 +5085,9 @@ def project_guide(
         keyword_overlap=keyword_overlap,
         recommendations=recommendations,
         job_evidence=job_evidence,
+        requested_variant=requested_variant,
+        applied_variant=applied_variant,
+        selection_mode=selection_mode,
     )
     proposal_plan_path = Path(proposal_plan["path"])
     proposal_plan_path.write_text(json.dumps(proposal_plan, indent=2, sort_keys=True) + "\n")
@@ -4937,7 +5097,7 @@ def project_guide(
             command="project.guide",
             project_id=project_paths.project_dir.name,
             project_dir=project_paths.project_dir,
-            base_variant=base_variant,
+            base_variant=applied_variant,
             job_source=job_source,
             config_path=config_path,
             proposal_variant_id=load_variant(project_paths.variant_path).id,
@@ -4956,7 +5116,7 @@ def project_guide(
         "variants": {
             "config": variants,
             "count": len(variants),
-            "default": base_variant,
+            "default": configured_default_variant,
         },
         "recommendations": recommendations,
         "proposal_plan": proposal_plan,
@@ -5030,16 +5190,17 @@ def project_show(
         review_run_id=review["run_id"] if review["review_ready"] else None,
     )
     review["next_command"] = commands.get("reviewpack", commands["build"])
-    if details.patch_is_empty:
-        patch_status = "empty"
-    elif details.patch_format == "project-ops":
-        patch_status = f"{details.patch_line_count} op"
-        if details.patch_line_count != 1:
-            patch_status += "s"
-    else:
-        patch_status = f"{details.patch_line_count} lines"
+    render_warning = project_patch_render_warning(
+        proposal_document_type=details.proposal_document_type,
+        patch_operations=details.patch_operations,
+    )
+    patch_status = project_patch_status(
+        patch_format=details.patch_format,
+        patch_is_empty=details.patch_is_empty,
+        patch_line_count=details.patch_line_count,
+    )
     proposal_plan_path = details.signals_path.parent / "proposal-plan.json"
-    proposal_plan = _load_optional_json(proposal_plan_path)
+    proposal_plan, proposal_plan_error = _load_optional_json(proposal_plan_path)
     summary = {
         "project": {
             "project_id": details.spec.project_id,
@@ -5051,6 +5212,7 @@ def project_show(
         "proposal": {
             "variant_id": details.proposal_variant_id,
             "variant_path": str(details.spec.variant_path),
+            "document_type": details.proposal_document_type,
         },
         "job": {
             "source_type": details.job_source_type,
@@ -5066,6 +5228,8 @@ def project_show(
             "format": details.patch_format,
             "is_empty": details.patch_is_empty,
             "line_count": details.patch_line_count,
+            "operations": list(details.patch_operations),
+            "render_warning": render_warning,
             "status": patch_status,
         },
         "review": review,
@@ -5073,6 +5237,8 @@ def project_show(
     }
     if proposal_plan is not None:
         summary["proposal_plan"] = proposal_plan
+    if proposal_plan_error is not None:
+        summary["proposal_plan_error"] = proposal_plan_error
 
     if get_output_mode() == OutputMode.JSON:
         typer.echo(json.dumps({"command": "project.show", **summary}, indent=2, sort_keys=True))
@@ -5691,7 +5857,9 @@ def reviewpack(
         except ProjectError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
-    resolved_variant = variant if (run or project_dir) else (variant or resolve_default_variant(config_path))
+    resolved_variant = (
+        variant if (run or project_dir) else (variant or resolve_default_variant(config_path))
+    )
     try:
         pack = build_review_pack(
             variant_id=resolved_variant,
@@ -5828,16 +5996,17 @@ def import_docx(
     summary = {
         "draft_dir": result.draft_dir,
         "patch": result.patch_path,
+        "metadata": result.metadata_path,
         "notes": result.notes_path,
         "imported_markdown": result.imported_path,
         "run_id": result.run_id,
         "apply_status": result.apply_status,
         "next_step": (
-            f"Review notes.md, then apply {result.patch_path.name} after explicit approval"
+            f"Review notes.md, then apply {result.patch_path.name} after explicit approval if draft.json reports ready"
             if result.apply_status == "ready"
-            else "Review notes.md; the normalized patch is a verified no-op"
+            else "Review notes.md; draft.json records a verified no-op"
             if result.apply_status == "ready_no_changes"
-            else "Review notes.md and author a real SoT patch manually"
+            else "Review notes.md and author a real SoT patch manually; draft.json records review_diff_only"
         ),
     }
     _print_import_summary(summary)
@@ -5961,7 +6130,7 @@ def build(
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
 
-    errors = validate_sot(resolved)
+    errors = _validate_sot(resolved)
     if errors:
         for error in errors:
             typer.echo(f"ERROR: {error}", err=True)
@@ -6065,8 +6234,15 @@ def render(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    parsed_formats = _parse_formats(formats) or resolved.outputs
+    parsed_formats = _parse_formats(formats)
+    selected_formats = resolved.outputs if parsed_formats is None else parsed_formats
+    parsed_formats = normalize_output_formats(selected_formats)
+    if not parsed_formats:
+        typer.echo("ERROR: No output formats selected", err=True)
+        raise typer.Exit(code=1)
     filters_path = filters_dir()
+    resolved_filter_paths = resolve_filter_paths(filters_path)
+    render_requests: list[RenderRequest] = []
     output_files: dict[str, Path] = {}
     for fmt in parsed_formats:
         output_file = output_path(dist_dir, resolved, fmt)
@@ -6079,19 +6255,33 @@ def render(
             )
             if fmt == "html":
                 plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
-            render_document(
-                canonical,
-                output_file,
-                resolved,
-                filters_path,
-                fmt,
-                pdf_engine,
-                plan,
+            render_requests.append(
+                RenderRequest(
+                    input_path=canonical,
+                    output_path=output_file,
+                    variant=resolved,
+                    filters_dir=filters_path,
+                    output_format=fmt,
+                    pdf_engine=pdf_engine,
+                    render_plan=plan,
+                )
             )
         except (RenderError, ThemeError) as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
-        output_files[fmt] = output_file
+
+    def _record_render_success(request: RenderRequest) -> None:
+        output_files[request.output_format] = request.output_path
+
+    try:
+        render_documents(
+            render_requests,
+            filter_paths=resolved_filter_paths,
+            after_each_success=_record_render_success,
+        )
+    except RenderError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     _print_render_summary(canonical, resolved.id, dist_dir, output_files)
 
 
@@ -6146,6 +6336,13 @@ def dev_serve(
             help="Build once and exit without starting the preview server",
         ),
     ] = False,
+    with_pdf: Annotated[
+        bool,
+        typer.Option(
+            "--with-pdf",
+            help="With --once, also render a PDF alongside HTML",
+        ),
+    ] = False,
     plain: Annotated[
         bool,
         typer.Option(
@@ -6163,6 +6360,7 @@ def dev_serve(
 ) -> None:
     configure_output_mode(plain, json_output)
     _reject_legacy_preview_env()
+    preview = _preview_runtime()
     config_path = resolve_config_path(config)
     project_spec = None
     try:
@@ -6202,20 +6400,21 @@ def dev_serve(
         except SotVersionError:
             sot_base = resolved
 
+    one_shot = once or os.environ.get("CVW_DEV_ONCE") == "1"
     session_id = uuid.uuid4().hex
     try:
-        controller = PreviewController(
+        controller = preview.PreviewController(
             sot_base=sot_base,
             config_path=config_path,
             variant_id=resolved_variant,
             theme_id=resolved_theme,
             style_preset=resolved_preset,
-            auto_pdf=True,
+            auto_pdf=(not one_shot) or with_pdf,
             project_dir=project_spec.project_dir if project_spec else None,
             project_sot_override=sot_base if project_spec and sot_path is not None else None,
             session_id=session_id,
         )
-    except PreviewError as exc:
+    except preview.PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     host = os.environ.get("CVW_DEV_HOST", "127.0.0.1")
@@ -6232,10 +6431,10 @@ def dev_serve(
     if idle_timeout_seconds < 0:
         typer.echo("ERROR: CVW_DEV_IDLE_TIMEOUT_SECONDS must be >= 0", err=True)
         raise typer.Exit(code=1)
-    if once or os.environ.get("CVW_DEV_ONCE") == "1":
+    if one_shot:
         try:
             state = controller.build_once()
-        except PreviewError as exc:
+        except preview.PreviewError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         html_path = state.output_files.get("html", state.dist_dir / "cv.html")
@@ -6252,12 +6451,12 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    session_path = preview_session_path(config_path)
+    session_path = preview.preview_session_path(config_path)
     if session_path.exists():
         try:
-            existing_session = load_preview_session(config_path)
-        except PreviewError:
-            clear_preview_session(config_path)
+            existing_session = preview.load_preview_session(config_path)
+        except preview.PreviewError:
+            preview.clear_preview_session(config_path)
         else:
             has_conflict, detail = _preview_session_conflict(existing_session)
             if has_conflict:
@@ -6270,10 +6469,10 @@ def dev_serve(
                     err=True,
                 )
                 raise typer.Exit(code=1)
-            clear_preview_session(config_path)
+            preview.clear_preview_session(config_path)
 
     def _on_start(url: str, html_path: Path) -> None:
-        session = new_preview_session(
+        session = preview.new_preview_session(
             host=host,
             port=port,
             url=url,
@@ -6281,7 +6480,7 @@ def dev_serve(
             session_id=session_id,
             project_id=controller.project_id(),
         )
-        write_preview_session(session, config_path)
+        preview.write_preview_session(session, config_path)
         _print_serve_summary(
             html_path,
             url,
@@ -6296,7 +6495,7 @@ def dev_serve(
             idle_timeout_seconds=idle_timeout_seconds,
             on_start=_on_start,
         )
-    except PreviewError as exc:
+    except preview.PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     except OSError as exc:
@@ -6313,7 +6512,7 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     finally:
-        clear_preview_session(config_path)
+        preview.clear_preview_session(config_path)
 
 
 @dev_app.command("stop")
@@ -6348,10 +6547,11 @@ def dev_stop(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
+    preview = _preview_runtime()
     config_path = resolve_config_path(config)
     try:
-        session = load_preview_session(config_path)
-    except PreviewError as exc:
+        session = preview.load_preview_session(config_path)
+    except preview.PreviewError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
@@ -6365,7 +6565,7 @@ def dev_stop(
             if has_conflict:
                 typer.echo(f"ERROR: {error}", err=True)
                 raise typer.Exit(code=1)
-            clear_preview_session(config_path)
+            preview.clear_preview_session(config_path)
             print_summary(
                 "dev.stop",
                 [
@@ -6393,7 +6593,7 @@ def dev_stop(
             if has_conflict:
                 typer.echo("ERROR: Preview server still running", err=True)
                 raise typer.Exit(code=1)
-            clear_preview_session(config_path)
+            preview.clear_preview_session(config_path)
             print_summary(
                 "dev.stop",
                 [
@@ -6404,7 +6604,7 @@ def dev_stop(
             )
             return
 
-    clear_preview_session(config_path)
+    preview.clear_preview_session(config_path)
     print_summary(
         "dev.stop",
         [
@@ -6473,6 +6673,13 @@ def preview(
             help="Build once and exit without starting the preview server",
         ),
     ] = False,
+    with_pdf: Annotated[
+        bool,
+        typer.Option(
+            "--with-pdf",
+            help="With --once, also render a PDF alongside HTML",
+        ),
+    ] = False,
     plain: Annotated[
         bool,
         typer.Option(
@@ -6496,6 +6703,7 @@ def preview(
         theme=theme,
         style_preset=style_preset,
         once=once,
+        with_pdf=with_pdf,
         plain=plain,
         json_output=json_output,
     )
@@ -6737,6 +6945,100 @@ def diff(
     _print_diff_summary(summary)
     if diff_text:
         typer.echo(diff_text)
+
+
+@app.command()
+def compare(
+    run_a: Annotated[
+        str,
+        typer.Option(
+            "--run-a",
+            help="Run id or path for side A",
+        ),
+    ],
+    run_b: Annotated[
+        str,
+        typer.Option(
+            "--run-b",
+            help="Run id or path for side B",
+        ),
+    ],
+    out_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--out-dir",
+            help="Directory to write rasterized pages and the HTML report",
+        ),
+    ] = None,
+    dpi: Annotated[
+        int,
+        typer.Option(
+            "--dpi",
+            help="Rasterization DPI for PDF pages",
+        ),
+    ] = 144,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        result = compare_rendered_pdfs(
+            config_path=config,
+            run_a=run_a,
+            run_b=run_b,
+            out_dir=out_dir,
+            dpi=dpi,
+        )
+    except RenderCompareError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    summary = {
+        "command": "compare",
+        "status": result.status,
+        "run_a": {
+            "run_id": result.run_a.run_id,
+            "path": str(result.run_a.path),
+            "pdf": str(result.pdf_a),
+        },
+        "run_b": {
+            "run_id": result.run_b.run_id,
+            "path": str(result.run_b.path),
+            "pdf": str(result.pdf_b),
+        },
+        "page_count_a": sum(1 for page in result.pages if page.image_a is not None),
+        "page_count_b": sum(1 for page in result.pages if page.image_b is not None),
+        "identical_pages": sum(1 for page in result.pages if page.identical),
+        "different_pages": sum(1 for page in result.pages if not page.identical),
+        "out_dir": str(result.out_dir),
+        "report": str(result.report_path),
+        "summary_json": str(result.summary_path),
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps(summary, indent=2, sort_keys=True))
+        return
+
+    _print_compare_summary(summary)
 
 
 @app.command()

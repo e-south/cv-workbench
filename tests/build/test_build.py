@@ -11,12 +11,16 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 import cvworkbench.build.pipeline as pipeline_module
+from cvworkbench.build.rendering import RenderError
 from cvworkbench.cli import app
 
 
@@ -140,7 +144,7 @@ def test_build_project_writes_outputs_to_project_run_dir(tmp_path: Path) -> None
         + "\n"
     )
     (proposals_dir / "variant.yaml").write_text("variant:\n  id: base\n  outputs: [md, pdf]\n")
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -268,6 +272,60 @@ def test_build_canonical_matches_variant_selection(tmp_path: Path) -> None:
     assert "Drop this summary." not in canonical
 
 
+def test_build_rejects_formats_that_normalize_to_empty() -> None:
+    with pytest.raises(ValueError, match="No output formats selected"):
+        pipeline_module.build_documents(
+            sot_path=Path("sot.sample"),
+            config_path=Path("config/workbench.yaml"),
+            variant_id="base",
+            formats=["   "],
+        )
+
+
+def test_build_render_failure_does_not_wait_for_manifest_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
+    metadata_started = threading.Event()
+    metadata_release = threading.Event()
+    metadata_finished = threading.Event()
+
+    def fake_collect_manifest_metadata(**kwargs):
+        metadata_started.set()
+        metadata_release.wait(timeout=1.0)
+        metadata_finished.set()
+        return None
+
+    def fake_render_documents(requests, **kwargs) -> None:
+        first = list(requests)[0]
+        first.output_path.write_text("rendered")
+        after_each_success = kwargs.get("after_each_success")
+        if after_each_success is not None:
+            after_each_success(first)
+        assert metadata_started.wait(timeout=0.2)
+        raise RenderError("render failed")
+
+    monkeypatch.setattr(
+        pipeline_module, "collect_manifest_metadata", fake_collect_manifest_metadata
+    )
+    monkeypatch.setattr(pipeline_module, "render_documents", fake_render_documents)
+
+    start = time.monotonic()
+    with pytest.raises(RenderError, match="render failed"):
+        pipeline_module.build_documents(
+            sot_path=Path("sot.sample"),
+            config_path=Path("config/workbench.yaml"),
+            variant_id="base",
+            formats=["md"],
+            run_dir=tmp_path / "var" / "runs" / "single",
+            dist_dir=tmp_path / "var" / "dist" / "base",
+        )
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 0.5
+    metadata_release.set()
+    assert metadata_finished.wait(timeout=1.0)
+
+
 def test_build_project_applies_project_ops_without_mutating_base_sot(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -374,7 +432,9 @@ def test_build_project_applies_project_ops_without_mutating_base_sot(tmp_path: P
     assert "Delivered measurable outcomes" not in (sot_path / "experience.yaml").read_text()
 
 
-def test_build_project_applies_project_summary_ops_without_mutating_base_sot(tmp_path: Path) -> None:
+def test_build_project_applies_project_summary_ops_without_mutating_base_sot(
+    tmp_path: Path,
+) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
     variants_dir.mkdir(parents=True, exist_ok=True)

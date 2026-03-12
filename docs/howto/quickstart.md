@@ -235,9 +235,36 @@ uv run cvw build --project <project-id> --format md,pdf,docx
 uv run cvw project show <project-id>
 ```
 
+When you omit `--variant`, `project guide` now retargets the scaffolded project
+to the top eligible recommendation it computed from job signals and SoT tags.
+If you already know the lane you want, pass `--variant <id>` and the explicit
+choice is preserved while the recommendation report remains advisory.
+
+`project show` now repeats the proposal-plan summary directly in the CLI:
+recommended variant, recommendation status, missing job keywords in the current
+SoT, and the next guided steps. Use that output before preview/build so the
+intended patch lane is explicit.
+
 After the review-ready build completes, `project show` prints the pinned
 `reviewpack --project <project-id> --run projects/<project-id>/<run-id>`
 command for the latest immutable project run.
+
+Before exporting review artifacts, compare the project run against an explicit
+baseline run so you can see the scoped content delta:
+
+```bash
+uv run cvw build --variant base --format md,pdf,docx
+uv run cvw build --project <project-id> --format md,pdf,docx
+uv run cvw diff --artifact canonical --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id>
+uv run cvw diff --artifact resume --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id> --format json
+uv run cvw compare --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id>
+```
+
+Use the explicit run ids printed by `build` or `project show`; `diff` is most
+useful when you choose the exact baseline you want to compare rather than
+assuming "latest" means the right thing. `diff` stays semantic and textual;
+`compare` rasterizes the two PDFs and writes a side-by-side HTML report plus
+page image hashes under `var/compare/`.
 
 Direct project creation when you already know the base variant:
 
@@ -287,9 +314,16 @@ If you omit `--old-text`, the command snapshots the current SoT source text for
 that bullet or project summary. `preview --project`, `build --project`, and
 `project apply` all reuse the same compare-and-set contract.
 
+The preview sidebar mirrors that project guidance. In particular, if a
+cover-letter proposal carries `project-ops` that only affect resume content,
+preview shows a visibility warning instead of leaving the edit lane implicit.
+
 When reviewed DOCX edits stay on supported resume surfaces, `import-docx` now
 writes `var/drafts/import-*/patch.yaml` using the same `project-ops` schema.
-Formatting-only normalized imports report `apply_status: ready_no_changes`.
+Every import draft also writes `var/drafts/import-*/draft.json`; that file is
+the authoritative applyability record, while `notes.md` is an operator-facing
+summary. Formatting-only normalized imports report `apply_status:
+ready_no_changes`.
 Unsupported edits still fall back to `patch.diff` plus `apply_status:
 review_diff_only`.
 

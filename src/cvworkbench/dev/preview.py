@@ -34,7 +34,14 @@ from cvworkbench.config import (
 )
 from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 from cvworkbench.inputs.validation import validate_sot
-from cvworkbench.ops.projects import ProjectError, load_project, prepare_project_sot
+from cvworkbench.ops.projects import (
+    ProjectError,
+    load_project,
+    load_project_details,
+    prepare_project_sot,
+    project_patch_render_warning,
+    project_patch_status,
+)
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
 
@@ -56,6 +63,7 @@ class PreviewState:
     dist_dir: Path
     output_files: dict[str, Path]
     build_id: int
+    project_context: dict[str, Any] | None = None
     last_error: str | None = None
 
 
@@ -94,7 +102,75 @@ class ClientActivity:
         with self._lock:
             if self.last_seen_monotonic is None:
                 return None
-            return time.monotonic() - self.last_seen_monotonic
+        return time.monotonic() - self.last_seen_monotonic
+
+
+def _load_optional_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not path.exists():
+        return None, None
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON at {path}: {exc.msg}"
+    if not isinstance(raw, dict):
+        return None, f"Optional JSON payload must be an object: {path}"
+    return raw, None
+
+
+def _project_context_error_payload(project_dir: Path, error: str) -> dict[str, Any]:
+    project_id = project_dir.name
+    try:
+        project_id = load_project(project_dir).project_id
+    except ProjectError:
+        pass
+    return {
+        "project_id": project_id,
+        "project_context_error": error,
+    }
+
+
+def _load_project_context(project_dir: Path) -> dict[str, Any]:
+    try:
+        details = load_project_details(project_dir)
+    except ProjectError as exc:
+        return _project_context_error_payload(project_dir, str(exc))
+    patch_warning = project_patch_render_warning(
+        proposal_document_type=details.proposal_document_type,
+        patch_operations=details.patch_operations,
+    )
+    patch_status = project_patch_status(
+        patch_format=details.patch_format,
+        patch_is_empty=details.patch_is_empty,
+        patch_line_count=details.patch_line_count,
+    )
+    proposal_plan_path = details.signals_path.parent / "proposal-plan.json"
+    proposal_plan, proposal_plan_error = _load_optional_object(proposal_plan_path)
+    payload: dict[str, Any] = {
+        "project_id": details.spec.project_id,
+        "proposal_document_type": details.proposal_document_type,
+        "patch_status": patch_status,
+        "patch_operations": list(details.patch_operations),
+        "render_warning": patch_warning,
+    }
+    if proposal_plan is not None:
+        payload["recommended_variant"] = proposal_plan.get("selected_variant")
+        payload["recommendation_status"] = proposal_plan.get("status")
+        payload["recommendation_summary"] = proposal_plan.get("summary")
+        missing_values = proposal_plan.get("job_keywords_missing_in_sot")
+        if isinstance(missing_values, list):
+            payload["job_keywords_missing"] = [
+                str(item).strip()
+                for item in missing_values
+                if isinstance(item, str) and item.strip()
+            ]
+        step_values = proposal_plan.get("steps")
+        if isinstance(step_values, list):
+            payload["steps"] = [
+                str(item).strip() for item in step_values if isinstance(item, str) and item.strip()
+            ]
+    if proposal_plan_error is not None:
+        payload["proposal_plan_error"] = proposal_plan_error
+    return payload
 
 
 class PreviewController:
@@ -216,6 +292,7 @@ class PreviewController:
                     variant_path_override=variant_path_override,
                     run_dir=run_dir,
                     dist_dir=run_dir if self._project_dir is not None else None,
+                    write_audit_artifacts=False,
                 )
             except (ValueError, ThemeError) as exc:
                 message = str(exc)
@@ -227,6 +304,9 @@ class PreviewController:
                 fmt: output_path(result.dist_dir, result.variant, fmt) for fmt in result.formats
             }
             build_id = 1 if self._state is None else self._state.build_id + 1
+            project_context = None
+            if self._project_dir is not None:
+                project_context = _load_project_context(self._project_dir)
             self._state = PreviewState(
                 variant_id=result.variant.id,
                 theme_id=result.theme_id or self._theme_id,
@@ -236,6 +316,7 @@ class PreviewController:
                 dist_dir=result.dist_dir,
                 output_files=output_files,
                 build_id=build_id,
+                project_context=project_context,
                 last_error=None,
             )
             return self._state
@@ -299,6 +380,7 @@ class PreviewController:
             "format": state.output_format,
             "auto_pdf": state.auto_pdf,
             "build_id": state.build_id,
+            "project_context": state.project_context,
             "last_error": state.last_error,
             "outputs": {fmt: path.name for fmt, path in state.output_files.items()},
         }
@@ -387,6 +469,7 @@ class PreviewController:
             dist_dir=dist_dir,
             output_files={},
             build_id=0,
+            project_context=None,
             last_error=None,
         )
 
@@ -1067,6 +1150,12 @@ def _preview_page_html() -> str:
         </div>
 
         <div class="section">
+          <div class="section-title">Project Guidance</div>
+          <div id="project-guidance" data-cvw-status="project-guidance" aria-live="polite"></div>
+          <div id="project-warning" data-cvw-status="project-warning" aria-live="polite"></div>
+        </div>
+
+        <div class="section">
           <div class="section-title">Runs</div>
           <div id="run-list" data-cvw-status="run-list" aria-live="polite"></div>
         </div>
@@ -1107,6 +1196,8 @@ def _preview_page_html() -> str:
       const statusEl = document.getElementById('status');
       const errorEl = document.getElementById('error');
       const summaryEl = document.getElementById('summary');
+      const projectGuidanceEl = document.getElementById('project-guidance');
+      const projectWarningEl = document.getElementById('project-warning');
       const runList = document.getElementById('run-list');
       const controllerPill = document.getElementById('controller-pill');
       const buildPill = document.getElementById('build-pill');
@@ -1119,6 +1210,7 @@ def _preview_page_html() -> str:
       let lastControlsKey = null;
       let lastOverlayKey = null;
       let lastSummaryKey = null;
+      let lastProjectGuidanceKey = null;
       let currentPreviewSrc = iframe.getAttribute('src') || '';
       let pendingAction = null;
       let refreshTimer = null;
@@ -1398,6 +1490,89 @@ def _preview_page_html() -> str:
         lastSummaryKey = nextSummaryKey;
       }
 
+      function projectGuidanceSignature(data) {
+        if (!data || !data.project_context) return data && data.project ? 'project::empty' : 'none';
+        return JSON.stringify(data.project_context);
+      }
+
+      function renderProjectGuidance(data) {
+        projectGuidanceEl.replaceChildren();
+        projectWarningEl.replaceChildren();
+        if (!data || !data.project) {
+          const line = document.createElement('div');
+          line.textContent = 'No project selected.';
+          projectGuidanceEl.appendChild(line);
+          return;
+        }
+        const context = data.project_context || null;
+        if (!context) {
+          const line = document.createElement('div');
+          line.textContent = 'Project guidance unavailable.';
+          projectGuidanceEl.appendChild(line);
+          return;
+        }
+        if (context.project_context_error) {
+          const line = document.createElement('div');
+          line.textContent = 'Project guidance unavailable.';
+          projectGuidanceEl.appendChild(line);
+          const warning = document.createElement('div');
+          warning.textContent = context.project_context_error;
+          projectWarningEl.appendChild(warning);
+          return;
+        }
+        const lines = [
+          ['document: ', context.proposal_document_type || 'n/a', ' | patch: ', context.patch_status || 'n/a'],
+          [
+            'recommended: ',
+            context.recommended_variant || 'none',
+            ' | status: ',
+            context.recommendation_status || 'unknown',
+          ],
+          [
+            'missing signals: ',
+            (context.job_keywords_missing || []).join(', ') || 'none',
+            '',
+            '',
+          ],
+        ];
+        lines.forEach(([labelA, valueA, labelB, valueB]) => {
+          const line = document.createElement('div');
+          appendSummaryField(line, labelA, valueA);
+          if (labelB || valueB) {
+            appendSummaryField(line, labelB, valueB || '');
+          }
+          projectGuidanceEl.appendChild(line);
+        });
+        if (context.recommendation_summary) {
+          const line = document.createElement('div');
+          appendSummaryField(line, 'recommendation: ', context.recommendation_summary);
+          projectGuidanceEl.appendChild(line);
+        }
+        const steps = Array.isArray(context.steps) ? context.steps : [];
+        steps.slice(0, 3).forEach((step, index) => {
+          const line = document.createElement('div');
+          appendSummaryField(line, 'step ' + String(index + 1) + ': ', step);
+          projectGuidanceEl.appendChild(line);
+        });
+        const warnings = [];
+        if (context.render_warning) warnings.push(context.render_warning);
+        if (context.proposal_plan_error) warnings.push(context.proposal_plan_error);
+        warnings.forEach((message) => {
+          const line = document.createElement('div');
+          line.textContent = message;
+          projectWarningEl.appendChild(line);
+        });
+      }
+
+      function syncProjectGuidance(data, force = false) {
+        const nextGuidanceKey = projectGuidanceSignature(data);
+        if (!force && nextGuidanceKey === lastProjectGuidanceKey) {
+          return;
+        }
+        renderProjectGuidance(data);
+        lastProjectGuidanceKey = nextGuidanceKey;
+      }
+
       function nextOption(list, current) {
         if (!list || list.length === 0) return null;
         const idx = list.indexOf(current);
@@ -1580,6 +1755,7 @@ def _preview_page_html() -> str:
           syncOverlay(data);
         }
         syncSummary(data);
+        syncProjectGuidance(data);
         syncPreviewSrc();
       }
 

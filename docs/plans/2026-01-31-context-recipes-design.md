@@ -24,8 +24,8 @@ inputs, and avoid hidden fallbacks or guessed paths.
 
 Recipes should be ordered for first-time agent usage:
 
-1) Baseline build/preview (A)  
-2) Review/import (C)  
+1) Baseline build/preview (A)
+2) Review/import (C)
 3) Job tailoring project (B)
 
 This ordering aligns with a “show me what we have” intent, then iteration, then

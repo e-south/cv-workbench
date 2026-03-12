@@ -73,8 +73,70 @@ def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     assert "preview_url:" not in result.stdout
     html_path = tmp_path / "var" / "dist" / "base" / "cv.html"
     assert html_path.exists()
+    assert not (tmp_path / "var" / "dist" / "base" / "cv.pdf").exists()
+    preview_run_dir = tmp_path / "var" / "runs" / "preview" / "base"
+    assert (preview_run_dir / "canonical.md").exists()
+    assert not (preview_run_dir / "resume.json").exists()
+    assert not (preview_run_dir / "selection.json").exists()
+    assert not (preview_run_dir / "manifest.json").exists()
     session_path = tmp_path / "var" / "runs" / "preview" / "session.json"
     assert not session_path.exists()
+
+
+def test_preview_once_with_pdf_renders_pdf(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    variants_dir = config_dir / "variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    (variants_dir / "base.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: base",
+                "  outputs: [md, pdf, html]",
+            ]
+        )
+        + "\n"
+    )
+    root = Path(__file__).resolve().parents[2]
+    themes_dir = root / "build" / "themes"
+    config_path = config_dir / "workbench.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "paths:",
+                "  dist: ../var/dist",
+                "  runs: ../var/runs",
+                "variants:",
+                "  default: base",
+                "render:",
+                f"  themes_dir: {themes_dir}",
+                "  theme: default",
+                "  style_preset: modern",
+            ]
+        )
+        + "\n"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "preview",
+            "--once",
+            "--with-pdf",
+            "--variant",
+            "base",
+            "--sot-path",
+            "sot.sample",
+            "--config",
+            str(config_path),
+            "--plain",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
+    assert (tmp_path / "var" / "dist" / "base" / "cv.pdf").exists()
 
 
 def test_preview_once_reports_invalid_variant_catalog_without_traceback(tmp_path: Path) -> None:
@@ -219,7 +281,7 @@ def test_preview_once_allows_project_with_explicit_sot_path(tmp_path: Path) -> N
     (proposals_dir / "variant.yaml").write_text(
         "variant:\n  id: base\n  outputs: [md, pdf, html]\n"
     )
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -550,7 +612,7 @@ def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_
     (proposals_dir / "variant.yaml").write_text(
         "variant:\n  id: base\n  outputs: [md, pdf, html]\n"
     )
-    (proposals_dir / "patch.yaml").write_text("patch:\n  format: unified-diff\n  diff: \"\"\n")
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
 
     runner = CliRunner()
     result = runner.invoke(

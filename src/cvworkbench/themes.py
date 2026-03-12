@@ -84,12 +84,8 @@ def resolve_theme(themes_dir: Path, theme_id: str) -> Theme:
 
 
 def list_theme_presets(theme: Theme) -> list[str]:
-    html_presets = {
-        path.stem for path in (theme.root / "styles" / "html").glob("*.css")
-    }
-    pdf_presets = {
-        path.stem for path in (theme.root / "styles" / "pdf").glob("*.tex")
-    }
+    html_presets = {path.stem for path in (theme.root / "styles" / "html").glob("*.css")}
+    pdf_presets = {path.stem for path in (theme.root / "styles" / "pdf").glob("*.tex")}
     return sorted(html_presets & pdf_presets)
 
 

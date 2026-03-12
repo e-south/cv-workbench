@@ -1,44 +1,75 @@
 # Documentation Index
 
+**Owner:** cv-workbench maintainers
+**Last verified:** 2026-03-12
+
 This is the central route map for `cv-workbench` workflows, command contracts,
 and maintainer references. Use it to choose the smallest correct document for a
 task instead of browsing the whole docs tree.
 
 ## Use This Index
 
-1. Start with [Workflow routes](#workflow-routes) when you know the outcome you need.
-2. Follow the route's "Verify next" target before moving into a downstream flow.
+1. Start with [Usage flows](#usage-flows) when you know the outcome you need.
+2. Follow the route's "Verify next" document before moving into a downstream flow.
 3. Use [Command and contract docs](#command-and-contract-docs) when scripting or building agent prompts.
-4. Use [Guides by audience](#guides-by-audience) when you need the maintainer-only routes.
+4. Use [Guides by audience](#guides-by-audience) when you need a role-specific entry point.
 5. Return here as the canonical docs map; keep the root [README](../README.md) lightweight.
 
-## Workflow Routes
+## Most Common Routes
+
+- First local build: [howto/quickstart.md](howto/quickstart.md) -> [reference/preview-contract.md](reference/preview-contract.md)
+- Job tailoring and project preview: [howto/ingestion.md](howto/ingestion.md) -> [reference/project-contract.md](reference/project-contract.md)
+- Review/import loop: [reference/project-contract.md](reference/project-contract.md) -> [reference/variant-lifecycle.md](reference/variant-lifecycle.md)
+- Automation/bootstrap: [reference/context-contract.md](reference/context-contract.md) -> [reference/verify-contract.md](reference/verify-contract.md)
+
+## Usage Flows
+
+### Bootstrap And First Build
 
 | Need | Start here | Verify next |
 | --- | --- | --- |
-| Bootstrap a fresh workspace or get the first sample build | [howto/quickstart.md](howto/quickstart.md) | [reference/context-contract.md](reference/context-contract.md) |
-| Capture a machine-readable workspace snapshot for automation | [reference/context-contract.md](reference/context-contract.md) | [concepts/overview.md](concepts/overview.md) |
+| Bootstrap a fresh workspace and get the first sample build | [howto/quickstart.md](howto/quickstart.md) | [reference/context-contract.md](reference/context-contract.md) |
+| Capture a machine-readable workspace snapshot for automation | [reference/context-contract.md](reference/context-contract.md) | [reference/verify-contract.md](reference/verify-contract.md) |
+| Run an explicit build or one-shot noninteractive preview | [howto/quickstart.md](howto/quickstart.md) | [reference/preview-contract.md](reference/preview-contract.md) |
 | Inspect workspace state, tags, runs, or explainable selection | [concepts/overview.md](concepts/overview.md) | [reference/context-contract.md](reference/context-contract.md) |
-| Run an explicit build or one-shot verification pass | [howto/quickstart.md](howto/quickstart.md) | [reference/preview-contract.md](reference/preview-contract.md) |
-| Run the repo-local verify harness in an isolated workspace | [reference/verify-contract.md](reference/verify-contract.md) | [reference/preview-contract.md](reference/preview-contract.md) |
+
+### Preview, Styling, And Export
+
+| Need | Start here | Verify next |
+| --- | --- | --- |
 | Inspect the local preview UI or drive rebuilds safely | [reference/preview-contract.md](reference/preview-contract.md) | [howto/styling.md](howto/styling.md) |
 | Compare themes, presets, and export styling | [howto/styling.md](howto/styling.md) | [reference/preview-contract.md](reference/preview-contract.md) |
-| Ingest a job and create a project-scoped proposal | [howto/ingestion.md](howto/ingestion.md) | [reference/project-contract.md](reference/project-contract.md) |
-| Inspect, keep, discard, or clean up proposal variants | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) | [reference/project-contract.md](reference/project-contract.md) |
-| Package a review run and import reviewed DOCX edits | [reference/project-contract.md](reference/project-contract.md) | [howto/ingestion.md](howto/ingestion.md) |
-| Work with versioned SoT directories or packs | [howto/sot-versions.md](howto/sot-versions.md) | [reference/context-contract.md](reference/context-contract.md) |
 | Sync rendered outputs into a site repo | [reference/site-contract.md](reference/site-contract.md) | [reference/security.md](reference/security.md) |
-| Profile build or preview performance | [howto/performance.md](howto/performance.md) | [concepts/architecture.md](concepts/architecture.md) |
+| Work with versioned SoT directories or packs | [howto/sot-versions.md](howto/sot-versions.md) | [reference/context-contract.md](reference/context-contract.md) |
+
+### Project Tailoring And Review
+
+| Need | Start here | Verify next |
+| --- | --- | --- |
+| Ingest a job and create a project-scoped proposal | [howto/ingestion.md](howto/ingestion.md) | [reference/project-contract.md](reference/project-contract.md) |
+| Inspect project guidance, patch status, and next commands | [reference/project-contract.md](reference/project-contract.md) | [reference/preview-contract.md](reference/preview-contract.md) |
+| Inspect, keep, discard, or clean up proposal variants | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) | [reference/project-contract.md](reference/project-contract.md) |
+| Compare a project run against a baseline before export or review | [reference/project-contract.md](reference/project-contract.md) | [concepts/overview.md](concepts/overview.md) |
+| Package a review run and import reviewed DOCX edits | [reference/project-contract.md](reference/project-contract.md) | [howto/ingestion.md](howto/ingestion.md) |
+
+### Automation, Verification, And Performance
+
+| Need | Start here | Verify next |
+| --- | --- | --- |
+| Run the repo-local verify harness in an isolated workspace | [reference/verify-contract.md](reference/verify-contract.md) | [reference/preview-contract.md](reference/preview-contract.md) |
+| Profile build, preview, or project inspection performance | [howto/performance.md](howto/performance.md) | [concepts/architecture.md](concepts/architecture.md) |
+| Inspect repo boundaries and policy before making maintainer changes | [concepts/architecture.md](concepts/architecture.md) | [reference/security.md](reference/security.md) |
 
 ## Command And Contract Docs
 
 Use these when the CLI contract matters more than the broader workflow:
 
-- [concepts/overview.md](concepts/overview.md): CLI surface and feature lanes
+- [concepts/overview.md](concepts/overview.md): CLI surface, feature lanes, and bounded editing scope
+- [concepts/architecture.md](concepts/architecture.md): repo boundaries and design constraints
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
-- [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, and UI control hooks
+- [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, session semantics, and UI control hooks
 - [reference/verify-contract.md](reference/verify-contract.md): repo-local tracer-bullet verification harness
-- [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, and guarded patch application
+- [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, guarded patch application, and proposal visibility rules
 - [reference/variant-lifecycle.md](reference/variant-lifecycle.md): ephemeral draft/project proposal lifecycle
 - [reference/site-contract.md](reference/site-contract.md): local-first site sync contract
 - [reference/security.md](reference/security.md): local/private content boundaries and security posture

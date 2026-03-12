@@ -96,9 +96,7 @@ def _write_project_manifest(root: Path, project_id: str, variant_id: str = "base
         )
         + "\n"
     )
-    (proposals_dir / "patch.yaml").write_text(
-        "patch:\n  format: unified-diff\n  diff: \"\"\n"
-    )
+    (proposals_dir / "patch.yaml").write_text("patch:\n  format: project-ops\n  operations: []\n")
     return project_dir
 
 
@@ -321,6 +319,11 @@ def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
     assert drafts_dir.exists()
     patch_files = list(drafts_dir.rglob("patch.diff"))
     assert patch_files
+    metadata_files = list(drafts_dir.rglob("draft.json"))
+    assert metadata_files
+    metadata = json.loads(metadata_files[0].read_text())
+    assert metadata["patch_path"] == "patch.diff"
+    assert metadata["apply_status"] == "review_diff_only"
     notes_files = list(drafts_dir.rglob("notes.md"))
     assert notes_files
     assert "not directly applyable to SoT" in notes_files[0].read_text()
@@ -375,6 +378,11 @@ def test_import_docx_generates_applyable_patch_for_experience_bullet_edits(
     patch_payload = yaml.safe_load(patch_files[0].read_text())
     assert patch_payload["patch"]["format"] == "project-ops"
     assert patch_payload["patch"]["operations"][0]["op"] == "replace-experience-bullet"
+    metadata_files = list(drafts_dir.rglob("draft.json"))
+    assert metadata_files
+    metadata = json.loads(metadata_files[0].read_text())
+    assert metadata["patch_path"] == "patch.yaml"
+    assert metadata["apply_status"] == "ready"
     notes_files = list(drafts_dir.rglob("notes.md"))
     assert notes_files
     notes_text = notes_files[0].read_text()
@@ -474,7 +482,7 @@ def test_import_docx_normalizes_wrapped_markdown_without_forcing_review_diff_onl
     notes_files = list(resolve_drafts_path(config_path).rglob("notes.md"))
     assert notes_files
     assert "- apply_status: ready_no_changes" in notes_files[0].read_text()
-    assert "next_step: Review notes.md; the normalized patch is a verified no-op" in result.stdout
+    assert "next_step: Review notes.md; draft.json records a verified no-op" in result.stdout
 
 
 def test_import_docx_normalizes_flattened_noneditable_sections_without_forcing_review_diff_only(

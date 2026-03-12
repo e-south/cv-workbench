@@ -167,9 +167,7 @@ def test_quickstart_builds_sample(tmp_path: Path, monkeypatch) -> None:
         result = runner.invoke(app, ["quickstart", "--plain"])
 
     assert result.exit_code == 0
-    expected_next_step = (
-        f"next_step: {_cvw_prefix()} preview --sot-path {template_root / 'sot.sample'} --variant base"
-    )
+    expected_next_step = f"next_step: {_cvw_prefix()} preview --sot-path {template_root / 'sot.sample'} --variant base"
     assert expected_next_step in result.stdout
     dist_dir = Path(cwd) / "var" / "dist" / "base"
     assert (dist_dir / "cv.md").exists()
@@ -221,9 +219,7 @@ def test_quickstart_sample_default_uses_workspace_sample(tmp_path: Path, monkeyp
     assert f"sample_sot: {root / 'sot.sample'}" in result.stdout
 
 
-def test_quickstart_reuses_existing_workspace_root_from_subdir(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_quickstart_reuses_existing_workspace_root_from_subdir(tmp_path: Path, monkeypatch) -> None:
     template_root = tmp_path / "template"
     template_root.mkdir()
     _write_minimal_sot_sample(template_root)
@@ -247,9 +243,7 @@ def test_quickstart_reuses_existing_workspace_root_from_subdir(
             os.chdir(previous_cwd)
 
     assert result.exit_code == 0
-    expected_next_step = (
-        f"next_step: {_cvw_prefix()} preview --sot-path {template_root / 'sot.sample'} --variant base"
-    )
+    expected_next_step = f"next_step: {_cvw_prefix()} preview --sot-path {template_root / 'sot.sample'} --variant base"
     assert expected_next_step in result.stdout
     assert (root / "var" / "dist" / "base" / "cv.md").exists()
     assert not (root / "docs" / "var").exists()

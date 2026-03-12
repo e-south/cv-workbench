@@ -93,3 +93,51 @@ def test_project_review_docs_keep_build_before_reviewpack() -> None:
     assert "uv run cvw reviewpack --project <project-id>" not in quickstart
     assert "latest review-ready" in contract
     assert "get the pinned `--run` command" in contract
+
+
+def test_docs_make_bounded_editing_scope_explicit() -> None:
+    readme = (REPO_ROOT / "README.md").read_text()
+    overview = (REPO_ROOT / "docs" / "concepts" / "overview.md").read_text()
+    contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
+
+    assert "free-form NL rewriting" in readme
+    assert "GUI SoT editing" in readme
+    assert "free-form NL rewriting" in contract
+    assert "SoT" in contract
+    assert "executable ops are intentionally narrow" in overview
+
+
+def test_project_docs_surface_comparison_and_exact_url_keying() -> None:
+    quickstart = (REPO_ROOT / "docs" / "howto" / "quickstart.md").read_text()
+    ingestion = (REPO_ROOT / "docs" / "howto" / "ingestion.md").read_text()
+    contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
+
+    assert "diff --artifact canonical --run-a <base-run-id-or-path>" in quickstart
+    assert "compare --run-a <base-run-id-or-path>" in quickstart
+    assert "projects/<project-id>/<run-id>" in quickstart
+    assert "diff --artifact canonical --run-a <base-run>" in contract
+    assert "compare --run-a <base-run>" in contract
+    assert "Registry ids are keyed from the exact URL string" in ingestion
+    assert "--job-file" in ingestion
+
+
+def test_performance_docs_cover_preview_and_read_path_profiling() -> None:
+    performance = (REPO_ROOT / "docs" / "howto" / "performance.md").read_text()
+
+    assert "preview-once.prof" in performance
+    assert "context.prof" in performance
+    assert "project-show.prof" in performance
+    assert "project show \\" in performance
+
+
+def test_docs_surface_strict_url_intake_and_import_metadata() -> None:
+    ingestion = (REPO_ROOT / "docs" / "howto" / "ingestion.md").read_text()
+    quickstart = (REPO_ROOT / "docs" / "howto" / "quickstart.md").read_text()
+    contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
+    verify = (REPO_ROOT / "docs" / "reference" / "verify-contract.md").read_text()
+
+    assert "public `https`" in ingestion
+    assert "--job-file" in ingestion
+    assert "draft.json" in quickstart
+    assert "draft.json" in contract
+    assert "draft.json" in verify

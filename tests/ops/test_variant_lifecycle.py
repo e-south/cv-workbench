@@ -11,7 +11,10 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import importlib
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -142,12 +145,45 @@ def test_gc_variants_expires_ephemeral_entries(tmp_path: Path) -> None:
 
     registry_path = tmp_path / "var" / "variants" / "registry.json"
     raw = json.loads(registry_path.read_text())
-    raw["entries"][0]["expires_at"] = (
-        datetime.now(timezone.utc) - timedelta(days=1)
-    ).isoformat()
+    raw["entries"][0]["expires_at"] = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     registry_path.write_text(json.dumps(raw, indent=2))
 
     summary = gc_variants(config_path=config_path, confirm=True)
 
     assert summary.expired == 1
     assert not cleanup_path.exists()
+
+
+def test_register_variant_serializes_concurrent_writers(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_config(tmp_path)
+    lifecycle_module = importlib.import_module("cvworkbench.ops.variant_lifecycle")
+    original_load_registry_raw = lifecycle_module._load_registry_raw
+
+    def _slow_load_registry_raw(config: Path) -> dict[str, object]:
+        raw = original_load_registry_raw(config)
+        time.sleep(0.05)
+        return raw
+
+    monkeypatch.setattr(lifecycle_module, "_load_registry_raw", _slow_load_registry_raw)
+
+    variant_paths: list[Path] = []
+    for idx in range(4):
+        variant_path = tmp_path / "var" / "drafts" / f"demo-{idx}" / "variant.yaml"
+        _write_variant(variant_path, f"demo-{idx}")
+        variant_paths.append(variant_path)
+
+    def _register(variant_path: Path):
+        return register_variant(
+            variant_path=variant_path,
+            cleanup_path=variant_path.parent,
+            source="draft",
+            config_path=config_path,
+            label=variant_path.parent.name,
+        )
+
+    with ThreadPoolExecutor(max_workers=len(variant_paths)) as executor:
+        results = list(executor.map(_register, variant_paths))
+
+    assert {result.variant_id for result in results} == {f"demo-{idx}" for idx in range(4)}
+    registry = load_variant_registry(config_path)
+    assert {entry.variant_id for entry in registry.entries} == {f"demo-{idx}" for idx in range(4)}

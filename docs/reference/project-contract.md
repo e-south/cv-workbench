@@ -4,9 +4,16 @@ Projects are local, private workspaces for job tailoring. They keep job context,
 signals, and proposal drafts without mutating the Source of Truth unless you
 explicitly apply a patch.
 
-`project guide` ranks variants, records deterministic evidence-backed rationale
-in `job/proposal-plan.json`, and scaffolds proposal artifacts. It does not
-perform free-form NL rewriting of your SoT.
+URL ingestion is intentionally strict: only public `https` targets are valid
+for `--job-url`. Internal or local content must be passed via `--job-file`.
+
+`project guide` ranks variants, auto-applies the top eligible recommendation to
+the scaffolded project when `--variant` is omitted, records deterministic
+evidence-backed rationale in `job/proposal-plan.json`, and scaffolds proposal
+artifacts. If you pass `--variant`, that explicit lane is preserved. The
+command does not perform free-form NL rewriting of your SoT. If the
+auto-retarget step fails, the command aborts and removes the partial project
+workspace instead of leaving a half-created proposal behind.
 
 ## Commands
 
@@ -15,12 +22,20 @@ perform free-form NL rewriting of your SoT.
 - `uv run cvw project new --job-url <url>` or `--job-file <path>`: create a project
   without generating guidance output.
 - `uv run cvw project show <slug>`: inspect the project proposal, patch status,
-  latest project run, review readiness, and ready-to-run next commands without
-  mutating the SoT.
+  latest project run, review readiness, ready-to-run next commands, the
+  `proposal-plan.json` guidance summary (recommended variant, missing job
+  keywords, next steps), and any proposal-visibility warning when
+  `project-ops` target resume content that the selected proposal variant does
+  not render, without mutating the SoT.
 - `uv run cvw preview --project <slug> [--sot-path <path>]`: preview with project patch
   applied in-memory, optionally against an explicit SoT override. Project preview
   renders stay inside `var/runs/preview/<slug>/`. When `--sot-path` points at a
-  concrete version directory, preview stays pinned to that exact directory.
+  concrete version directory, preview stays pinned to that exact directory. The
+  preview sidebar mirrors project guidance and patch visibility so operators can
+  see whether `project-ops` target content that the current proposal document
+  type will not render. If the preview can render but project guidance metadata
+  is incomplete, the sidebar reports that failure explicitly instead of hiding
+  it.
 - `uv run cvw reviewpack --project <slug>`: package the latest review-ready
   project-scoped run for review. Use `project show <slug>` after building to
   get the pinned `--run` command for the current immutable run.
@@ -76,12 +91,18 @@ Use:
 - Project builds write rendered artifacts into `var/runs/projects/<slug>/<run-id>/`
   instead of overwriting shared `var/dist/<variant>/`.
 - `uv run cvw project show <slug>` reports the current proposal variant id,
-  patch status, job source, latest project run, and replayable
-  preview/build/apply/keep/discard commands.
+  patch status, proposal-plan guidance, job source, latest project run, and
+  replayable preview/build/apply/keep/discard commands.
 - When the latest project run is review-ready, `project show` emits a pinned
   `reviewpack --project <slug> --run <run-id>` command. Otherwise it reports
   `review.status=build_required` and points back to
   `build --project <slug> --format md,pdf,docx`.
+- Compare project output against an explicit baseline run before review/export
+  with `uv run cvw diff --artifact canonical --run-a <base-run> --run-b
+  projects/<slug>/<run-id>` or `--artifact resume`. For rendered visual review,
+  use `uv run cvw compare --run-a <base-run> --run-b projects/<slug>/<run-id>`.
+  Use explicit run ids or run paths from `build` / `project show` rather than
+  guessing a latest baseline.
 - `uv run cvw reviewpack --run projects/<slug>/<run-id>` packages a specific project build
   deterministically when multiple runs exist. Review packs now source DOCX/PDF/selection
   metadata from the selected run directory, not the shared `var/dist/<variant>/` directory.
@@ -151,12 +172,14 @@ cleanly back to SoT ids. Canonical markdown now follows the same variant
 selection gates as rendered review artifacts, so filtered project imports no
 longer fall back to `review_diff_only` just because hidden items were present
 in the unrendered canonical source. Formatting-only normalized imports report
-`apply_status: ready_no_changes`. Unsupported edits still fall back to
-`var/drafts/import-*/patch.diff` with `apply_status: review_diff_only`.
+`apply_status: ready_no_changes`. Every import draft also writes
+`var/drafts/import-*/draft.json`; that metadata is the authoritative
+applyability contract, while `notes.md` is informational. Unsupported edits
+still fall back to `var/drafts/import-*/patch.diff` with
+`apply_status: review_diff_only`.
 
-Legacy project proposal artifacts may still carry a `unified-diff` payload in
-`proposals/patch.yaml`, and project apply/preview continue to accept that
-format.
+Project proposal artifacts must use `project-ops`. Unsupported legacy patch
+formats fail fast instead of being interpreted heuristically.
 
 Project-scoped review packs default to `var/reviews/projects/<slug>/` so they do
 not collide with variant-level review packs.

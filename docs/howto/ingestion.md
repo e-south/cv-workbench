@@ -17,6 +17,8 @@ This command:
 - Fetches and extracts readable text from the URL.
 - Stores source metadata and extracted markdown.
 - Generates deterministic signals and a draft `strategy.yaml`.
+- Rejects non-public or non-`https` URLs; save local or internal content to a
+  file and use `--job-file` instead.
 
 ## Registry layout
 
@@ -67,8 +69,10 @@ uv run cvw variant discard --project <slug> --yes
 
 New projects scaffold a project-local proposal variant plus a `project-ops`
 patch file at `proposals/patch.yaml`. `project guide` helps you choose a base
-variant, writes `job/proposal-plan.json` with deterministic ranking rationale
-and evidence snippets, and does not directly rewrite SoT content.
+variant, auto-applies the top eligible recommendation when `--variant` is
+omitted, writes `job/proposal-plan.json` with deterministic ranking rationale
+and evidence snippets, and does not directly rewrite SoT content. If you pass
+`--variant`, that explicit scaffold lane is preserved.
 
 Today the supported executable op families are guarded experience bullet
 replacement and project summary replacement. Use
@@ -93,6 +97,12 @@ registry:
 
 - Ingestion is generic. Use it for job listings, product pages, blog posts, or
   any context you want to mine for signals.
+- URL ingestion is intentionally strict: only public `https` targets are
+  accepted. Loopback, RFC1918/private, link-local, localhost, and non-default
+  ports fail fast.
+- Registry ids are keyed from the exact URL string. If a job board adds
+  tracking query params and you want stable dedupe, prefer the canonical
+  listing URL or save the text locally and use `--job-file`.
 - If a site blocks automated access, the command will fail instead of silently
   falling back. Capture the text manually and store it in your private SoT if
   needed.

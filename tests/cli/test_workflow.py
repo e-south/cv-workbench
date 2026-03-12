@@ -152,7 +152,9 @@ def test_workflow_plain_renders_selected_recipe(tmp_path: Path) -> None:
     output = strip_ansi(result.stdout)
     assert "selected: baseline.build_preview" in output
     assert "recipe_id: baseline.build_preview" in output
-    assert _recipe_command("build --variant base --format md,pdf", config_path=config_path) in output
+    assert (
+        _recipe_command("build --variant base --format md,pdf", config_path=config_path) in output
+    )
 
 
 def test_workflow_json_filters_recipe(tmp_path: Path) -> None:

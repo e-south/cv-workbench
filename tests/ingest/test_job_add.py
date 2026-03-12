@@ -87,3 +87,25 @@ def test_job_add_creates_registry_entry(tmp_path: Path, monkeypatch) -> None:
 
     payload = json.loads((registry_dir / "source.json").read_text())
     assert payload["url"] == url
+
+
+def test_job_add_rejects_unsafe_url(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(tmp_path)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "job",
+                "add",
+                "--url",
+                "http://127.0.0.1/jobs/role",
+                "--config",
+                str(config_path),
+                "--plain",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "https" in (result.stderr or "")

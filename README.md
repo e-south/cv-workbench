@@ -7,30 +7,26 @@ private CV content lives in a separate Source of Truth (SoT) directory outside
 git.
 
 Use [docs/readme.md](docs/readme.md) as the canonical docs router. The root
-README stays intentionally light; `docs/readme.md` routes the full workflow and
-contract surface.
+README is intentionally a light front door; `docs/readme.md` carries the fuller
+workflow map, contracts, and maintainer routes.
 
-> [!NOTE]
-> Preview/browser hardening update (March 11, 2026)
->
-> - Session ownership is explicit in the preview contract: `session.json` and `/api/state` carry a `session_id`, preview startup rejects an already-live session instead of silently overwriting it, stale session files are cleared, and `dev stop --force` no longer reports success if the preview port is still busy. See [src/cvworkbench/cli/app.py](src/cvworkbench/cli/app.py), [src/cvworkbench/dev/preview.py](src/cvworkbench/dev/preview.py), and [docs/reference/preview-contract.md](docs/reference/preview-contract.md).
-> - The preview page enforces a single active controller tab per session. A newer tab claims the session, older tabs become passive, disable controls, and stop polling instead of remaining competing live controllers, and a released/stopped session does not silently wake every remaining tab back up. See [src/cvworkbench/dev/preview.py](src/cvworkbench/dev/preview.py).
-> - Button responsiveness is materially better because format switches reuse already-built outputs locally, non-force control changes are debounced/coalesced before rebuild, steady-state summary DOM updates are suppressed, and redundant render requests are collapsed instead of stacking up. See [src/cvworkbench/dev/preview.py](src/cvworkbench/dev/preview.py) and [docs/reference/preview-contract.md](docs/reference/preview-contract.md).
->
-> Verification:
->
-> - Baseline before the first hardening pass: `build_once(html+pdf)` averaged `2.19s`; a rebuild after initial build averaged `4.41s`; switching `html -> pdf` also averaged `4.41s`.
-> - Tests passed: `uv run pytest -q tests/cli/test_preview.py tests/cli/test_dev_stop.py tests/cli/test_dev_serve.py tests/dev/test_preview_session.py tests/dev/test_preview_contract.py tests/ux/test_preview.py`
-> - Local Chrome DevTools smoke check validated local format switching with no redundant `POST /api/render`, passive-tab takeover, and artifacts under `var/runs/preview/hardening-20260311/`.
->
-> This hardening is ownership-first: one live preview session, one active controller tab, no silent stale-session reuse, and fewer unnecessary rebuilds during fast operator interaction.
+## Documentation
+
+- [docs/readme.md](docs/readme.md): central docs router and usage-flow index
+- [docs/howto/quickstart.md](docs/howto/quickstart.md): first successful local build
+- [docs/reference/context-contract.md](docs/reference/context-contract.md): automation/bootstrap contract
+- [docs/reference/preview-contract.md](docs/reference/preview-contract.md): local build and preview contract
+- [docs/reference/project-contract.md](docs/reference/project-contract.md): project guide, reviewpack, import, and guarded patching
+- [docs/reference/verify-contract.md](docs/reference/verify-contract.md): repo-local verification harness
+- [docs/concepts/architecture.md](docs/concepts/architecture.md): boundaries and design constraints
 
 ## Start Here
 
+Requirements:
 - Python 3.12
 - uv
-- Pandoc (for rendering)
-- LaTeX engine (xelatex) for PDF output
+- Pandoc
+- LaTeX engine (`xelatex`) for PDF output
 
 ```bash
 uv sync --locked
@@ -39,14 +35,7 @@ uv run cvw doctor
 uv run cvw quickstart
 ```
 
-Common entry points:
-- [First successful local build](docs/howto/quickstart.md)
-- [Agent/bootstrap contract](docs/reference/context-contract.md)
-- [Build and preview contract](docs/reference/preview-contract.md)
-- [Job tailoring and project workflows](docs/howto/ingestion.md)
-- [Review/import and guarded patching](docs/reference/project-contract.md)
-
-Deterministic bootstrap commands:
+## Deterministic Entry Points
 
 ```bash
 uv run cvw context --json --compact
@@ -55,21 +44,19 @@ uv run cvw workflow --id automation.verify --json --compact
 uv run python scripts/verify_repo.py
 ```
 
-## Core Workflows
+## Usage Lanes
 
-- deterministic `build`, `render`, and `preview` flows
-- project-scoped job tailoring with proposal variants and `project-ops` patches
-- immutable run artifacts, review packs, and DOCX import drafts
-- variant lifecycle, SoT versioning, and local site sync support
+- Build and preview: start with [docs/howto/quickstart.md](docs/howto/quickstart.md), then use [docs/reference/preview-contract.md](docs/reference/preview-contract.md) for explicit render and preview behavior.
+- Job tailoring and proposal review: start with [docs/howto/ingestion.md](docs/howto/ingestion.md), then use [docs/reference/project-contract.md](docs/reference/project-contract.md).
+- Automation and agent bootstrap: start with [docs/reference/context-contract.md](docs/reference/context-contract.md), then narrow to [docs/reference/verify-contract.md](docs/reference/verify-contract.md).
+- Styling, versioned SoT, and site sync: use [docs/howto/styling.md](docs/howto/styling.md), [docs/howto/sot-versions.md](docs/howto/sot-versions.md), and [docs/reference/site-contract.md](docs/reference/site-contract.md).
 
-## Documentation Map
+## Scope Boundary
 
-- [docs/readme.md](docs/readme.md): task-first docs index
-- [docs/concepts/overview.md](docs/concepts/overview.md): CLI surface and feature lanes
-- [docs/concepts/architecture.md](docs/concepts/architecture.md): repo boundaries and design constraints
-- [docs/howto/](docs/howto/): operator guides
-- [docs/reference/](docs/reference/): command contracts and invariants
-- [docs/reference/verify-contract.md](docs/reference/verify-contract.md): repo-local verify harness contract
+cv-workbench is strong on deterministic generation, local preview, project-local
+proposal patching, review packaging, and export. Guided tailoring and review
+import can generate guarded patch ops, but free-form NL rewriting and GUI SoT editing
+are intentionally out of scope.
 
 ## License
 

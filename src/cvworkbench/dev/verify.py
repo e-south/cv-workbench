@@ -62,7 +62,9 @@ class VerifyStep:
     verify: Verifier
 
 
-def prepare_verify_workspace(repo_root: Path, workspace_root: Path | None = None) -> VerifyWorkspace:
+def prepare_verify_workspace(
+    repo_root: Path, workspace_root: Path | None = None
+) -> VerifyWorkspace:
     resolved_repo_root = repo_root.resolve()
     _require(
         (resolved_repo_root / "pyproject.toml").exists(),
@@ -365,7 +367,17 @@ def _build_steps(workspace: VerifyWorkspace) -> tuple[VerifyStep, ...]:
         VerifyStep(
             id="reviewpack",
             title="Create a review pack from the latest run",
-            argv=("uv", "run", "cvw", "reviewpack", "--json", "--variant", "base", "--config", config),
+            argv=(
+                "uv",
+                "run",
+                "cvw",
+                "reviewpack",
+                "--json",
+                "--variant",
+                "base",
+                "--config",
+                config,
+            ),
             verify=_verify_reviewpack,
         ),
         VerifyStep(
@@ -474,7 +486,9 @@ def _verify_preview_once(
     _require(html_path.exists(), f"preview output missing: {html_path}")
     preview_path = data.get("preview_file") or data.get("preview_url")
     _require(preview_path == str(html_path), "preview --once should return the local HTML path")
-    _require(data.get("watching") == "false", f"preview --once watching drift: {data.get('watching')}")
+    _require(
+        data.get("watching") == "false", f"preview --once watching drift: {data.get('watching')}"
+    )
     session_path = workspace.root / "var" / "runs" / "preview" / "session.json"
     _require(not session_path.exists(), f"preview --once wrote a session file: {session_path}")
     return {
@@ -540,9 +554,10 @@ def _verify_import_docx(
     data = _expect_summary_payload(payload, "import-docx")
     draft_dir = _require_path(data, "draft_dir")
     patch_path = _require_path(data, "patch")
+    metadata_path = _require_path(data, "metadata")
     notes_path = _require_path(data, "notes")
     imported_path = _require_path(data, "imported_markdown")
-    for path in [draft_dir, patch_path, notes_path, imported_path]:
+    for path in [draft_dir, patch_path, metadata_path, notes_path, imported_path]:
         _require(path.exists(), f"import-docx artifact missing: {path}")
     _require(
         draft_dir.parent == workspace.root / "var" / "drafts",
@@ -557,6 +572,7 @@ def _verify_import_docx(
     return {
         "draft_dir": str(draft_dir),
         "patch": str(patch_path),
+        "metadata": str(metadata_path),
         "run_id": str(data["run_id"]),
     }
 
