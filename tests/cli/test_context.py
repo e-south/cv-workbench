@@ -831,6 +831,93 @@ def test_context_recommended_workflows_skip_review_import_when_runs_are_not_revi
     assert "project.guide" in recommended_ids
 
 
+def test_context_recommended_workflows_ignore_review_ready_nondefault_variants(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    config_path.write_text(
+        config_path.read_text().replace(
+            "  reviews: ../var/reviews\n",
+            "  reviews: ../var/reviews\n  sot: ../sot.sample\n",
+        )
+    )
+    config_dir = config_path.parent
+    (config_dir / "variants" / "cover.yaml").write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: cover",
+                "  outputs: [md, pdf, docx]",
+                "  document_type: cover-letter",
+            ]
+        )
+        + "\n"
+    )
+    base_run_dir = tmp_path / "var" / "runs" / "2026-03-10T00-00-00Z"
+    base_run_dir.mkdir(parents=True, exist_ok=True)
+    (base_run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "created_at": "2026-03-10T00:00:00+00:00",
+                "formats": ["md"],
+                "outputs": {"md": "cv.md"},
+                "variant": {"id": "base"},
+            }
+        )
+    )
+    (base_run_dir / "cv.md").write_text("# cv\n")
+    cover_run_dir = tmp_path / "var" / "runs" / "2026-03-11T00-00-00Z"
+    cover_run_dir.mkdir(parents=True, exist_ok=True)
+    (cover_run_dir / "selection.json").write_text("{\"items\": []}\n")
+    (cover_run_dir / "cv.md").write_text("# cover\n")
+    (cover_run_dir / "cv.pdf").write_bytes(b"pdf")
+    (cover_run_dir / "cv.docx").write_bytes(b"docx")
+    (cover_run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "created_at": "2026-03-11T00:00:00+00:00",
+                "formats": ["md", "pdf", "docx"],
+                "outputs": {"md": "cv.md", "pdf": "cv.pdf", "docx": "cv.docx"},
+                "variant": {"id": "cover"},
+            }
+        )
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["context", "--json", "--compact", "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    recommended_ids = [item["id"] for item in payload["recommended_workflows"]]
+    assert "review.import" not in recommended_ids
+    assert "project.guide" in recommended_ids
+
+
+def test_run_is_review_ready_rejects_outputs_outside_run_dir(tmp_path: Path) -> None:
+    app_module = importlib.import_module("cvworkbench.cli.app")
+    run_dir = tmp_path / "var" / "runs" / "2026-03-10T00-00-00Z"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    outside_dir = tmp_path / "shared"
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    (outside_dir / "cv.pdf").write_bytes(b"pdf")
+    (outside_dir / "cv.docx").write_bytes(b"docx")
+    (run_dir / "selection.json").write_text("{\"items\": []}\n")
+
+    assert (
+        app_module._run_is_review_ready(
+            {
+                "path": str(run_dir),
+                "outputs": {"pdf": "../shared/cv.pdf", "docx": "../shared/cv.docx"},
+            }
+        )
+        is False
+    )
+
+
 def test_context_variant_run_inventory_ignores_newer_project_runs(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     _write_minimal_sot(tmp_path)

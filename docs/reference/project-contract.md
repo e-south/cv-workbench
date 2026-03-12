@@ -82,6 +82,11 @@ Use:
   `reviewpack --project <slug> --run <run-id>` command. Otherwise it reports
   `review.status=build_required` and points back to
   `build --project <slug> --format md,pdf,docx`.
+- Compare project output against an explicit baseline run before review/export
+  with `uv run cvw diff --artifact canonical --run-a <base-run> --run-b
+  projects/<slug>/<run-id>` or `--artifact resume`. Use explicit run ids or
+  run paths from `build` / `project show` rather than guessing a latest
+  baseline.
 - `uv run cvw reviewpack --run projects/<slug>/<run-id>` packages a specific project build
   deterministically when multiple runs exist. Review packs now source DOCX/PDF/selection
   metadata from the selected run directory, not the shared `var/dist/<variant>/` directory.

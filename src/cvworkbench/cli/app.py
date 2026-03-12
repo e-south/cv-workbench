@@ -1174,6 +1174,7 @@ def _build_recommended_workflows(
     recipes: list[dict[str, Any]],
     sot_status: str,
     latest_runs: dict[str, list[dict[str, Any]]],
+    default_variant: str | None,
     config_path: Path,
     sot_path: Path | None,
 ) -> list[dict[str, str]]:
@@ -1242,11 +1243,15 @@ def _build_recommended_workflows(
         "baseline.build_preview",
         "Use when you need PDF output or a live preview server instead of one-shot HTML.",
     )
-    has_review_ready_runs = any(
-        _run_is_review_ready(run)
-        for runs in latest_runs.values()
-        for run in runs
-    )
+    if default_variant is not None:
+        candidate_runs = latest_runs.get(default_variant, [])
+    else:
+        candidate_runs = [
+            run
+            for runs in latest_runs.values()
+            for run in runs
+        ]
+    has_review_ready_runs = any(_run_is_review_ready(run) for run in candidate_runs)
     if has_review_ready_runs:
         add(
             "review.import",
@@ -1301,15 +1306,26 @@ def _run_is_review_ready(run: RunInfo | Mapping[str, Any]) -> bool:
     else:
         return False
 
+    run_root = run_path.resolve()
     if not required_formats.issubset(set(outputs.keys())):
         return False
     for fmt in required_formats:
         output_path = outputs.get(fmt)
         if not isinstance(output_path, str) or not output_path.strip():
             return False
-        if not (run_path / output_path).exists():
+        resolved_output = (run_path / output_path).resolve()
+        try:
+            resolved_output.relative_to(run_root)
+        except ValueError:
             return False
-    return (run_path / "selection.json").exists()
+        if not resolved_output.exists():
+            return False
+    selection_path = (run_path / "selection.json").resolve()
+    try:
+        selection_path.relative_to(run_root)
+    except ValueError:
+        return False
+    return selection_path.exists()
 
 
 def _project_commands(
@@ -2699,6 +2715,7 @@ def _build_context_summary(
             recipes=recipes,
             sot_status=shared.sot_status,
             latest_runs=latest_payload,
+            default_variant=shared.default_variant,
             config_path=shared.config_path,
             sot_path=sot_path,
         ),

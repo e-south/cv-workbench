@@ -61,6 +61,9 @@ uv run python scripts/verify_repo.py
 - project-scoped job tailoring with proposal variants and `project-ops` patches
 - immutable run artifacts, review packs, and DOCX import drafts
 - variant lifecycle, SoT versioning, and local site sync support
+- bounded modification loop: guided tailoring and review import can generate
+  guarded patch ops, but free-form NL rewriting and GUI SoT editing are
+  intentionally out of scope
 
 ## Documentation Map
 

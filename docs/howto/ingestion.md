@@ -93,6 +93,9 @@ registry:
 
 - Ingestion is generic. Use it for job listings, product pages, blog posts, or
   any context you want to mine for signals.
+- Registry ids are keyed from the exact URL string. If a job board adds
+  tracking query params and you want stable dedupe, prefer the canonical
+  listing URL or save the text locally and use `--job-file`.
 - If a site blocks automated access, the command will fail instead of silently
   falling back. Capture the text manually and store it in your private SoT if
   needed.

@@ -239,6 +239,20 @@ After the review-ready build completes, `project show` prints the pinned
 `reviewpack --project <project-id> --run projects/<project-id>/<run-id>`
 command for the latest immutable project run.
 
+Before exporting review artifacts, compare the project run against an explicit
+baseline run so you can see the scoped content delta:
+
+```bash
+uv run cvw build --variant base --format md,pdf,docx
+uv run cvw build --project <project-id> --format md,pdf,docx
+uv run cvw diff --artifact canonical --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id>
+uv run cvw diff --artifact resume --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id> --format json
+```
+
+Use the explicit run ids printed by `build` or `project show`; `diff` is most
+useful when you choose the exact baseline you want to compare rather than
+assuming "latest" means the right thing.
+
 Direct project creation when you already know the base variant:
 
 ```bash
