@@ -84,6 +84,7 @@ from cvworkbench.ops.apply import ApplyError, apply_draft
 from cvworkbench.ops.clean import CleanError, clean_path
 from cvworkbench.ops.diffing import DiffError, DiffSelection, diff_artifacts, parse_artifact
 from cvworkbench.ops.doctor import run_doctor
+from cvworkbench.ops.render_compare import RenderCompareError, compare_rendered_pdfs
 from cvworkbench.ops.projects import (
     ProjectError,
     apply_project_patch,
@@ -267,6 +268,25 @@ def _print_diff_summary(summary: dict[str, Any]) -> None:
         ("deletions", str(summary.get("deletions", ""))),
     ]
     print_summary("diff", rows)
+
+
+def _print_compare_summary(summary: dict[str, Any]) -> None:
+    run_a = summary.get("run_a", {})
+    run_b = summary.get("run_b", {})
+    rows: list[tuple[str, str | Path]] = [
+        ("run_a", str(run_a.get("run_id", ""))),
+        ("run_b", str(run_b.get("run_id", ""))),
+        ("pdf_a", str(run_a.get("pdf", ""))),
+        ("pdf_b", str(run_b.get("pdf", ""))),
+        ("status", str(summary.get("status", ""))),
+        ("page_count_a", str(summary.get("page_count_a", ""))),
+        ("page_count_b", str(summary.get("page_count_b", ""))),
+        ("identical_pages", str(summary.get("identical_pages", ""))),
+        ("different_pages", str(summary.get("different_pages", ""))),
+        ("report", str(summary.get("report", ""))),
+        ("summary_json", str(summary.get("summary_json", ""))),
+    ]
+    print_summary("compare", rows)
 
 
 def _print_doctor_summary(rows: list[tuple[str, str | Path]]) -> None:
@@ -6761,6 +6781,100 @@ def diff(
     _print_diff_summary(summary)
     if diff_text:
         typer.echo(diff_text)
+
+
+@app.command()
+def compare(
+    run_a: Annotated[
+        str,
+        typer.Option(
+            "--run-a",
+            help="Run id or path for side A",
+        ),
+    ],
+    run_b: Annotated[
+        str,
+        typer.Option(
+            "--run-b",
+            help="Run id or path for side B",
+        ),
+    ],
+    out_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--out-dir",
+            help="Directory to write rasterized pages and the HTML report",
+        ),
+    ] = None,
+    dpi: Annotated[
+        int,
+        typer.Option(
+            "--dpi",
+            help="Rasterization DPI for PDF pages",
+        ),
+    ] = 144,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    configure_output_mode(plain, json_output)
+    try:
+        result = compare_rendered_pdfs(
+            config_path=config,
+            run_a=run_a,
+            run_b=run_b,
+            out_dir=out_dir,
+            dpi=dpi,
+        )
+    except RenderCompareError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    summary = {
+        "command": "compare",
+        "status": result.status,
+        "run_a": {
+            "run_id": result.run_a.run_id,
+            "path": str(result.run_a.path),
+            "pdf": str(result.pdf_a),
+        },
+        "run_b": {
+            "run_id": result.run_b.run_id,
+            "path": str(result.run_b.path),
+            "pdf": str(result.pdf_b),
+        },
+        "page_count_a": sum(1 for page in result.pages if page.image_a is not None),
+        "page_count_b": sum(1 for page in result.pages if page.image_b is not None),
+        "identical_pages": sum(1 for page in result.pages if page.identical),
+        "different_pages": sum(1 for page in result.pages if not page.identical),
+        "out_dir": str(result.out_dir),
+        "report": str(result.report_path),
+        "summary_json": str(result.summary_path),
+    }
+
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(json.dumps(summary, indent=2, sort_keys=True))
+        return
+
+    _print_compare_summary(summary)
 
 
 @app.command()

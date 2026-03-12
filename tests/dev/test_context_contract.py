@@ -113,8 +113,10 @@ def test_project_docs_surface_comparison_and_exact_url_keying() -> None:
     contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
 
     assert "diff --artifact canonical --run-a <base-run-id-or-path>" in quickstart
+    assert "compare --run-a <base-run-id-or-path>" in quickstart
     assert "projects/<project-id>/<run-id>" in quickstart
     assert "diff --artifact canonical --run-a <base-run>" in contract
+    assert "compare --run-a <base-run>" in contract
     assert "Registry ids are keyed from the exact URL string" in ingestion
     assert "--job-file" in ingestion
 

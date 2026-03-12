@@ -247,11 +247,14 @@ uv run cvw build --variant base --format md,pdf,docx
 uv run cvw build --project <project-id> --format md,pdf,docx
 uv run cvw diff --artifact canonical --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id>
 uv run cvw diff --artifact resume --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id> --format json
+uv run cvw compare --run-a <base-run-id-or-path> --run-b projects/<project-id>/<run-id>
 ```
 
 Use the explicit run ids printed by `build` or `project show`; `diff` is most
 useful when you choose the exact baseline you want to compare rather than
-assuming "latest" means the right thing.
+assuming "latest" means the right thing. `diff` stays semantic and textual;
+`compare` rasterizes the two PDFs and writes a side-by-side HTML report plus
+page image hashes under `var/compare/`.
 
 Direct project creation when you already know the base variant:
 
