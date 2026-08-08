@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,6 +82,13 @@ class SyncResult:
     site: SiteSyncConfig
     plan: SyncPlan
     branch: str | None
+
+
+@dataclass(frozen=True)
+class _StagedWrite:
+    destination: Path
+    staged: Path
+    backup: Path | None
 
 
 def load_site_sync(path: Path) -> SiteSyncConfig:
@@ -237,14 +246,62 @@ def _plan_sync(
 
 
 def _apply_plan(plan: SyncPlan) -> None:
-    for source, dest in plan.copy_ops:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, dest)
+    writes: list[tuple[Path | None, Path, str | None]] = [
+        (source, destination, None) for source, destination in plan.copy_ops
+    ]
     if plan.frontmatter_content:
-        plan.frontmatter_path.write_text(plan.frontmatter_content)
+        writes.append((None, plan.frontmatter_path, plan.frontmatter_content))
     if plan.manifest_content:
-        plan.manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        plan.manifest_path.write_text(plan.manifest_content)
+        writes.append((None, plan.manifest_path, plan.manifest_content))
+
+    staged_writes: list[_StagedWrite] = []
+    applied: list[_StagedWrite] = []
+    try:
+        for source, destination, content in writes:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            staged = _temporary_sibling(destination, "stage")
+            if source is not None:
+                shutil.copy2(source, staged)
+            else:
+                staged.write_text(content or "")
+            backup: Path | None = None
+            if destination.exists():
+                backup = _temporary_sibling(destination, "backup")
+                shutil.copy2(destination, backup)
+            staged_writes.append(
+                _StagedWrite(destination=destination, staged=staged, backup=backup)
+            )
+
+        for staged_write in staged_writes:
+            os.replace(staged_write.staged, staged_write.destination)
+            applied.append(staged_write)
+    except OSError as exc:
+        rollback_errors: list[OSError] = []
+        for staged_write in reversed(applied):
+            try:
+                if staged_write.backup is None:
+                    staged_write.destination.unlink(missing_ok=True)
+                else:
+                    os.replace(staged_write.backup, staged_write.destination)
+            except OSError as rollback_exc:
+                rollback_errors.append(rollback_exc)
+        if rollback_errors:
+            raise SyncError("Site sync failed and rollback was incomplete") from exc
+        raise SyncError("Site sync failed; prior artifacts were restored") from exc
+    finally:
+        for staged_write in staged_writes:
+            staged_write.staged.unlink(missing_ok=True)
+            if staged_write.backup is not None:
+                staged_write.backup.unlink(missing_ok=True)
+
+
+def _temporary_sibling(destination: Path, role: str) -> Path:
+    descriptor, raw_path = tempfile.mkstemp(
+        prefix=f".{destination.name}.cvw-{role}-",
+        dir=destination.parent,
+    )
+    os.close(descriptor)
+    return Path(raw_path)
 
 
 def _validate_publish_policy(variant: Variant, publish: PublishConfig) -> None:

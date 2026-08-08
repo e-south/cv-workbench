@@ -16,9 +16,10 @@ navigation:
   contact fields.
 - Authored CV preparation validates DOCX/PDF correspondence, rejects macros,
   removes prohibited contact and section content, strips hidden PDF payloads,
-  rejects hidden or non-HTTPS links, anchors section removal to exact headings,
-  and validates that every removed glyph falls inside a policy-derived region
-  while every surviving glyph retains its visual geometry.
+  rejects hidden or non-HTTPS links and non-text visual payloads that cannot be
+  verified, anchors section removal to exact headings, and validates that every
+  removed glyph falls inside a policy-derived region while every surviving
+  glyph retains its visual geometry.
 - Site sync reparses the PDF and validates current variant policy and artifact
   hash before writing. The site receives a sanitized provenance manifest, not
   source paths, authored-source hashes, or private SoT hashes.

@@ -238,6 +238,46 @@ def test_validate_public_pdf_accepts_visible_https_link(tmp_path: Path) -> None:
     )
 
 
+def test_validate_public_pdf_rejects_raster_content(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "raster.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Example Person")
+    pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 10, 10), False)
+    pixmap.clear_with(0)
+    page.insert_image(pymupdf.Rect(72, 90, 82, 100), pixmap=pixmap)
+    document.save(source_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="unverifiable raster content"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
+def test_validate_public_pdf_rejects_complex_vector_content(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "vector.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Example Person")
+    page.draw_circle((100, 100), 10, color=(0, 0, 0))
+    document.save(source_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="unverifiable vector content"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
 def test_prepare_public_pdf_rejects_truncated_export(tmp_path: Path) -> None:
     config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
     source_pdf = tmp_path / "truncated.pdf"

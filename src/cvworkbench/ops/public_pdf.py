@@ -172,6 +172,7 @@ def validate_public_pdf(
             raise PublicPdfError(f"Public PDF must not be encrypted: {path}")
         if document.embfile_count():
             raise PublicPdfError(f"Public PDF must not contain embedded files: {path}")
+        _validate_verifiable_visual_content(document)
         _validate_pdf_links(document)
         text = "\n".join(page.get_text() for page in document)
     finally:
@@ -342,6 +343,27 @@ def _validate_pdf_links(document: pymupdf.Document) -> None:
             ):
                 raise PublicPdfError(
                     f"Public PDF contains an unsafe or hidden link on page {page_index + 1}"
+                )
+
+
+def _validate_verifiable_visual_content(document: pymupdf.Document) -> None:
+    for page_index, page in enumerate(document):
+        if page.get_images(full=True):
+            raise PublicPdfError(
+                f"Public PDF contains unverifiable raster content on page {page_index + 1}"
+            )
+        if any(True for _ in page.annots()):
+            raise PublicPdfError(
+                f"Public PDF contains unsupported annotations on page {page_index + 1}"
+            )
+        if any(True for _ in page.widgets()):
+            raise PublicPdfError(
+                f"Public PDF contains unsupported form widgets on page {page_index + 1}"
+            )
+        for drawing in page.get_drawings():
+            if any(item[0] != "re" for item in drawing.get("items", [])):
+                raise PublicPdfError(
+                    f"Public PDF contains unverifiable vector content on page {page_index + 1}"
                 )
 
 

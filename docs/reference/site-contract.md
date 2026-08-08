@@ -44,6 +44,10 @@ writes a sanitized manifest containing the public path, artifact hash, variant,
 and disclosure policy. Source paths, SoT hashes, and private content never cross
 the site boundary.
 
+All changed outputs are staged before replacement. If any replacement fails,
+sync restores every previously replaced artifact before returning an error, so
+the PDF, frontmatter, and manifest cannot remain at mixed generations.
+
 The sync command defaults to local updates. PR sync is opt-in and additionally
 requires a clean Git target before it creates a branch.
 

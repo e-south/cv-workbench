@@ -24,7 +24,8 @@ Keep both inputs outside git:
 The preparation command verifies token-frequency coverage from DOCX to PDF and
 from PDF to DOCX, removes fields and sections prohibited by
 `config/publish.yaml`, strips hidden or embedded payloads, rejects hidden or
-non-HTTPS links, and validates the result before replacing
+non-HTTPS links, rejects raster or complex vector content that cannot be
+verified against the text policy, and validates the result before replacing
 `var/publish/<variant>/cv.pdf`. The manifest records content hashes and the
 transformation without publishing local paths.
 
@@ -49,7 +50,8 @@ uv run cvw sync --mode local --plain
 Preparation and sync fail closed when the source pair is unrelated, the PDF is
 invalid or encrypted, embedded files are present, a forbidden phone or section
 survives, an unauthorized email or hidden link appears, provenance or policy
-metadata disagrees, a destination escapes the configured site repository, or
+metadata disagrees, a destination escapes the configured site repository, the
+PDF contains unverifiable raster, annotation, form, or complex-vector data, or
 any removed character falls outside an exact policy-derived redaction region,
 or any surviving character changes its page, order, origin, bounding box, font,
 size, style flags, or color. Section removal starts at the exact heading line,

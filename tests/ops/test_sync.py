@@ -16,9 +16,11 @@ import json
 from pathlib import Path
 
 import pymupdf
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from cvworkbench.ops import syncing
 from cvworkbench.ops.syncing import load_site_sync
 from tests.utils import strip_ansi
 
@@ -222,6 +224,47 @@ def test_sync_local_publishes_only_pdf_and_sanitized_manifest(tmp_path: Path) ->
     assert '"forbidden_contact_fields": ["phone"]' in manifest_text
     assert '"forbidden_sections": ["references"]' in manifest_text
     assert '"required_exclude_tags": ["private"]' in manifest_text
+
+
+def test_sync_local_rolls_back_every_artifact_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    site_repo, workbench_config, site_config = _write_workspace(tmp_path)
+    manifest_path = site_repo / "scripts/cv/public-cv-manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("old manifest\n")
+    destinations = {
+        site_repo / "public/cv/cv.pdf": b"old",
+        site_repo / "src/content/page-cv/cv.md": (
+            site_repo / "src/content/page-cv/cv.md"
+        ).read_bytes(),
+        manifest_path: b"old manifest\n",
+    }
+    replace = syncing.os.replace
+    staged_replacements = 0
+
+    def fail_second_staged_replace(source: Path | str, destination: Path | str) -> None:
+        nonlocal staged_replacements
+        if ".cvw-stage-" in Path(source).name:
+            staged_replacements += 1
+            if staged_replacements == 2:
+                raise OSError("simulated replacement failure")
+        replace(source, destination)
+
+    monkeypatch.setattr(syncing.os, "replace", fail_second_staged_replace)
+
+    result = CliRunner().invoke(
+        app,
+        ["sync", "--config", str(workbench_config), "--site-config", str(site_config)],
+    )
+
+    assert result.exit_code != 0
+    assert "prior artifacts were restored" in strip_ansi(result.stderr)
+    for destination, original in destinations.items():
+        assert destination.read_bytes() == original
+    assert not list(site_repo.rglob("*.cvw-stage-*"))
+    assert not list(site_repo.rglob("*.cvw-backup-*"))
 
 
 def test_sync_defaults_to_config_mode(tmp_path: Path) -> None:
