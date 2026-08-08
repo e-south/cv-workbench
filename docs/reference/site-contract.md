@@ -31,12 +31,13 @@ so a resume build or test cannot replace the reviewed authored artifact.
 Before its first write, sync verifies:
 
 - the source is a parseable, unencrypted PDF without embedded files;
-- the deterministic build manifest names the selected variant and PDF;
+- the manifest identifies an authored PDF publication produced by semantic
+  redaction and names the selected variant and PDF;
 - the PDF SHA-256 matches the build manifest;
 - manifest selection fields match the current variant;
 - all required exclusion tags are present; and
 - forbidden contact fields and sections are absent; and
-- no third-party email survives the public contact allowlist.
+- no third-party email or hidden/unsafe link survives the public allowlist.
 
 Sync copies only the PDF, updates its configured page-frontmatter path, and
 writes a sanitized manifest containing the public path, artifact hash, variant,
@@ -54,7 +55,9 @@ variants, required exclusion tags, forbidden contact fields, and forbidden
 sections.
 
 `repo_path` in the site sync config is resolved relative to the config file
-location.
+location. Every configured destination must remain beneath that resolved
+repository; absolute and parent-traversal destinations are rejected before the
+first write.
 
 Sync fails fast if the repo, page, manifest, artifact, or policy contract is
 missing or inconsistent. It does not fall back to Markdown, an older PDF, or a

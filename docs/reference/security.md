@@ -16,7 +16,8 @@ navigation:
   contact fields.
 - Authored CV preparation validates DOCX/PDF correspondence, rejects macros,
   removes prohibited contact and section content, strips hidden PDF payloads,
-  and validates extracted text after redaction.
+  rejects hidden or non-HTTPS links, and validates extracted text and visual
+  character geometry after redaction.
 - Site sync reparses the PDF and validates current variant policy and artifact
   hash before writing. The site receives a sanitized provenance manifest, not
   source paths, authored-source hashes, or private SoT hashes.

@@ -21,11 +21,12 @@ Keep both inputs outside git:
 - the canonical editable `.docx`;
 - a PDF exported from that DOCX with the authoring application.
 
-The preparation command verifies that the PDF's extracted vocabulary closely
-matches the DOCX, removes fields and sections prohibited by
-`config/publish.yaml`, strips hidden or embedded payloads, and validates the
-result before replacing `var/publish/<variant>/cv.pdf`. The manifest records
-content hashes and the transformation without publishing local paths.
+The preparation command verifies token-frequency coverage from DOCX to PDF and
+from PDF to DOCX, removes fields and sections prohibited by
+`config/publish.yaml`, strips hidden or embedded payloads, rejects hidden or
+non-HTTPS links, and validates the result before replacing
+`var/publish/<variant>/cv.pdf`. The manifest records content hashes and the
+transformation without publishing local paths.
 
 ## Prepare
 
@@ -47,10 +48,11 @@ uv run cvw sync --mode local --plain
 
 Preparation and sync fail closed when the source pair is unrelated, the PDF is
 invalid or encrypted, embedded files are present, a forbidden phone or section
-survives, an unauthorized email appears, provenance hashes disagree, or any
-surviving character changes its page, order, origin, bounding box, font, size,
-style flags, or color. Do not replace this lane with a Markdown-to-PDF rebuild
-when layout fidelity is the requirement.
+survives, an unauthorized email or hidden link appears, provenance or policy
+metadata disagrees, a destination escapes the configured site repository, or
+any surviving character changes its page, order, origin, bounding box, font,
+size, style flags, or color. Do not replace this lane with a Markdown-to-PDF
+rebuild when layout fidelity is the requirement.
 
 Continue with [the site contract](../reference/site-contract.md) for ownership
 and write-boundary details, then [security](../reference/security.md) for the

@@ -17,9 +17,11 @@ import os
 import re
 import tempfile
 import zipfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from xml.etree import ElementTree
 
 import pymupdf
@@ -31,7 +33,8 @@ from cvworkbench.ops.publish import PublishConfig, load_publish_config
 from cvworkbench.variants import Variant, load_variant
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
-PHONE_PATTERN = re.compile(r"(?<!\w)(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}(?!\w)")
+PHONE_CANDIDATE_PATTERN = re.compile(r"(?<!\w)\+?\d(?:[\d\s().\-\u2010-\u2015]*\d)?(?!\w)")
+MIN_SOURCE_TOKEN_COVERAGE = 0.9
 
 
 class PublicPdfError(RuntimeError):
@@ -54,6 +57,12 @@ class _PdfCharacter:
     size: float
     flags: int
     color: int
+
+
+@dataclass(frozen=True)
+class _SourceMatch:
+    pdf_token_coverage: float
+    docx_token_coverage: float
 
 
 def prepare_public_pdf(
@@ -80,10 +89,11 @@ def prepare_public_pdf(
     if source_pdf.resolve() == output_pdf.resolve():
         raise PublicPdfError("Authored source and public output must be different files")
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
+    person = _load_person(sot_path)
 
     document = _open_pdf(source_pdf)
     try:
-        redaction_count = _mark_private_content(document, publish)
+        redaction_count = _mark_private_content(document, publish, person)
         for page in document:
             page.apply_redactions(images=0, graphics=0, text=0)
         document.scrub(remove_links=False)
@@ -146,17 +156,22 @@ def validate_public_pdf(
             raise PublicPdfError(f"Public PDF must not be encrypted: {path}")
         if document.embfile_count():
             raise PublicPdfError(f"Public PDF must not contain embedded files: {path}")
+        _validate_pdf_links(document)
         text = "\n".join(page.get_text() for page in document)
     finally:
         document.close()
 
-    if "phone" in publish.forbidden_contact_fields and PHONE_PATTERN.search(text):
+    person = _load_person(sot_path)
+    forbidden_phone_digits = _forbidden_phone_digits(person, publish)
+    if any(
+        _matches_forbidden_phone(match.group(0), forbidden_phone_digits)
+        for match in PHONE_CANDIDATE_PATTERN.finditer(text)
+    ):
         raise PublicPdfError("Public PDF contains a forbidden phone number")
 
     observed_emails = {match.casefold() for match in EMAIL_PATTERN.findall(text)}
     allowed_emails: set[str] = set()
     if observed_emails:
-        person = _load_person(sot_path)
         if "email" in variant.contact_fields and "email" not in publish.forbidden_contact_fields:
             email = person.get("email")
             if isinstance(email, str) and email.strip():
@@ -258,12 +273,39 @@ def _coordinates_match(source: tuple[float, ...], public: tuple[float, ...]) -> 
     )
 
 
-def _mark_private_content(document: pymupdf.Document, publish: PublishConfig) -> int:
+def _validate_pdf_links(document: pymupdf.Document) -> None:
+    for page_index, page in enumerate(document):
+        word_rectangles = [pymupdf.Rect(*word[:4]) for word in page.get_text("words")]
+        for link in page.get_links():
+            uri = link.get("uri")
+            parsed = urlsplit(uri) if isinstance(uri, str) else None
+            link_rect = pymupdf.Rect(link["from"])
+            covers_visible_text = any(link_rect.intersects(rect) for rect in word_rectangles)
+            if (
+                link.get("kind") != pymupdf.LINK_URI
+                or parsed is None
+                or parsed.scheme.casefold() != "https"
+                or not parsed.hostname
+                or not covers_visible_text
+            ):
+                raise PublicPdfError(
+                    f"Public PDF contains an unsafe or hidden link on page {page_index + 1}"
+                )
+
+
+def _mark_private_content(
+    document: pymupdf.Document,
+    publish: PublishConfig,
+    person: dict[str, Any],
+) -> int:
     redaction_count = 0
-    if "phone" in publish.forbidden_contact_fields:
+    forbidden_phone_digits = _forbidden_phone_digits(person, publish)
+    if forbidden_phone_digits:
         for page in document:
             page_text = page.get_text()
-            for match in PHONE_PATTERN.finditer(page_text):
+            for match in PHONE_CANDIDATE_PATTERN.finditer(page_text):
+                if not _matches_forbidden_phone(match.group(0), forbidden_phone_digits):
+                    continue
                 for rect in page.search_for(match.group(0)):
                     page.add_redact_annot(rect, fill=(1, 1, 1), cross_out=False)
                     redaction_count += 1
@@ -271,6 +313,39 @@ def _mark_private_content(document: pymupdf.Document, publish: PublishConfig) ->
     for section in publish.forbidden_sections:
         redaction_count += _mark_section_and_following_pages(document, section)
     return redaction_count
+
+
+def _forbidden_phone_digits(
+    person: dict[str, Any],
+    publish: PublishConfig,
+) -> tuple[str, ...]:
+    if "phone" not in publish.forbidden_contact_fields:
+        return ()
+
+    raw = person.get("phone")
+    values = raw if isinstance(raw, list) else [raw]
+    digits = tuple(
+        normalized
+        for value in values
+        if isinstance(value, str)
+        if (normalized := re.sub(r"\D", "", value))
+    )
+    if not digits:
+        raise PublicPdfError("Phone publication policy requires phone data in the Source of Truth")
+    return digits
+
+
+def _matches_forbidden_phone(candidate: str, forbidden_digits: tuple[str, ...]) -> bool:
+    candidate_digits = re.sub(r"\D", "", candidate)
+    for expected in forbidden_digits:
+        if candidate_digits == expected:
+            return True
+        if len(expected) == 11 and expected.startswith("1") and candidate_digits == expected[1:]:
+            return True
+        if len(candidate_digits) == 11 and candidate_digits.startswith("1"):
+            if candidate_digits[1:] == expected:
+                return True
+    return False
 
 
 def _mark_section_and_following_pages(document: pymupdf.Document, section: str) -> int:
@@ -361,7 +436,7 @@ def _section_label(section: str) -> str:
     return section.replace("_", " ").replace("-", " ").strip().title()
 
 
-def _validate_authored_source(authored_source: Path, source_pdf: Path) -> float:
+def _validate_authored_source(authored_source: Path, source_pdf: Path) -> _SourceMatch:
     if not authored_source.exists():
         raise PublicPdfError(f"Authored source not found: {authored_source}")
     if authored_source.suffix.casefold() != ".docx":
@@ -386,14 +461,19 @@ def _validate_authored_source(authored_source: Path, source_pdf: Path) -> float:
     finally:
         source_document.close()
 
-    authored_tokens = set(_normalized_tokens(authored_text))
-    source_tokens = set(_normalized_tokens(source_text))
+    authored_tokens = Counter(_normalized_tokens(authored_text))
+    source_tokens = Counter(_normalized_tokens(source_text))
     if not authored_tokens or not source_tokens:
         raise PublicPdfError("Authored DOCX and exported PDF must both contain extractable text")
-    coverage = len(authored_tokens & source_tokens) / len(source_tokens)
-    if coverage < 0.9:
+    overlap = sum((authored_tokens & source_tokens).values())
+    pdf_coverage = overlap / source_tokens.total()
+    docx_coverage = overlap / authored_tokens.total()
+    if pdf_coverage < MIN_SOURCE_TOKEN_COVERAGE or docx_coverage < MIN_SOURCE_TOKEN_COVERAGE:
         raise PublicPdfError("Exported PDF does not correspond closely enough to the authored DOCX")
-    return coverage
+    return _SourceMatch(
+        pdf_token_coverage=pdf_coverage,
+        docx_token_coverage=docx_coverage,
+    )
 
 
 def _normalized_tokens(text: str) -> list[str]:
@@ -419,7 +499,7 @@ def _write_publication_manifest(
     variant: Variant,
     publish: PublishConfig,
     redaction_count: int,
-    source_match: float,
+    source_match: _SourceMatch,
 ) -> None:
     payload = {
         "schema_version": 1,
@@ -438,7 +518,8 @@ def _write_publication_manifest(
             "authored_sha256": _hash_file(authored_source),
             "exported_pdf_name": source_pdf.name,
             "exported_pdf_sha256": _hash_file(source_pdf),
-            "text_token_coverage": round(source_match, 6),
+            "pdf_token_coverage": round(source_match.pdf_token_coverage, 6),
+            "docx_token_coverage": round(source_match.docx_token_coverage, 6),
         },
         "transformation": {
             "kind": "semantic-redaction",

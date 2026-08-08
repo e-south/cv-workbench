@@ -27,7 +27,7 @@ from cvworkbench.ops.public_pdf import (
     validate_public_pdf,
     validate_public_pdf_layout,
 )
-from cvworkbench.ops.publish import load_publish_config
+from cvworkbench.ops.publish import PublishError, load_publish_config
 from cvworkbench.variants import load_variant
 
 
@@ -136,7 +136,8 @@ def test_prepare_public_pdf_preserves_content_and_removes_private_surfaces(
     )
     assert manifest["source"]["authored_name"] == "authored.docx"
     assert manifest["source"]["exported_pdf_name"] == "authored.pdf"
-    assert manifest["source"]["text_token_coverage"] >= 0.9
+    assert manifest["source"]["pdf_token_coverage"] >= 0.9
+    assert manifest["source"]["docx_token_coverage"] >= 0.9
     assert "phone" in manifest["transformation"]["forbidden_contact_fields"]
 
     first_bytes = result.output_pdf.read_bytes()
@@ -163,6 +164,113 @@ def test_validate_public_pdf_rejects_unauthorized_third_party_email(tmp_path: Pa
             publish=load_publish_config(publish_path),
             sot_path=sot_path,
         )
+
+
+def test_prepare_public_pdf_redacts_compact_phone_matching_source_of_truth(
+    tmp_path: Path,
+) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "authored.pdf"
+    authored_source = tmp_path / "authored.docx"
+    _write_docx(authored_source, "Example Person 5558675309 Education")
+    _write_pdf(source_pdf, ["Example Person | 5558675309\nEducation"])
+
+    result = prepare_public_pdf(
+        authored_source=authored_source,
+        source_pdf=source_pdf,
+        config_path=config_path,
+        variant_id="base",
+        publish_config_path=publish_path,
+        sot_path=sot_path,
+    )
+
+    with pymupdf.open(result.output_pdf) as document:
+        assert "5558675309" not in "\n".join(page.get_text() for page in document)
+
+
+def test_validate_public_pdf_rejects_hidden_contact_link(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unsafe-link.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Example Person")
+    page.insert_link(
+        {
+            "kind": pymupdf.LINK_URI,
+            "from": pymupdf.Rect(72, 100, 180, 112),
+            "uri": "mailto:advisor@example.org",
+        }
+    )
+    document.save(source_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="unsafe or hidden link"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
+def test_validate_public_pdf_accepts_visible_https_link(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "safe-link.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Profile")
+    link_rect = page.search_for("Profile")[0]
+    page.insert_link(
+        {
+            "kind": pymupdf.LINK_URI,
+            "from": link_rect,
+            "uri": "https://example.com/profile",
+        }
+    )
+    document.save(source_pdf)
+    document.close()
+
+    validate_public_pdf(
+        source_pdf,
+        variant=load_variant(variant_path),
+        publish=load_publish_config(publish_path),
+        sot_path=sot_path,
+    )
+
+
+def test_prepare_public_pdf_rejects_truncated_export(tmp_path: Path) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "truncated.pdf"
+    authored_source = tmp_path / "authored.docx"
+    _write_docx(
+        authored_source,
+        "Example Person Education Research Publications Teaching Service Honors "
+        "Experience Skills Projects Conferences Awards Affiliations Summary",
+    )
+    _write_pdf(source_pdf, ["Example Person"])
+
+    with pytest.raises(PublicPdfError, match="does not correspond closely enough"):
+        prepare_public_pdf(
+            authored_source=authored_source,
+            source_pdf=source_pdf,
+            config_path=config_path,
+            variant_id="base",
+            publish_config_path=publish_path,
+            sot_path=sot_path,
+        )
+
+
+def test_publish_config_rejects_unsupported_forbidden_contact_field(tmp_path: Path) -> None:
+    _, _, publish_path, _ = _write_workspace(tmp_path)
+    publish_path.write_text(
+        publish_path.read_text().replace(
+            "forbidden_contact_fields: [phone]",
+            "forbidden_contact_fields: [phone, location]",
+        )
+    )
+
+    with pytest.raises(PublishError, match="unsupported forbidden contact fields: location"):
+        load_publish_config(publish_path)
 
 
 def test_validate_public_pdf_layout_rejects_moved_surviving_text(tmp_path: Path) -> None:

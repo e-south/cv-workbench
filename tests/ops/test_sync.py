@@ -51,6 +51,9 @@ def _write_workspace(
         item.strip().strip('"') for item in order.strip("[]").split(",") if item.strip()
     ]
     (root / "local/sot").mkdir(parents=True)
+    (root / "local/sot/person.yaml").write_text(
+        "id: person\nname: Example Person\nphone: 555.867.5309\n"
+    )
     site_repo = root / "site"
     if site_exists:
         (site_repo / "src/content/cv").mkdir(parents=True)
@@ -69,6 +72,8 @@ def _write_workspace(
     (publish_dir / "manifest.json").write_text(
         json.dumps(
             {
+                "schema_version": 1,
+                "artifact_kind": "authored-pdf-publication",
                 "variant": {
                     "id": "base",
                     "exclude_tags": ["private"],
@@ -78,6 +83,12 @@ def _write_workspace(
                 "formats": ["pdf"],
                 "outputs": {"pdf": "cv.pdf"},
                 "output_hashes": {"pdf": pdf_hash},
+                "transformation": {
+                    "kind": "semantic-redaction",
+                    "forbidden_contact_fields": ["phone"],
+                    "forbidden_sections": ["references"],
+                    "redaction_count": 1,
+                },
             }
         )
         + "\n"
@@ -262,6 +273,43 @@ def test_sync_rejects_artifact_hash_mismatch(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "hash does not match" in strip_ansi(result.stderr)
+
+
+def test_sync_rejects_regular_build_manifest_without_authored_provenance(
+    tmp_path: Path,
+) -> None:
+    _, workbench_config, site_config = _write_workspace(tmp_path)
+    manifest_path = tmp_path / "var/publish/base/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.pop("artifact_kind")
+    manifest_path.write_text(json.dumps(manifest) + "\n")
+
+    result = CliRunner().invoke(
+        app,
+        ["sync", "--config", str(workbench_config), "--site-config", str(site_config)],
+    )
+
+    assert result.exit_code != 0
+    assert "not an authored PDF publication" in strip_ansi(result.stderr)
+
+
+def test_sync_rejects_manifest_destination_outside_site_repo(tmp_path: Path) -> None:
+    _, workbench_config, site_config = _write_workspace(tmp_path)
+    site_config.write_text(
+        site_config.read_text().replace(
+            "cv_manifest: scripts/cv/public-cv-manifest.json",
+            "cv_manifest: ../outside.json",
+        )
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["sync", "--config", str(workbench_config), "--site-config", str(site_config)],
+    )
+
+    assert result.exit_code != 0
+    assert "must remain inside the site repository" in strip_ansi(result.stderr)
+    assert not (tmp_path / "outside.json").exists()
 
 
 def test_sync_rejects_public_variant_with_forbidden_contact_field(tmp_path: Path) -> None:

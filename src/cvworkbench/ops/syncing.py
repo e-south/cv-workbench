@@ -103,13 +103,16 @@ def load_site_sync(path: Path) -> SiteSyncConfig:
         raise SyncError(f"Site repo path not found: {repo_path}")
     if not repo_path.is_dir():
         raise SyncError(f"Site repo path is not a directory: {repo_path}")
+    cv_pdf_name = Path(site.cv_pdf_name)
+    if cv_pdf_name.name != site.cv_pdf_name or cv_pdf_name.is_absolute():
+        raise SyncError("Site cv_pdf_name must be a single filename")
     return SiteSyncConfig(
         repo_path=repo_path,
         publish_variant=site.publish_variant,
-        cv_pdf_dir=Path(site.cv_pdf_dir),
+        cv_pdf_dir=_site_relative_path(repo_path, site.cv_pdf_dir, "cv_pdf_dir"),
         cv_pdf_name=site.cv_pdf_name,
-        cv_manifest=Path(site.cv_manifest),
-        cv_page=Path(site.cv_page),
+        cv_manifest=_site_relative_path(repo_path, site.cv_manifest, "cv_manifest"),
+        cv_page=_site_relative_path(repo_path, site.cv_page, "cv_page"),
         cv_page_frontmatter_key=site.cv_page_frontmatter_key,
     )
 
@@ -142,7 +145,7 @@ def sync_site(
     if not source_pdf.exists():
         raise SyncError(f"Missing PDF output: {source_pdf}")
     source_manifest = publish_dir / "manifest.json"
-    pdf_hash = _validate_public_artifact(source_pdf, source_manifest, variant)
+    pdf_hash = _validate_public_artifact(source_pdf, source_manifest, variant, publish)
     if publish is not None:
         try:
             validate_public_pdf(
@@ -266,6 +269,7 @@ def _validate_public_artifact(
     source_pdf: Path,
     manifest_path: Path,
     variant: Variant,
+    publish: PublishConfig | None,
 ) -> str:
     if not source_pdf.read_bytes().startswith(b"%PDF-"):
         raise SyncError(f"Public artifact is not a PDF: {source_pdf}")
@@ -277,6 +281,12 @@ def _validate_public_artifact(
         raise SyncError(f"Build manifest is invalid: {manifest_path}") from exc
     if not isinstance(manifest, dict):
         raise SyncError(f"Build manifest is invalid: {manifest_path}")
+    if manifest.get("schema_version") != 1:
+        raise SyncError("Build manifest schema does not match authored publication contract")
+    if manifest.get("artifact_kind") != "authored-pdf-publication":
+        raise SyncError("Build manifest is not an authored PDF publication")
+    if manifest.get("formats") != ["pdf"]:
+        raise SyncError("Build manifest must declare only the PDF publication format")
 
     manifest_variant = manifest.get("variant")
     if not isinstance(manifest_variant, dict) or manifest_variant.get("id") != variant.id:
@@ -297,6 +307,17 @@ def _validate_public_artifact(
     pdf_hash = _hash_file(source_pdf)
     if not isinstance(output_hashes, dict) or output_hashes.get("pdf") != pdf_hash:
         raise SyncError("Build manifest PDF hash does not match the artifact")
+    transformation = manifest.get("transformation")
+    if not isinstance(transformation, dict) or transformation.get("kind") != "semantic-redaction":
+        raise SyncError("Build manifest lacks the semantic-redaction provenance contract")
+    redaction_count = transformation.get("redaction_count")
+    if not isinstance(redaction_count, int) or isinstance(redaction_count, bool):
+        raise SyncError("Build manifest redaction count is invalid")
+    if publish is not None:
+        if transformation.get("forbidden_contact_fields") != publish.forbidden_contact_fields:
+            raise SyncError("Build manifest contact policy does not match publish policy")
+        if transformation.get("forbidden_sections") != publish.forbidden_sections:
+            raise SyncError("Build manifest section policy does not match publish policy")
     return pdf_hash
 
 
@@ -383,8 +404,22 @@ def _pdf_url(pdf_dir: Path, pdf_name: str) -> str:
 def _resolve_path(base: Path, value: str) -> Path:
     path = Path(value)
     if path.is_absolute():
-        return path
+        return path.resolve()
     return (base / path).resolve()
+
+
+def _site_relative_path(repo_path: Path, value: str, field: str) -> Path:
+    candidate = Path(value)
+    if candidate.is_absolute():
+        raise SyncError(f"Site {field} must be relative to the site repository")
+    destination = (repo_path / candidate).resolve()
+    try:
+        relative = destination.relative_to(repo_path)
+    except ValueError as exc:
+        raise SyncError(f"Site {field} must remain inside the site repository") from exc
+    if relative == Path("."):
+        raise SyncError(f"Site {field} must name a path inside the site repository")
+    return relative
 
 
 def _ensure_git_repo(repo_path: Path) -> None:

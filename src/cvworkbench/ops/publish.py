@@ -21,6 +21,9 @@ class PublishError(RuntimeError):
     pass
 
 
+SUPPORTED_FORBIDDEN_CONTACT_FIELDS = frozenset({"phone"})
+
+
 @dataclass(frozen=True)
 class PublishConfig:
     variants: list[str]
@@ -47,6 +50,14 @@ def load_publish_config(path: Path) -> PublishConfig:
     required_exclude_tags = _string_list(publish, "required_exclude_tags")
     forbidden_contact_fields = _string_list(publish, "forbidden_contact_fields")
     forbidden_sections = _string_list(publish, "forbidden_sections")
+    unsupported_contact_fields = sorted(
+        set(forbidden_contact_fields) - SUPPORTED_FORBIDDEN_CONTACT_FIELDS
+    )
+    if unsupported_contact_fields:
+        raise PublishError(
+            "Publish config contains unsupported forbidden contact fields: "
+            + ", ".join(unsupported_contact_fields)
+        )
 
     return PublishConfig(
         variants=variants,

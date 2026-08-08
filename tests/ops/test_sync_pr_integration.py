@@ -71,14 +71,23 @@ def test_sync_pr_creates_branch_and_pr(tmp_path: Path) -> None:
     (publish_dir / "manifest.json").write_text(
         json.dumps(
             {
+                "schema_version": 1,
+                "artifact_kind": "authored-pdf-publication",
                 "variant": {
                     "id": "base",
                     "exclude_tags": variant.exclude_tags,
                     "contact_fields": variant.contact_fields,
                     "order": variant.order,
                 },
+                "formats": ["pdf"],
                 "outputs": {"pdf": "cv.pdf"},
                 "output_hashes": {"pdf": hashlib.sha256(pdf_bytes).hexdigest()},
+                "transformation": {
+                    "kind": "semantic-redaction",
+                    "forbidden_contact_fields": ["phone"],
+                    "forbidden_sections": ["references"],
+                    "redaction_count": 0,
+                },
             }
         )
         + "\n"
