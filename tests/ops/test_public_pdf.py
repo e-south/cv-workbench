@@ -287,6 +287,22 @@ def test_validate_public_pdf_rejects_invalid_isbn_labeled_compact_phone(
         )
 
 
+def test_validate_public_pdf_rejects_ean13_phone_outside_isbn_prefixes(
+    tmp_path: Path,
+) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unsafe.pdf"
+    _write_pdf(source_pdf, ["ISBN-13 2125550199009"])
+
+    with pytest.raises(PublicPdfError, match="forbidden phone number"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
 def test_prepare_public_pdf_redacts_compact_phone_matching_source_of_truth(
     tmp_path: Path,
 ) -> None:

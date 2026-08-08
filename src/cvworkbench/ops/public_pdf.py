@@ -640,6 +640,8 @@ def _is_labeled_valid_isbn(candidate: str, *, preceding_text: str) -> bool:
             sum(weight * value for weight, value in zip(range(10, 0, -1), digits, strict=True)) % 11
             == 0
         )
+    if not candidate.startswith(("978", "979")):
+        return False
     weighted_sum = sum(
         value * (1 if index % 2 == 0 else 3) for index, value in enumerate(digits[:-1])
     )
