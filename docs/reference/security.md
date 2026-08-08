@@ -21,9 +21,10 @@ navigation:
   reviewed rectangle-layout fingerprint, anchors section removal to exact
   headings, rejects non-terminal forbidden sections, recognizes typographic
   phone separators and third-party phone shapes without treating bibliographic
-  ranges or compact ISBN-like identifiers as contacts, and validates
-  that every removed glyph falls inside a policy-derived region while every
-  surviving glyph and approved vector graphic retains its visual geometry.
+  ranges or labeled, checksum-valid ISBN-10/ISBN-13 identifiers as contacts,
+  and validates that every removed glyph falls inside a policy-derived region
+  while every surviving glyph and approved vector graphic retains its visual
+  geometry.
 - Site sync reparses the PDF and validates current variant policy and artifact
   hash before writing. The site receives a sanitized provenance manifest, not
   source paths, authored-source hashes, or private SoT hashes.
