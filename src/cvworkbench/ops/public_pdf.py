@@ -34,7 +34,14 @@ from cvworkbench.ops.publish import PublishConfig, load_publish_config
 from cvworkbench.variants import Variant, load_variant
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
-PHONE_CANDIDATE_PATTERN = re.compile(r"(?<!\w)\+?\d(?:[\d\s().\-\u2010-\u2015]*\d)?(?!\w)")
+PHONE_CANDIDATE_PATTERN = re.compile(
+    r"(?<!\w)(?:"
+    r"(?:\+?1[ .\-]?)?(?:\(\d{3}\)|\d{3})[ .\-]\d{3}[ .\-]\d{4}"
+    r"|\+\d{1,3}(?:[ .\-]\(?\d{1,4}\)?){2,5}"
+    r"|\+?\d{10,15}"
+    r"|\d{3}[ .\-]\d{4}"
+    r")(?!\w)"
+)
 MIN_SOURCE_TOKEN_COVERAGE = 0.9
 LINK_LABEL_TOLERANCE_POINTS = 3.0
 
@@ -111,7 +118,7 @@ def prepare_public_pdf(
     document = _open_pdf(source_pdf)
     try:
         source_visual_fingerprint = _validate_source_visual_contract(document, publish)
-        redaction_plan = _mark_private_content(document, publish, person)
+        redaction_plan = _mark_private_content(document, publish, person, variant)
         for page in document:
             page.apply_redactions(images=0, graphics=0, text=0)
         document.scrub(remove_links=False)
@@ -197,7 +204,7 @@ def validate_public_pdf(
         document.close()
 
     forbidden_phone_digits = _forbidden_phone_digits(person, publish)
-    if any(
+    if forbidden_phone_digits and any(
         _matches_forbidden_phone(match.group(0), forbidden_phone_digits)
         for match in PHONE_CANDIDATE_PATTERN.finditer(text)
     ):
@@ -259,6 +266,13 @@ def validate_public_pdf_layout(
                     raise PublicPdfError(
                         f"Public PDF layout drift on page {page_index + 1}: {label} changed"
                     )
+
+            if _visual_fingerprint_for_page(source_page) != _visual_fingerprint_for_page(
+                public_page
+            ):
+                raise PublicPdfError(
+                    f"Public PDF layout drift on page {page_index + 1}: graphics changed"
+                )
 
             source_characters = _pdf_characters(source_page)
             public_characters = _pdf_characters(public_page)
@@ -451,26 +465,38 @@ def _validate_source_visual_contract(
 def _visual_fingerprint(document: pymupdf.Document) -> str:
     drawings: list[dict[str, Any]] = []
     for page_index, page in enumerate(document):
-        for drawing in page.get_drawings():
-            drawings.append(
-                {
-                    "page": page_index,
-                    "type": drawing.get("type"),
-                    "rect": _canonical_visual_value(drawing.get("rect")),
-                    "fill": _canonical_visual_value(drawing.get("fill")),
-                    "color": _canonical_visual_value(drawing.get("color")),
-                    "width": _canonical_visual_value(drawing.get("width")),
-                    "dashes": drawing.get("dashes"),
-                    "close_path": drawing.get("closePath"),
-                    "fill_opacity": _canonical_visual_value(drawing.get("fill_opacity")),
-                    "stroke_opacity": _canonical_visual_value(drawing.get("stroke_opacity")),
-                    "even_odd": drawing.get("even_odd"),
-                    "layer": drawing.get("layer"),
-                    "items": _canonical_visual_value(drawing.get("items", [])),
-                }
-            )
+        drawings.extend(
+            {"page": page_index, **drawing} for drawing in _canonical_page_drawings(page)
+        )
     payload = json.dumps(drawings, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+def _visual_fingerprint_for_page(page: pymupdf.Page) -> str:
+    payload = json.dumps(
+        _canonical_page_drawings(page), sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _canonical_page_drawings(page: pymupdf.Page) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": drawing.get("type"),
+            "rect": _canonical_visual_value(drawing.get("rect")),
+            "fill": _canonical_visual_value(drawing.get("fill")),
+            "color": _canonical_visual_value(drawing.get("color")),
+            "width": _canonical_visual_value(drawing.get("width")),
+            "dashes": drawing.get("dashes"),
+            "close_path": drawing.get("closePath"),
+            "fill_opacity": _canonical_visual_value(drawing.get("fill_opacity")),
+            "stroke_opacity": _canonical_visual_value(drawing.get("stroke_opacity")),
+            "even_odd": drawing.get("even_odd"),
+            "layer": drawing.get("layer"),
+            "items": _canonical_visual_value(drawing.get("items", [])),
+        }
+        for drawing in page.get_drawings()
+    ]
 
 
 def _canonical_visual_value(value: Any) -> Any:
@@ -489,6 +515,7 @@ def _mark_private_content(
     document: pymupdf.Document,
     publish: PublishConfig,
     person: dict[str, Any],
+    variant: Variant,
 ) -> _RedactionPlan:
     regions: list[_RedactionRegion] = []
     forbidden_phone_digits = _forbidden_phone_digits(person, publish)
@@ -498,16 +525,49 @@ def _mark_private_content(
             for match in PHONE_CANDIDATE_PATTERN.finditer(page_text):
                 if not _matches_forbidden_phone(match.group(0), forbidden_phone_digits):
                     continue
-                for rect in page.search_for(match.group(0)):
+                for rect in _phone_redaction_rects(page, match.group(0)):
                     region = _RedactionRegion(page_index=page_index, rect=tuple(rect))
                     if region in regions:
                         continue
-                    page.add_redact_annot(rect, fill=(1, 1, 1), cross_out=False)
+                    page.add_redact_annot(rect, fill=None, cross_out=False)
                     regions.append(region)
 
     for section in publish.forbidden_sections:
-        regions.extend(_mark_section_and_following_pages(document, section))
+        regions.extend(
+            _mark_terminal_section_and_following_pages(
+                document,
+                section,
+                allowed_sections=variant.order,
+            )
+        )
     return _RedactionPlan(count=len(regions), regions=tuple(regions))
+
+
+def _phone_redaction_rects(page: pymupdf.Page, candidate: str) -> list[pymupdf.Rect]:
+    separators = {"|", "•", "·"}
+    words = page.get_text("words")
+    redactions: list[pymupdf.Rect] = []
+    for match_rect in page.search_for(candidate):
+        rect = pymupdf.Rect(match_rect)
+        same_line_separators = [
+            pymupdf.Rect(*word[:4])
+            for word in words
+            if word[4] in separators
+            if abs(word[1] - rect.y0) <= 1
+            if abs(word[3] - rect.y1) <= 1
+        ]
+        preceding = [
+            separator for separator in same_line_separators if 0 <= rect.x0 - separator.x1 <= 6
+        ]
+        following = [
+            separator for separator in same_line_separators if 0 <= separator.x0 - rect.x1 <= 6
+        ]
+        if preceding:
+            rect |= max(preceding, key=lambda separator: separator.x1)
+        elif following:
+            rect |= min(following, key=lambda separator: separator.x0)
+        redactions.append(rect)
+    return redactions
 
 
 def _forbidden_phone_digits(
@@ -540,12 +600,14 @@ def _matches_forbidden_phone(candidate: str, forbidden_digits: tuple[str, ...]) 
         if len(candidate_digits) == 11 and candidate_digits.startswith("1"):
             if candidate_digits[1:] == expected:
                 return True
-    return False
+    return 7 <= len(candidate_digits) <= 15
 
 
-def _mark_section_and_following_pages(
+def _mark_terminal_section_and_following_pages(
     document: pymupdf.Document,
     section: str,
+    *,
+    allowed_sections: tuple[str, ...],
 ) -> list[_RedactionRegion]:
     label = _section_label(section)
     heading_page: int | None = None
@@ -569,6 +631,19 @@ def _mark_section_and_following_pages(
             raise PublicPdfError(f"Could not isolate forbidden section heading: {section}")
         return []
 
+    for allowed_section in allowed_sections:
+        allowed_label = _section_label(allowed_section)
+        for page_index in range(heading_page, document.page_count):
+            allowed_rect = _exact_line_rect(document[page_index], allowed_label)
+            if allowed_rect is None:
+                continue
+            follows_forbidden = page_index > heading_page or allowed_rect.y0 > heading_rect.y0
+            if follows_forbidden:
+                raise PublicPdfError(
+                    f"Forbidden section '{section}' must be terminal; "
+                    f"allowed section '{allowed_section}' follows it"
+                )
+
     regions: list[_RedactionRegion] = []
     for page_index in range(heading_page, document.page_count):
         page = document[page_index]
@@ -581,7 +656,7 @@ def _mark_section_and_following_pages(
             )
         else:
             rect = page.rect
-        page.add_redact_annot(rect, fill=(1, 1, 1), cross_out=False)
+        page.add_redact_annot(rect, fill=None, cross_out=False)
         regions.append(_RedactionRegion(page_index=page_index, rect=tuple(rect)))
     return regions
 
