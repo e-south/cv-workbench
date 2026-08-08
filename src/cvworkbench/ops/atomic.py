@@ -44,11 +44,7 @@ def replace_files_atomically(writes: list[tuple[Path, bytes]]) -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             staged = _temporary_sibling(destination, "stage")
             staged.write_bytes(content)
-            mode = (
-                stat.S_IMODE(destination.stat().st_mode)
-                if destination.exists()
-                else 0o644
-            )
+            mode = stat.S_IMODE(destination.stat().st_mode) if destination.exists() else 0o644
             staged.chmod(mode)
             backup: Path | None = None
             if destination.exists():
