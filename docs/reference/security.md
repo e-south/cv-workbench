@@ -19,8 +19,9 @@ navigation:
   restricts visible HTTPS links to exact Source of Truth targets and label-sized
   hitboxes, rejects non-text visual payloads that cannot be verified, pins the
   reviewed rectangle-layout fingerprint, anchors section removal to exact
-  headings, rejects non-terminal forbidden sections, recognizes third-party
-  phone shapes without treating bibliographic ranges as contacts, and validates
+  headings, rejects non-terminal forbidden sections, recognizes typographic
+  phone separators and third-party phone shapes without treating bibliographic
+  ranges or compact ISBN-like identifiers as contacts, and validates
   that every removed glyph falls inside a policy-derived region while every
   surviving glyph and approved vector graphic retains its visual geometry.
 - Site sync reparses the PDF and validates current variant policy and artifact

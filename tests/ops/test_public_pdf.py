@@ -23,7 +23,9 @@ from typer.testing import CliRunner
 from cvworkbench.cli import app
 from cvworkbench.ops import atomic
 from cvworkbench.ops.public_pdf import (
+    PHONE_CANDIDATE_PATTERN,
     PublicPdfError,
+    _matches_forbidden_phone,
     _visual_fingerprint,
     prepare_public_pdf,
     validate_public_pdf,
@@ -190,6 +192,36 @@ def test_validate_public_pdf_rejects_third_party_phone(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize("separator", [" ", "‐", "‑", "–", "—", " ", "−"])
+def test_phone_candidate_pattern_recognizes_typographic_separators(
+    separator: str,
+) -> None:
+    candidate = f"212{separator}555{separator}0199"
+
+    assert PHONE_CANDIDATE_PATTERN.fullmatch(candidate)
+    assert _matches_forbidden_phone(candidate, ("5558675309",))
+
+
+def test_validate_public_pdf_rejects_extracted_typographic_dash_phone(
+    tmp_path: Path,
+) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unsafe.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Advisor | 212–555–0199", fontname="china-s")
+    document.save(source_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="forbidden phone number"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
 def test_validate_public_pdf_does_not_treat_citation_numbers_as_phones(
     tmp_path: Path,
 ) -> None:
@@ -199,6 +231,21 @@ def test_validate_public_pdf_does_not_treat_citation_numbers_as_phones(
         source_pdf,
         ["Nat Chem Biol 19, 951-961 (2023)\nACS Omega 2022 7 (22), 18331-18338"],
     )
+
+    validate_public_pdf(
+        source_pdf,
+        variant=load_variant(variant_path),
+        publish=load_publish_config(publish_path),
+        sot_path=sot_path,
+    )
+
+
+def test_validate_public_pdf_does_not_treat_compact_isbns_as_phones(
+    tmp_path: Path,
+) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "safe.pdf"
+    _write_pdf(source_pdf, ["ISBN-10 0123456789\nISBN-13 9780123456786"])
 
     validate_public_pdf(
         source_pdf,
@@ -473,6 +520,26 @@ def test_prepare_public_pdf_preserves_approved_graphics_during_redaction(
 
     with pymupdf.open(result.output_pdf) as public:
         assert _visual_fingerprint(public) == source_fingerprint
+
+
+def test_visual_fingerprint_includes_vector_line_styles() -> None:
+    def fingerprint(*, line_cap: int, line_join: int) -> str:
+        document = pymupdf.open()
+        page = document.new_page()
+        page.draw_rect(
+            pymupdf.Rect(72, 72, 120, 100),
+            color=(0, 0, 0),
+            width=4,
+            lineCap=line_cap,
+            lineJoin=line_join,
+        )
+        result = _visual_fingerprint(document)
+        document.close()
+        return result
+
+    baseline = fingerprint(line_cap=0, line_join=0)
+    assert fingerprint(line_cap=0, line_join=1) != baseline
+    assert fingerprint(line_cap=1, line_join=0) != baseline
 
 
 def test_prepare_public_pdf_restores_pdf_and_manifest_when_replace_fails(

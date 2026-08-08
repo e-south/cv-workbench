@@ -34,13 +34,15 @@ from cvworkbench.ops.publish import PublishConfig, load_publish_config
 from cvworkbench.variants import Variant, load_variant
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+PHONE_SEPARATOR_PATTERN = r"[ .\-\u00a0\u2010-\u2015\u202f\u2212]"
 PHONE_CANDIDATE_PATTERN = re.compile(
-    r"(?<!\w)(?:"
-    r"(?:\+?1[ .\-]?)?(?:\(\d{3}\)|\d{3})[ .\-]\d{3}[ .\-]\d{4}"
-    r"|\+\d{1,3}(?:[ .\-]\(?\d{1,4}\)?){2,5}"
-    r"|\+?\d{10,15}"
-    r"|\d{3}[ .\-]\d{4}"
-    r")(?!\w)"
+    rf"(?<!\w)(?:"
+    rf"(?:\+?1{PHONE_SEPARATOR_PATTERN}?)?(?:\(\d{{3}}\)|\d{{3}})"
+    rf"{PHONE_SEPARATOR_PATTERN}\d{{3}}{PHONE_SEPARATOR_PATTERN}\d{{4}}"
+    rf"|\+\d{{1,3}}(?:{PHONE_SEPARATOR_PATTERN}\(?\d{{1,4}}\)?){{2,5}}"
+    rf"|\+?\d{{10,15}}"
+    rf"|\d{{3}}{PHONE_SEPARATOR_PATTERN}\d{{4}}"
+    rf")(?!\w)"
 )
 MIN_SOURCE_TOKEN_COVERAGE = 0.9
 LINK_LABEL_TOLERANCE_POINTS = 3.0
@@ -488,6 +490,8 @@ def _canonical_page_drawings(page: pymupdf.Page) -> list[dict[str, Any]]:
             "color": _canonical_visual_value(drawing.get("color")),
             "width": _canonical_visual_value(drawing.get("width")),
             "dashes": drawing.get("dashes"),
+            "line_cap": _canonical_visual_value(drawing.get("lineCap")),
+            "line_join": _canonical_visual_value(drawing.get("lineJoin")),
             "close_path": drawing.get("closePath"),
             "fill_opacity": _canonical_visual_value(drawing.get("fill_opacity")),
             "stroke_opacity": _canonical_visual_value(drawing.get("stroke_opacity")),
@@ -600,6 +604,8 @@ def _matches_forbidden_phone(candidate: str, forbidden_digits: tuple[str, ...]) 
         if len(candidate_digits) == 11 and candidate_digits.startswith("1"):
             if candidate_digits[1:] == expected:
                 return True
+    if re.fullmatch(r"\d{10,15}", candidate):
+        return False
     return 7 <= len(candidate_digits) <= 15
 
 
