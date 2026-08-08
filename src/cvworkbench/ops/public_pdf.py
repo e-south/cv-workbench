@@ -45,6 +45,17 @@ class PublicPdfResult:
     redaction_count: int
 
 
+@dataclass(frozen=True)
+class _PdfCharacter:
+    value: str
+    origin: tuple[float, float]
+    bbox: tuple[float, float, float, float]
+    font: str
+    size: float
+    flags: int
+    color: int
+
+
 def prepare_public_pdf(
     *,
     authored_source: Path,
@@ -95,6 +106,7 @@ def prepare_public_pdf(
                 publish=publish,
                 sot_path=sot_path,
             )
+            validate_public_pdf_layout(source_pdf, temporary_pdf)
             os.replace(temporary_pdf, output_pdf)
         finally:
             temporary_pdf.unlink(missing_ok=True)
@@ -158,6 +170,92 @@ def validate_public_pdf(
         marker = _section_label(section).casefold()
         if re.search(rf"\b{re.escape(marker)}\b", normalized_text):
             raise PublicPdfError(f"Public PDF contains forbidden section heading: {section}")
+
+
+def validate_public_pdf_layout(source_path: Path, public_path: Path) -> None:
+    """Prove that sanitization did not reflow or restyle surviving text."""
+
+    source = _open_pdf(source_path)
+    public = _open_pdf(public_path)
+    try:
+        if source.page_count != public.page_count:
+            raise PublicPdfError("Public PDF layout drift: page count changed")
+
+        for page_index in range(source.page_count):
+            source_page = source[page_index]
+            public_page = public[page_index]
+            if source_page.rotation != public_page.rotation:
+                raise PublicPdfError(
+                    f"Public PDF layout drift on page {page_index + 1}: rotation changed"
+                )
+            for label, source_rect, public_rect in (
+                ("page", source_page.rect, public_page.rect),
+                ("media box", source_page.mediabox, public_page.mediabox),
+                ("crop box", source_page.cropbox, public_page.cropbox),
+            ):
+                if not _coordinates_match(tuple(source_rect), tuple(public_rect)):
+                    raise PublicPdfError(
+                        f"Public PDF layout drift on page {page_index + 1}: {label} changed"
+                    )
+
+            source_characters = _pdf_characters(source_page)
+            public_characters = _pdf_characters(public_page)
+            source_cursor = 0
+            for public_character in public_characters:
+                while source_cursor < len(source_characters) and not _characters_match(
+                    source_characters[source_cursor], public_character
+                ):
+                    source_cursor += 1
+                if source_cursor == len(source_characters):
+                    value = repr(public_character.value)
+                    raise PublicPdfError(
+                        "Public PDF layout drift on page "
+                        f"{page_index + 1} near character {value}"
+                    )
+                source_cursor += 1
+    finally:
+        public.close()
+        source.close()
+
+
+def _pdf_characters(page: pymupdf.Page) -> list[_PdfCharacter]:
+    characters: list[_PdfCharacter] = []
+    payload = page.get_text("rawdict", sort=True)
+    for block in payload.get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                for character in span.get("chars", []):
+                    characters.append(
+                        _PdfCharacter(
+                            value=character["c"],
+                            origin=tuple(character["origin"]),
+                            bbox=tuple(character["bbox"]),
+                            font=span["font"],
+                            size=span["size"],
+                            flags=span["flags"],
+                            color=span["color"],
+                        )
+                    )
+    return characters
+
+
+def _characters_match(source: _PdfCharacter, public: _PdfCharacter) -> bool:
+    return (
+        source.value == public.value
+        and _coordinates_match(source.origin, public.origin)
+        and _coordinates_match(source.bbox, public.bbox)
+        and source.font == public.font
+        and abs(source.size - public.size) <= 0.001
+        and source.flags == public.flags
+        and source.color == public.color
+    )
+
+
+def _coordinates_match(source: tuple[float, ...], public: tuple[float, ...]) -> bool:
+    return len(source) == len(public) and all(
+        abs(source_value - public_value) <= 0.02
+        for source_value, public_value in zip(source, public, strict=True)
+    )
 
 
 def _mark_private_content(document: pymupdf.Document, publish: PublishConfig) -> int:

@@ -21,7 +21,12 @@ import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
-from cvworkbench.ops.public_pdf import PublicPdfError, prepare_public_pdf, validate_public_pdf
+from cvworkbench.ops.public_pdf import (
+    PublicPdfError,
+    prepare_public_pdf,
+    validate_public_pdf,
+    validate_public_pdf_layout,
+)
 from cvworkbench.ops.publish import load_publish_config
 from cvworkbench.variants import load_variant
 
@@ -158,6 +163,21 @@ def test_validate_public_pdf_rejects_unauthorized_third_party_email(tmp_path: Pa
             publish=load_publish_config(publish_path),
             sot_path=sot_path,
         )
+
+
+def test_validate_public_pdf_layout_rejects_moved_surviving_text(tmp_path: Path) -> None:
+    source_pdf = tmp_path / "source.pdf"
+    public_pdf = tmp_path / "public.pdf"
+    _write_pdf(source_pdf, ["Example Person"])
+
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((80, 72), "Example Person", fontsize=11)
+    document.save(public_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="layout drift"):
+        validate_public_pdf_layout(source_pdf, public_pdf)
 
 
 def test_prepare_public_pdf_fails_closed_when_required_heading_cannot_be_redacted(

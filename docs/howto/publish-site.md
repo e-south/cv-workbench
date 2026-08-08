@@ -47,9 +47,10 @@ uv run cvw sync --mode local --plain
 
 Preparation and sync fail closed when the source pair is unrelated, the PDF is
 invalid or encrypted, embedded files are present, a forbidden phone or section
-survives, an unauthorized email appears, or provenance hashes disagree. Do not
-replace this lane with a Markdown-to-PDF rebuild when layout fidelity is the
-requirement.
+survives, an unauthorized email appears, provenance hashes disagree, or any
+surviving character changes its page, order, origin, bounding box, font, size,
+style flags, or color. Do not replace this lane with a Markdown-to-PDF rebuild
+when layout fidelity is the requirement.
 
 Continue with [the site contract](../reference/site-contract.md) for ownership
 and write-boundary details, then [security](../reference/security.md) for the
