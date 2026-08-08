@@ -1,3 +1,12 @@
+---
+id: howto-sot-versions
+intent: Guide isolated Source of Truth version experiments and activation.
+audience: [operator, agent]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # SoT version packs
 
 Use version packs to experiment safely without overwriting your canonical SoT.

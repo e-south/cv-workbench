@@ -11,12 +11,14 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
 from cvworkbench.text import normalize_tags
+
+CONTACT_FIELDS = ("label", "email", "phone", "location", "links")
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class Variant:
     letter_id: str | None
     render_theme: str | None
     render_style_preset: str | None
+    contact_fields: list[str] = field(default_factory=lambda: list(CONTACT_FIELDS))
 
 
 DEFAULT_ORDER = [
@@ -73,6 +76,7 @@ def load_variant(path: Path) -> Variant:
     render_data = _optional_mapping(variant_data.get("render"))
     render_theme = _optional_str_or_none(render_data.get("theme")) if render_data else None
     render_style = _optional_str_or_none(render_data.get("style_preset")) if render_data else None
+    contact_fields = _contact_fields(variant_data.get("contact_fields"))
 
     return Variant(
         id=variant_id,
@@ -86,6 +90,7 @@ def load_variant(path: Path) -> Variant:
         letter_id=letter_id,
         render_theme=render_theme,
         render_style_preset=render_style,
+        contact_fields=contact_fields,
     )
 
 
@@ -146,3 +151,13 @@ def _optional_mapping(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         raise ValueError("Variant field render must be a mapping")
     return value
+
+
+def _contact_fields(value: object) -> list[str]:
+    fields = _string_list(value, default=list(CONTACT_FIELDS))
+    unknown = sorted(set(fields) - set(CONTACT_FIELDS))
+    if unknown:
+        raise ValueError(f"Unknown contact fields: {', '.join(unknown)}")
+    if len(fields) != len(set(fields)):
+        raise ValueError("Variant contact_fields must not contain duplicates")
+    return fields

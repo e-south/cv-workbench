@@ -1,3 +1,12 @@
+---
+id: reference-context-contract
+intent: Define the deterministic bootstrap payload for humans and agents.
+audience: [agent, maintainer]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Context Contract
 
 `uv run cvw context --json` is the bootstrap command for humans and agents. It reports

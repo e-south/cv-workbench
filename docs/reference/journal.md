@@ -1,3 +1,12 @@
+---
+id: reference-journal
+intent: Preserve historical implementation decisions without making them live instructions.
+audience: [maintainer]
+status: historical
+navigation:
+  parent: ../readme.md
+---
+
 # Journal
 
 ## 2026-01-29

@@ -3,6 +3,7 @@ project:
 paths:
   sot: ../local/sot
   dist: ../var/dist
+  publish: ../var/publish
   runs: ../var/runs
   drafts: ../var/drafts
   reviews: ../var/reviews

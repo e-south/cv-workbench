@@ -1,3 +1,10 @@
 publish:
   variants:
     - base
+  required_exclude_tags:
+    - private
+  forbidden_contact_fields:
+    - phone
+  forbidden_sections:
+    - references
+  approved_visual_fingerprint_sha256: 8251581a3830670e61f0494e90372f88af107d1bc9019b207b41176f2f3b7025

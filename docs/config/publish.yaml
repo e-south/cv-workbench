@@ -1,3 +1,9 @@
 publish:
   variants:
     - base
+  required_exclude_tags:
+    - private
+  forbidden_contact_fields:
+    - phone
+  forbidden_sections:
+    - references

@@ -1,7 +1,13 @@
-# Documentation Index
+---
+id: docs-router
+intent: Route operators, agents, and maintainers to the smallest authoritative document.
+audience: [operator, agent, maintainer]
+status: active
+navigation:
+  parent: ../README.md
+---
 
-**Owner:** cv-workbench maintainers
-**Last verified:** 2026-03-12
+# Documentation Index
 
 This is the central route map for `cv-workbench` workflows, command contracts,
 and maintainer references. Use it to choose the smallest correct document for a
@@ -20,6 +26,7 @@ task instead of browsing the whole docs tree.
 - First local build: [howto/quickstart.md](howto/quickstart.md) -> [reference/preview-contract.md](reference/preview-contract.md)
 - Job tailoring and project preview: [howto/ingestion.md](howto/ingestion.md) -> [reference/project-contract.md](reference/project-contract.md)
 - Review/import loop: [reference/project-contract.md](reference/project-contract.md) -> [reference/variant-lifecycle.md](reference/variant-lifecycle.md)
+- Publish the faithful authored CV: [howto/publish-site.md](howto/publish-site.md) -> [reference/site-contract.md](reference/site-contract.md)
 - Automation/bootstrap: [reference/context-contract.md](reference/context-contract.md) -> [reference/verify-contract.md](reference/verify-contract.md)
 
 ## Usage Flows
@@ -39,7 +46,7 @@ task instead of browsing the whole docs tree.
 | --- | --- | --- |
 | Inspect the local preview UI or drive rebuilds safely | [reference/preview-contract.md](reference/preview-contract.md) | [howto/styling.md](howto/styling.md) |
 | Compare themes, presets, and export styling | [howto/styling.md](howto/styling.md) | [reference/preview-contract.md](reference/preview-contract.md) |
-| Sync rendered outputs into a site repo | [reference/site-contract.md](reference/site-contract.md) | [reference/security.md](reference/security.md) |
+| Prepare and sync the faithful authored CV | [howto/publish-site.md](howto/publish-site.md) | [reference/site-contract.md](reference/site-contract.md) |
 | Work with versioned SoT directories or packs | [howto/sot-versions.md](howto/sot-versions.md) | [reference/context-contract.md](reference/context-contract.md) |
 
 ### Project Tailoring And Review
@@ -73,6 +80,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [reference/variant-lifecycle.md](reference/variant-lifecycle.md): ephemeral draft/project proposal lifecycle
 - [reference/site-contract.md](reference/site-contract.md): local-first site sync contract
 - [reference/security.md](reference/security.md): local/private content boundaries and security posture
+- [reference/documentation-contract.md](reference/documentation-contract.md): frontmatter, lifecycle, and progressive-disclosure rules
 - [reference/journal.md](reference/journal.md): operator and maintainer journal surface
 
 ## Guides By Audience
@@ -83,6 +91,7 @@ Operators:
 - [howto/styling.md](howto/styling.md)
 - [howto/sot-versions.md](howto/sot-versions.md)
 - [howto/performance.md](howto/performance.md)
+- [howto/publish-site.md](howto/publish-site.md)
 
 Agents and automation:
 - [reference/context-contract.md](reference/context-contract.md)

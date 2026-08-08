@@ -85,6 +85,19 @@ def resolve_dist_path(config_path: Path) -> Path:
     return resolve_var_root(config_path) / "dist"
 
 
+def resolve_publish_path(config_path: Path) -> Path:
+    config_path = resolve_config_path(config_path)
+    config = load_config(config_path)
+    paths = config.get("paths", {})
+    if not isinstance(paths, dict):
+        raise ValueError("Config field paths must be a mapping")
+
+    value = paths.get("publish")
+    if value:
+        return _resolve_from_config(config_path, value)
+    return resolve_var_root(config_path) / "publish"
+
+
 def resolve_runs_path(config_path: Path) -> Path:
     config_path = resolve_config_path(config_path)
     config = load_config(config_path)

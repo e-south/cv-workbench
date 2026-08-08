@@ -10,9 +10,15 @@ dependencies = [
   "PyYAML>=6.0.1",
   "rich>=13.7.0",
   "trafilatura>=1.12.0",
+  "pymupdf>=1.26,<2",
+]
+
+[dependency-groups]
+dev = [
   "pre-commit>=3.7.0",
   "pytest>=8.0.0",
   "ruff>=0.4.0",
+  "pip-audit>=2.9,<3",
 ]
 
 [project.scripts]

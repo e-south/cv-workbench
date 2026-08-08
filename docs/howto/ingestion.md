@@ -1,3 +1,12 @@
+---
+id: howto-ingestion
+intent: Guide bounded job-context ingestion and project tailoring.
+audience: [operator, agent]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Ingestion
 
 Use `project guide` or `project new` for the main job-tailoring workflow. Those

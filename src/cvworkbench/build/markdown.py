@@ -37,7 +37,7 @@ def _build_resume_markdown(
         lines.append(f"# {name}")
         lines.append("")
 
-    contact_line = _build_contact_line(person)
+    contact_line = _build_contact_line(person, variant.contact_fields)
     if contact_line:
         lines.append(contact_line)
         lines.append("")
@@ -83,7 +83,7 @@ def _build_cover_letter_markdown(
         lines.append(f"# {name}")
         lines.append("")
 
-    contact_line = _build_contact_line(person)
+    contact_line = _build_contact_line(person, variant.contact_fields)
     if contact_line:
         lines.append(contact_line)
         lines.append("")
@@ -154,22 +154,22 @@ def _find_letter(sot: dict[str, Any], letter_id: str) -> dict[str, Any]:
     raise ValueError(f"Letter not found: {letter_id}")
 
 
-def _build_contact_line(person: dict[str, Any]) -> str:
+def _build_contact_line(person: dict[str, Any], contact_fields: list[str]) -> str:
     parts: list[str] = []
     label = person.get("label")
-    if isinstance(label, str) and label.strip():
+    if "label" in contact_fields and isinstance(label, str) and label.strip():
         parts.append(label.strip())
 
     email = person.get("email")
-    if isinstance(email, str) and email.strip():
+    if "email" in contact_fields and isinstance(email, str) and email.strip():
         parts.append(email.strip())
 
     phone = person.get("phone")
-    if isinstance(phone, str) and phone.strip():
+    if "phone" in contact_fields and isinstance(phone, str) and phone.strip():
         parts.append(phone.strip())
 
     location = person.get("location")
-    if isinstance(location, dict):
+    if "location" in contact_fields and isinstance(location, dict):
         city = location.get("city")
         region = location.get("region")
         country = location.get("country")
@@ -178,7 +178,7 @@ def _build_contact_line(person: dict[str, Any]) -> str:
             parts.append(", ".join(location_bits))
 
     links = person.get("links")
-    if isinstance(links, list):
+    if "links" in contact_fields and isinstance(links, list):
         for link in links:
             if not isinstance(link, dict):
                 continue

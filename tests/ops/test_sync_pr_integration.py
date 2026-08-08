@@ -11,15 +11,20 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
+import pymupdf
 import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from cvworkbench.ops.publish import load_publish_config
+from cvworkbench.variants import load_variant
 
 
 def _should_run() -> bool:
@@ -51,19 +56,45 @@ def test_sync_pr_creates_branch_and_pr(tmp_path: Path) -> None:
     _ensure_clean_repo(site_repo)
     original_branch = _git(site_repo, ["rev-parse", "--abbrev-ref", "HEAD"]).strip()
 
-    site_cv_md = site_repo / "src/content/cv/cv.md"
     site_cv_page = site_repo / "src/content/page-cv/cv.md"
-    if not site_cv_md.exists():
-        pytest.fail(f"Missing site CV markdown: {site_cv_md}")
     if not site_cv_page.exists():
         pytest.fail(f"Missing site CV page: {site_cv_page}")
 
-    dist_dir = Path("var/dist/base")
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    existing = site_cv_md.read_text()
-    unique_line = f"\nSync integration test: {os.getpid()}\n"
-    (dist_dir / "cv.md").write_text(existing + unique_line)
-    (dist_dir / "cv.pdf").write_bytes(b"sync-test")
+    publish_dir = Path("var/publish/base")
+    publish_dir.mkdir(parents=True, exist_ok=True)
+    variant = load_variant(Path("config/variants/base.yaml"))
+    publish = load_publish_config(Path("config/publish.yaml"))
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), f"Sync integration test: {os.getpid()}")
+    pdf_bytes = document.tobytes()
+    document.close()
+    (publish_dir / "cv.pdf").write_bytes(pdf_bytes)
+    (publish_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "artifact_kind": "authored-pdf-publication",
+                "variant": {
+                    "id": "base",
+                    "exclude_tags": variant.exclude_tags,
+                    "contact_fields": variant.contact_fields,
+                    "order": variant.order,
+                },
+                "formats": ["pdf"],
+                "outputs": {"pdf": "cv.pdf"},
+                "output_hashes": {"pdf": hashlib.sha256(pdf_bytes).hexdigest()},
+                "source": {"visual_fingerprint_sha256": publish.approved_visual_fingerprint_sha256},
+                "transformation": {
+                    "kind": "semantic-redaction",
+                    "forbidden_contact_fields": ["phone"],
+                    "forbidden_sections": ["references"],
+                    "redaction_count": 0,
+                },
+            }
+        )
+        + "\n"
+    )
 
     site_config = tmp_path / "site-sync.yaml"
     site_config.write_text(
@@ -72,9 +103,9 @@ def test_sync_pr_creates_branch_and_pr(tmp_path: Path) -> None:
                 "site:",
                 f"  repo_path: {site_repo}",
                 "  publish_variant: base",
-                "  cv_markdown: src/content/cv/cv.md",
                 "  cv_pdf_dir: public/cv",
                 "  cv_pdf_name: cv.pdf",
+                "  cv_manifest: scripts/cv/public-cv-manifest.json",
                 "  cv_page: src/content/page-cv/cv.md",
                 "  cv_page_frontmatter_key: cvPdf",
             ]

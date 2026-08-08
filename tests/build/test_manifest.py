@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -68,6 +69,10 @@ def test_manifest_written() -> None:
     assert "sot_hashes" in data
     assert data["resume"]["path"] == "resume.json"
     assert "hash" in data["resume"]
+    assert (
+        data["output_hashes"]["md"]
+        == hashlib.sha256((result.dist_dir / "cv.md").read_bytes()).hexdigest()
+    )
 
 
 def test_manifest_hashes_optional_files() -> None:

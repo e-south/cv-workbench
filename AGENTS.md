@@ -36,3 +36,17 @@ When you must visually verify output (HTML/PDF):
 If Chrome DevTools MCP is unavailable:
 - do not attempt OS-level browser automation
 - fall back to CLI-only verification and clearly report what cannot be visually confirmed.
+
+## Code Review Rules
+
+### Publication boundary
+
+- Treat `local/` and `var/` as private. Flag any change that commits their data or publishes phone numbers, references, third-party contacts, or source manifests. The safe path is a configured public variant followed by the publish-policy and artifact-hash gates.
+
+### Artifact integrity
+
+- A `.pdf` publication must begin with the PDF signature and match its deterministic manifest hash. Preserve the target extension during atomic rendering, and fail closed when the manifest, variant policy, or artifact disagree.
+
+### Side effects
+
+- Keep local sync as the default and PR creation explicitly opt-in. Commands that write another repository must validate the target and publication policy before writing; do not add silent fallbacks.

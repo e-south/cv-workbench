@@ -1,3 +1,12 @@
+---
+id: reference-project-contract
+intent: Define private tailoring workspaces, proposal state, and guarded application.
+audience: [operator, agent, maintainer]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Project Contract
 
 Projects are local, private workspaces for job tailoring. They keep job context,

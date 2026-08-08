@@ -226,8 +226,8 @@ class _ScheduledRenderRequest:
 def _allocate_temp_output_path(output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fd, raw_path = tempfile.mkstemp(
-        prefix=f".{output_path.name}.",
-        suffix=".tmp",
+        prefix=f".{output_path.stem}.",
+        suffix=output_path.suffix or ".tmp",
         dir=output_path.parent,
     )
     os.close(fd)

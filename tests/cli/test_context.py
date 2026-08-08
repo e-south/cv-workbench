@@ -212,7 +212,9 @@ def test_context_omits_sot_path_in_recipes_when_configured_sot_is_ready(tmp_path
     baseline = next(
         recipe for recipe in payload["recipes"] if recipe["id"] == "baseline.build_preview"
     )
-    assert baseline["steps"][0]["command"] == _recipe_command("status", config_path=config_path)
+    assert baseline["steps"][0]["command"] == _recipe_command(
+        "status --plain", config_path=config_path
+    )
     assert baseline["steps"][1]["command"] == _recipe_command(
         "build --variant base --format md,pdf",
         config_path=config_path,
@@ -572,7 +574,7 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         recipe for recipe in payload["recipes"] if recipe["id"] == "baseline.build_preview"
     )
     assert baseline["steps"][0]["command"] == _recipe_command(
-        "status",
+        "status --plain",
         config_path=config_path,
         sot_path=sot_path,
     )

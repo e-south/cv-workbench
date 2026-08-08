@@ -90,11 +90,15 @@ def build_manifest(
             "outputs": list(variant.outputs),
             "include_tags": list(variant.include_tags),
             "exclude_tags": list(variant.exclude_tags),
+            "contact_fields": list(variant.contact_fields),
             "max_bullets_per_role": variant.max_bullets_per_role,
             "order": list(variant.order),
         },
         "formats": list(formats),
         "outputs": {fmt: output_paths[fmt].name for fmt in formats if fmt in output_paths},
+        "output_hashes": {
+            fmt: _hash_file(output_paths[fmt]) for fmt in formats if fmt in output_paths
+        },
         "resume": {
             "path": metadata.resume_name,
             "hash": metadata.resume_hash,

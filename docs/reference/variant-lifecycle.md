@@ -1,3 +1,12 @@
+---
+id: reference-variant-lifecycle
+intent: Define ephemeral and retained proposal lifecycle semantics.
+audience: [operator, agent, maintainer]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Variant Lifecycle
 
 Variant drafts and project proposals are treated as ephemeral until you
