@@ -20,6 +20,7 @@ from typer.testing import CliRunner
 import cvworkbench.ops.review as review_module
 from cvworkbench.cli import app
 from cvworkbench.config import resolve_drafts_path, resolve_reviews_path
+from tests.utils import isolated_filesystem
 
 
 def _write_minimal_config(root: Path) -> Path:
@@ -207,7 +208,7 @@ def test_reviewpack_creates_bundle(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
@@ -224,7 +225,7 @@ def test_reviewpack_requires_runs(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
@@ -247,7 +248,7 @@ def test_reviewpack_ignores_invalid_run_dirs_when_valid_run_exists(tmp_path: Pat
     invalid_dir.mkdir(parents=True, exist_ok=True)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
@@ -275,7 +276,7 @@ def test_reviewpack_rejects_manifest_outputs_outside_run_dir(tmp_path: Path) -> 
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
@@ -299,7 +300,7 @@ def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -356,7 +357,7 @@ def test_import_docx_generates_applyable_patch_for_experience_bullet_edits(
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -457,7 +458,7 @@ def test_import_docx_normalizes_wrapped_markdown_without_forcing_review_diff_onl
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -563,7 +564,7 @@ def test_import_docx_normalizes_flattened_noneditable_sections_without_forcing_r
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -643,7 +644,7 @@ def test_import_docx_maps_duplicate_experience_bullets_by_position(
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -735,7 +736,7 @@ def test_import_docx_generates_applyable_patch_for_filtered_project_summary_edit
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -802,7 +803,7 @@ def test_import_docx_keeps_review_diff_only_for_unsupported_heading_edits(
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -842,7 +843,7 @@ def test_import_docx_uses_variant_latest_run(tmp_path: Path, monkeypatch) -> Non
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -871,7 +872,7 @@ def test_import_docx_reports_hint_when_runs_are_missing(tmp_path: Path) -> None:
     docx_path.write_bytes(b"docx")
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -908,7 +909,7 @@ def test_import_docx_ignores_invalid_run_dirs_when_variant_resolves_latest_run(
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -947,7 +948,7 @@ def test_reviewpack_variant_ignores_project_scoped_runs(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
@@ -967,7 +968,7 @@ def test_reviewpack_variant_rejects_project_only_runs(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--variant", "base", "--config", str(config_path), "--plain"],
@@ -991,7 +992,7 @@ def test_reviewpack_uses_explicit_run_and_isolates_project_review_dir(tmp_path: 
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1025,7 +1026,7 @@ def test_reviewpack_force_replaces_existing_pack(tmp_path: Path) -> None:
     (review_dir / "stale.txt").write_text("stale")
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1055,7 +1056,7 @@ def test_reviewpack_uses_project_selector_for_latest_project_run(tmp_path: Path)
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             ["reviewpack", "--project", "job", "--config", str(config_path), "--plain"],
@@ -1080,7 +1081,7 @@ def test_reviewpack_project_run_mismatch_reports_selector_hint(tmp_path: Path) -
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1121,7 +1122,7 @@ def test_import_docx_variant_ignores_project_scoped_runs(tmp_path: Path, monkeyp
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1164,7 +1165,7 @@ def test_import_docx_variant_rejects_project_only_runs(tmp_path: Path, monkeypat
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1204,7 +1205,7 @@ def test_import_docx_uses_project_selector(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1258,7 +1259,7 @@ def test_import_docx_project_selector_writes_project_ops_patch_for_summary_edits
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1348,7 +1349,7 @@ def test_import_docx_project_selector_reconciles_existing_project_summary_overla
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1415,7 +1416,7 @@ def test_import_docx_project_run_override_uses_pinned_run(tmp_path: Path, monkey
     monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -1447,7 +1448,7 @@ def test_import_docx_requires_run_variant_or_project(tmp_path: Path) -> None:
     docx_path.write_bytes(b"docx")
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [

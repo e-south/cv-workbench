@@ -900,8 +900,7 @@ def test_project_show_warns_when_resume_patch_is_hidden_by_cover_letter_variant(
     assert payload["proposal"]["document_type"] == "cover-letter"
     assert payload["patch"]["operations"] == ["replace-project-summary"]
     assert payload["patch"]["render_warning"] == (
-        "project-ops target resume content and will not appear in "
-        "cover-letter preview/build output"
+        "project-ops target resume content and will not appear in cover-letter preview/build output"
     )
     assert payload["proposal_plan"]["selected_variant"] == "proposal-cover-letter"
     assert payload["proposal_plan"]["job_keywords_missing_in_sot"] == ["stakeholder-management"]
