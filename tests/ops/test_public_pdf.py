@@ -255,6 +255,38 @@ def test_validate_public_pdf_does_not_treat_compact_isbns_as_phones(
     )
 
 
+def test_validate_public_pdf_rejects_unlabeled_compact_third_party_phone(
+    tmp_path: Path,
+) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unsafe.pdf"
+    _write_pdf(source_pdf, ["Advisor 2125550199"])
+
+    with pytest.raises(PublicPdfError, match="forbidden phone number"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
+def test_validate_public_pdf_rejects_invalid_isbn_labeled_compact_phone(
+    tmp_path: Path,
+) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unsafe.pdf"
+    _write_pdf(source_pdf, ["ISBN-10 2125550198"])
+
+    with pytest.raises(PublicPdfError, match="forbidden phone number"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
 def test_prepare_public_pdf_redacts_compact_phone_matching_source_of_truth(
     tmp_path: Path,
 ) -> None:
@@ -279,12 +311,16 @@ def test_prepare_public_pdf_redacts_compact_phone_matching_source_of_truth(
         assert "|" not in public_text
 
 
-def test_prepare_public_pdf_redacts_third_party_phone(tmp_path: Path) -> None:
+@pytest.mark.parametrize("candidate", ["212.555.0199", "2125550199"])
+def test_prepare_public_pdf_redacts_third_party_phone(
+    tmp_path: Path,
+    candidate: str,
+) -> None:
     config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
     source_pdf = tmp_path / "authored.pdf"
     authored_source = tmp_path / "authored.docx"
-    _write_docx(authored_source, "Example Person Advisor 212.555.0199 Education")
-    _write_pdf(source_pdf, ["Example Person\nAdvisor | 212.555.0199\nEducation"])
+    _write_docx(authored_source, f"Example Person Advisor {candidate} Education")
+    _write_pdf(source_pdf, [f"Example Person\nAdvisor | {candidate}\nEducation"])
 
     result = prepare_public_pdf(
         authored_source=authored_source,
@@ -297,7 +333,7 @@ def test_prepare_public_pdf_redacts_third_party_phone(tmp_path: Path) -> None:
 
     with pymupdf.open(result.output_pdf) as document:
         public_text = "\n".join(page.get_text() for page in document)
-        assert "212.555.0199" not in public_text
+        assert candidate not in public_text
         assert "|" not in public_text
 
 

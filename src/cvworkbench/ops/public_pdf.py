@@ -207,7 +207,11 @@ def validate_public_pdf(
 
     forbidden_phone_digits = _forbidden_phone_digits(person, publish)
     if forbidden_phone_digits and any(
-        _matches_forbidden_phone(match.group(0), forbidden_phone_digits)
+        _matches_forbidden_phone(
+            match.group(0),
+            forbidden_phone_digits,
+            preceding_text=text[: match.start()],
+        )
         for match in PHONE_CANDIDATE_PATTERN.finditer(text)
     ):
         raise PublicPdfError("Public PDF contains a forbidden phone number")
@@ -527,7 +531,11 @@ def _mark_private_content(
         for page_index, page in enumerate(document):
             page_text = page.get_text()
             for match in PHONE_CANDIDATE_PATTERN.finditer(page_text):
-                if not _matches_forbidden_phone(match.group(0), forbidden_phone_digits):
+                if not _matches_forbidden_phone(
+                    match.group(0),
+                    forbidden_phone_digits,
+                    preceding_text=page_text[: match.start()],
+                ):
                     continue
                 for rect in _phone_redaction_rects(page, match.group(0)):
                     region = _RedactionRegion(page_index=page_index, rect=tuple(rect))
@@ -594,7 +602,12 @@ def _forbidden_phone_digits(
     return digits
 
 
-def _matches_forbidden_phone(candidate: str, forbidden_digits: tuple[str, ...]) -> bool:
+def _matches_forbidden_phone(
+    candidate: str,
+    forbidden_digits: tuple[str, ...],
+    *,
+    preceding_text: str = "",
+) -> bool:
     candidate_digits = re.sub(r"\D", "", candidate)
     for expected in forbidden_digits:
         if candidate_digits == expected:
@@ -604,9 +617,33 @@ def _matches_forbidden_phone(candidate: str, forbidden_digits: tuple[str, ...]) 
         if len(candidate_digits) == 11 and candidate_digits.startswith("1"):
             if candidate_digits[1:] == expected:
                 return True
-    if re.fullmatch(r"\d{10,15}", candidate):
+    if _is_labeled_valid_isbn(candidate, preceding_text=preceding_text):
         return False
     return 7 <= len(candidate_digits) <= 15
+
+
+def _is_labeled_valid_isbn(candidate: str, *, preceding_text: str) -> bool:
+    if not re.fullmatch(r"\d{10}|\d{13}", candidate):
+        return False
+
+    line_prefix = preceding_text.rsplit("\n", maxsplit=1)[-1]
+    label_match = re.search(r"\bISBN(?:-(10|13))?\s*:?\s*$", line_prefix, re.IGNORECASE)
+    if label_match is None:
+        return False
+    labeled_length = label_match.group(1)
+    if labeled_length is not None and int(labeled_length) != len(candidate):
+        return False
+
+    digits = [int(value) for value in candidate]
+    if len(digits) == 10:
+        return (
+            sum(weight * value for weight, value in zip(range(10, 0, -1), digits, strict=True)) % 11
+            == 0
+        )
+    weighted_sum = sum(
+        value * (1 if index % 2 == 0 else 3) for index, value in enumerate(digits[:-1])
+    )
+    return (10 - weighted_sum % 10) % 10 == digits[-1]
 
 
 def _mark_terminal_section_and_following_pages(
