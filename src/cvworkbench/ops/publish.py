@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +31,7 @@ class PublishConfig:
     required_exclude_tags: list[str]
     forbidden_contact_fields: list[str]
     forbidden_sections: list[str]
+    approved_visual_fingerprint_sha256: str
 
 
 def load_publish_config(path: Path) -> PublishConfig:
@@ -50,6 +52,11 @@ def load_publish_config(path: Path) -> PublishConfig:
     required_exclude_tags = _string_list(publish, "required_exclude_tags")
     forbidden_contact_fields = _string_list(publish, "forbidden_contact_fields")
     forbidden_sections = _string_list(publish, "forbidden_sections")
+    approved_visual_fingerprint_sha256 = publish.get("approved_visual_fingerprint_sha256")
+    if not isinstance(approved_visual_fingerprint_sha256, str) or not re.fullmatch(
+        r"[a-f0-9]{64}", approved_visual_fingerprint_sha256
+    ):
+        raise PublishError("Publish config must include a lowercase SHA-256 visual fingerprint")
     unsupported_contact_fields = sorted(
         set(forbidden_contact_fields) - SUPPORTED_FORBIDDEN_CONTACT_FIELDS
     )
@@ -64,6 +71,7 @@ def load_publish_config(path: Path) -> PublishConfig:
         required_exclude_tags=required_exclude_tags,
         forbidden_contact_fields=forbidden_contact_fields,
         forbidden_sections=forbidden_sections,
+        approved_visual_fingerprint_sha256=approved_visual_fingerprint_sha256,
     )
 
 

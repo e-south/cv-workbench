@@ -23,6 +23,7 @@ import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from cvworkbench.ops.publish import load_publish_config
 from cvworkbench.variants import load_variant
 
 
@@ -62,6 +63,7 @@ def test_sync_pr_creates_branch_and_pr(tmp_path: Path) -> None:
     publish_dir = Path("var/publish/base")
     publish_dir.mkdir(parents=True, exist_ok=True)
     variant = load_variant(Path("config/variants/base.yaml"))
+    publish = load_publish_config(Path("config/publish.yaml"))
     document = pymupdf.open()
     page = document.new_page()
     page.insert_text((72, 72), f"Sync integration test: {os.getpid()}")
@@ -82,6 +84,7 @@ def test_sync_pr_creates_branch_and_pr(tmp_path: Path) -> None:
                 "formats": ["pdf"],
                 "outputs": {"pdf": "cv.pdf"},
                 "output_hashes": {"pdf": hashlib.sha256(pdf_bytes).hexdigest()},
+                "source": {"visual_fingerprint_sha256": publish.approved_visual_fingerprint_sha256},
                 "transformation": {
                     "kind": "semantic-redaction",
                     "forbidden_contact_fields": ["phone"],

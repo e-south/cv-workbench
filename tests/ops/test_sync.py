@@ -20,7 +20,7 @@ import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
-from cvworkbench.ops import syncing
+from cvworkbench.ops import atomic
 from cvworkbench.ops.syncing import load_site_sync
 from tests.utils import strip_ansi
 
@@ -85,6 +85,11 @@ def _write_workspace(
                 "formats": ["pdf"],
                 "outputs": {"pdf": "cv.pdf"},
                 "output_hashes": {"pdf": pdf_hash},
+                "source": {
+                    "visual_fingerprint_sha256": (
+                        "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+                    )
+                },
                 "transformation": {
                     "kind": "semantic-redaction",
                     "forbidden_contact_fields": ["phone"],
@@ -136,6 +141,8 @@ def _write_workspace(
                 "  required_exclude_tags: [private]",
                 "  forbidden_contact_fields: [phone]",
                 "  forbidden_sections: [references]",
+                "  approved_visual_fingerprint_sha256: "
+                "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             ]
         )
         + "\n"
@@ -241,7 +248,7 @@ def test_sync_local_rolls_back_every_artifact_when_replace_fails(
         ).read_bytes(),
         manifest_path: b"old manifest\n",
     }
-    replace = syncing.os.replace
+    replace = atomic.os.replace
     staged_replacements = 0
 
     def fail_second_staged_replace(source: Path | str, destination: Path | str) -> None:
@@ -252,7 +259,7 @@ def test_sync_local_rolls_back_every_artifact_when_replace_fails(
                 raise OSError("simulated replacement failure")
         replace(source, destination)
 
-    monkeypatch.setattr(syncing.os, "replace", fail_second_staged_replace)
+    monkeypatch.setattr(atomic.os, "replace", fail_second_staged_replace)
 
     result = CliRunner().invoke(
         app,
@@ -265,6 +272,25 @@ def test_sync_local_rolls_back_every_artifact_when_replace_fails(
         assert destination.read_bytes() == original
     assert not list(site_repo.rglob("*.cvw-stage-*"))
     assert not list(site_repo.rglob("*.cvw-backup-*"))
+
+
+def test_sync_local_preserves_existing_destination_permissions(tmp_path: Path) -> None:
+    site_repo, workbench_config, site_config = _write_workspace(tmp_path)
+    page_path = site_repo / "src/content/page-cv/cv.md"
+    manifest_path = site_repo / "scripts/cv/public-cv-manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("old manifest\n")
+    page_path.chmod(0o644)
+    manifest_path.chmod(0o640)
+
+    result = CliRunner().invoke(
+        app,
+        ["sync", "--config", str(workbench_config), "--site-config", str(site_config)],
+    )
+
+    assert result.exit_code == 0
+    assert page_path.stat().st_mode & 0o777 == 0o644
+    assert manifest_path.stat().st_mode & 0o777 == 0o640
 
 
 def test_sync_defaults_to_config_mode(tmp_path: Path) -> None:
@@ -334,6 +360,22 @@ def test_sync_rejects_regular_build_manifest_without_authored_provenance(
 
     assert result.exit_code != 0
     assert "not an authored PDF publication" in strip_ansi(result.stderr)
+
+
+def test_sync_rejects_manifest_with_unapproved_visual_fingerprint(tmp_path: Path) -> None:
+    _, workbench_config, site_config = _write_workspace(tmp_path)
+    manifest_path = tmp_path / "var/publish/base/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["source"]["visual_fingerprint_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest) + "\n")
+
+    result = CliRunner().invoke(
+        app,
+        ["sync", "--config", str(workbench_config), "--site-config", str(site_config)],
+    )
+
+    assert result.exit_code != 0
+    assert "visual fingerprint does not match" in strip_ansi(result.stderr)
 
 
 def test_sync_rejects_manifest_destination_outside_site_repo(tmp_path: Path) -> None:

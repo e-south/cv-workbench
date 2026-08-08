@@ -29,6 +29,13 @@ verified against the text policy, and validates the result before replacing
 `var/publish/<variant>/cv.pdf`. The manifest records content hashes and the
 transformation without publishing local paths.
 
+`config/publish.yaml` also pins `approved_visual_fingerprint_sha256`. When an
+authored export changes its non-text rectangle layout, preparation reports the
+observed fingerprint and stops. Compare the new export visually with the DOCX;
+only after that review should you update the approved fingerprint and rerun.
+This keeps table rules and underlines possible without treating arbitrary
+rectangle compositions as automatically safe.
+
 ## Prepare
 
 ```bash
@@ -57,6 +64,11 @@ or any surviving character changes its page, order, origin, bounding box, font,
 size, style flags, or color. Section removal starts at the exact heading line,
 not an earlier prose mention. Do not replace this lane with a Markdown-to-PDF
 rebuild when layout fidelity is the requirement.
+
+Retained links must exactly match a public link in the person Source of Truth,
+use HTTPS, and have a click rectangle that closely matches visible label text.
+Preparation stages the PDF and provenance manifest together and restores the
+prior pair if either replacement fails.
 
 Continue with [the site contract](../reference/site-contract.md) for ownership
 and write-boundary details, then [security](../reference/security.md) for the

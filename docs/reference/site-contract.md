@@ -24,6 +24,11 @@ DOCX and a faithful PDF export. It checks that they correspond, applies semantic
 redactions, strips hidden payloads, and emits the only PDF eligible for sync.
 See [Publish The Authored CV](../howto/publish-site.md).
 
+Preparation commits the public PDF and its provenance manifest as one
+recoverable update. Sync applies the PDF, page frontmatter, and sanitized site
+manifest through the same staged replacement primitive while preserving each
+existing destination mode.
+
 Publish-eligible artifacts live under `var/publish/<variant>`, separate from
 ordinary generated outputs under `var/dist`. Sync never falls back to `dist`,
 so a resume build or test cannot replace the reviewed authored artifact.

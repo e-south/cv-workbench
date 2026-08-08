@@ -21,6 +21,7 @@ import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from cvworkbench.ops import atomic
 from cvworkbench.ops.public_pdf import (
     PublicPdfError,
     prepare_public_pdf,
@@ -74,6 +75,8 @@ def _write_workspace(root: Path) -> tuple[Path, Path, Path, Path]:
         "  required_exclude_tags: [private]\n"
         "  forbidden_contact_fields: [phone]\n"
         "  forbidden_sections: [references]\n"
+        "  approved_visual_fingerprint_sha256: "
+        "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\n"
     )
     person_path = root / "local/sot/person.yaml"
     person_path.write_text(
@@ -81,6 +84,9 @@ def _write_workspace(root: Path) -> tuple[Path, Path, Path, Path]:
         "name: Example Person\n"
         "email: person@example.com\n"
         "phone: 555.867.5309\n"
+        "links:\n"
+        "  - label: Profile\n"
+        "    url: https://example.com/profile\n"
         "location:\n"
         "  city: Boston\n"
     )
@@ -138,6 +144,9 @@ def test_prepare_public_pdf_preserves_content_and_removes_private_surfaces(
     assert manifest["source"]["exported_pdf_name"] == "authored.pdf"
     assert manifest["source"]["pdf_token_coverage"] >= 0.9
     assert manifest["source"]["docx_token_coverage"] >= 0.9
+    assert manifest["source"]["visual_fingerprint_sha256"] == (
+        "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    )
     assert "phone" in manifest["transformation"]["forbidden_contact_fields"]
 
     first_bytes = result.output_pdf.read_bytes()
@@ -238,6 +247,56 @@ def test_validate_public_pdf_accepts_visible_https_link(tmp_path: Path) -> None:
     )
 
 
+def test_validate_public_pdf_rejects_unapproved_https_target(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unapproved-link.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Profile")
+    page.insert_link(
+        {
+            "kind": pymupdf.LINK_URI,
+            "from": page.search_for("Profile")[0],
+            "uri": "https://example.com/?email=advisor@example.org",
+        }
+    )
+    document.save(source_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="unsafe or hidden link"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
+def test_validate_public_pdf_rejects_oversized_link_overlay(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "oversized-link.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Profile")
+    page.insert_link(
+        {
+            "kind": pymupdf.LINK_URI,
+            "from": page.rect,
+            "uri": "https://example.com/profile",
+        }
+    )
+    document.save(source_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="unsafe or hidden link"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
 def test_validate_public_pdf_rejects_raster_content(tmp_path: Path) -> None:
     _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
     source_pdf = tmp_path / "raster.pdf"
@@ -300,6 +359,72 @@ def test_prepare_public_pdf_rejects_truncated_export(tmp_path: Path) -> None:
         )
 
 
+def test_prepare_public_pdf_rejects_unapproved_rectangle_layout(tmp_path: Path) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unapproved-layout.pdf"
+    authored_source = tmp_path / "authored.docx"
+    _write_docx(authored_source, "Example Person Education")
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Example Person\nEducation")
+    page.draw_rect(pymupdf.Rect(72, 90, 110, 91), fill=(0, 0, 0))
+    document.save(source_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="visual fingerprint is not approved"):
+        prepare_public_pdf(
+            authored_source=authored_source,
+            source_pdf=source_pdf,
+            config_path=config_path,
+            variant_id="base",
+            publish_config_path=publish_path,
+            sot_path=sot_path,
+        )
+
+
+def test_prepare_public_pdf_restores_pdf_and_manifest_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "authored.pdf"
+    authored_source = tmp_path / "authored.docx"
+    _write_docx(authored_source, "Example Person Education")
+    _write_pdf(source_pdf, ["Example Person\nEducation"])
+    output_pdf = tmp_path / "var/publish/base/cv.pdf"
+    manifest_path = output_pdf.parent / "manifest.json"
+    output_pdf.parent.mkdir(parents=True)
+    output_pdf.write_bytes(b"old pdf")
+    manifest_path.write_text("old manifest\n")
+    replace = atomic.os.replace
+    staged_replacements = 0
+
+    def fail_second_staged_replace(source: Path | str, destination: Path | str) -> None:
+        nonlocal staged_replacements
+        if ".cvw-stage-" in Path(source).name:
+            staged_replacements += 1
+            if staged_replacements == 2:
+                raise OSError("simulated replacement failure")
+        replace(source, destination)
+
+    monkeypatch.setattr(atomic.os, "replace", fail_second_staged_replace)
+
+    with pytest.raises(PublicPdfError, match="prior artifacts were restored"):
+        prepare_public_pdf(
+            authored_source=authored_source,
+            source_pdf=source_pdf,
+            config_path=config_path,
+            variant_id="base",
+            publish_config_path=publish_path,
+            sot_path=sot_path,
+        )
+
+    assert output_pdf.read_bytes() == b"old pdf"
+    assert manifest_path.read_text() == "old manifest\n"
+    assert not list(output_pdf.parent.glob("*.cvw-stage-*"))
+    assert not list(output_pdf.parent.glob("*.cvw-backup-*"))
+
+
 def test_publish_config_rejects_unsupported_forbidden_contact_field(tmp_path: Path) -> None:
     _, _, publish_path, _ = _write_workspace(tmp_path)
     publish_path.write_text(
@@ -310,6 +435,19 @@ def test_publish_config_rejects_unsupported_forbidden_contact_field(tmp_path: Pa
     )
 
     with pytest.raises(PublishError, match="unsupported forbidden contact fields: location"):
+        load_publish_config(publish_path)
+
+
+def test_publish_config_requires_valid_visual_fingerprint(tmp_path: Path) -> None:
+    _, _, publish_path, _ = _write_workspace(tmp_path)
+    publish_path.write_text(
+        publish_path.read_text().replace(
+            "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "not-a-hash",
+        )
+    )
+
+    with pytest.raises(PublishError, match="lowercase SHA-256 visual fingerprint"):
         load_publish_config(publish_path)
 
 

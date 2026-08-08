@@ -29,12 +29,14 @@ import yaml
 
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_variant_path
+from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.publish import PublishConfig, load_publish_config
 from cvworkbench.variants import Variant, load_variant
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 PHONE_CANDIDATE_PATTERN = re.compile(r"(?<!\w)\+?\d(?:[\d\s().\-\u2010-\u2015]*\d)?(?!\w)")
 MIN_SOURCE_TOKEN_COVERAGE = 0.9
+LINK_LABEL_TOLERANCE_POINTS = 3.0
 
 
 class PublicPdfError(RuntimeError):
@@ -91,6 +93,8 @@ def prepare_public_pdf(
     if not source_pdf.exists():
         raise PublicPdfError(f"Authored PDF not found: {source_pdf}")
     source_match = _validate_authored_source(authored_source, source_pdf)
+    authored_sha256 = _hash_file(authored_source)
+    source_pdf_sha256 = _hash_file(source_pdf)
     variant = load_variant(resolve_variant_path(variant_id, config_path))
     publish = load_publish_config(publish_config_path)
     _validate_publish_variant(variant, publish)
@@ -98,6 +102,7 @@ def prepare_public_pdf(
         raise PublicPdfError(f"Publish variant '{variant.id}' does not declare a PDF output")
 
     output_pdf = output_path(resolve_publish_path(config_path) / variant.id, variant, "pdf")
+    manifest_path = output_pdf.parent / "manifest.json"
     if source_pdf.resolve() == output_pdf.resolve():
         raise PublicPdfError("Authored source and public output must be different files")
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
@@ -105,6 +110,7 @@ def prepare_public_pdf(
 
     document = _open_pdf(source_pdf)
     try:
+        source_visual_fingerprint = _validate_source_visual_contract(document, publish)
         redaction_plan = _mark_private_content(document, publish, person)
         for page in document:
             page.apply_redactions(images=0, graphics=0, text=0)
@@ -133,23 +139,34 @@ def prepare_public_pdf(
                 temporary_pdf,
                 allowed_redactions=redaction_plan.regions,
             )
-            os.replace(temporary_pdf, output_pdf)
+            public_pdf_bytes = temporary_pdf.read_bytes()
+            manifest_content = _publication_manifest_content(
+                authored_name=authored_source.name,
+                authored_sha256=authored_sha256,
+                source_pdf_name=source_pdf.name,
+                source_pdf_sha256=source_pdf_sha256,
+                output_pdf_name=output_pdf.name,
+                output_pdf_sha256=hashlib.sha256(public_pdf_bytes).hexdigest(),
+                variant=variant,
+                publish=publish,
+                redaction_count=redaction_plan.count,
+                source_match=source_match,
+                source_visual_fingerprint=source_visual_fingerprint,
+            )
+            try:
+                replace_files_atomically(
+                    [
+                        (output_pdf, public_pdf_bytes),
+                        (manifest_path, manifest_content.encode()),
+                    ]
+                )
+            except AtomicWriteError as exc:
+                raise PublicPdfError(str(exc)) from exc
         finally:
             temporary_pdf.unlink(missing_ok=True)
     finally:
         document.close()
 
-    manifest_path = output_pdf.parent / "manifest.json"
-    _write_publication_manifest(
-        manifest_path,
-        authored_source=authored_source,
-        source_pdf=source_pdf,
-        output_pdf=output_pdf,
-        variant=variant,
-        publish=publish,
-        redaction_count=redaction_plan.count,
-        source_match=source_match,
-    )
     return PublicPdfResult(
         output_pdf=output_pdf,
         manifest_path=manifest_path,
@@ -166,6 +183,7 @@ def validate_public_pdf(
 ) -> None:
     """Fail closed when a PDF exposes contact or section data forbidden by policy."""
 
+    person = _load_person(sot_path)
     document = _open_pdf(path)
     try:
         if document.needs_pass:
@@ -173,12 +191,11 @@ def validate_public_pdf(
         if document.embfile_count():
             raise PublicPdfError(f"Public PDF must not contain embedded files: {path}")
         _validate_verifiable_visual_content(document)
-        _validate_pdf_links(document)
+        _validate_pdf_links(document, person=person, variant=variant)
         text = "\n".join(page.get_text() for page in document)
     finally:
         document.close()
 
-    person = _load_person(sot_path)
     forbidden_phone_digits = _forbidden_phone_digits(person, publish)
     if any(
         _matches_forbidden_phone(match.group(0), forbidden_phone_digits)
@@ -326,24 +343,74 @@ def _character_is_within_redaction(
     return any(character_rect.intersects(region) for region in regions)
 
 
-def _validate_pdf_links(document: pymupdf.Document) -> None:
+def _validate_pdf_links(
+    document: pymupdf.Document,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+) -> None:
+    allowed_urls = _allowed_public_links(person, variant)
     for page_index, page in enumerate(document):
         word_rectangles = [pymupdf.Rect(*word[:4]) for word in page.get_text("words")]
         for link in page.get_links():
             uri = link.get("uri")
             parsed = urlsplit(uri) if isinstance(uri, str) else None
             link_rect = pymupdf.Rect(link["from"])
-            covers_visible_text = any(link_rect.intersects(rect) for rect in word_rectangles)
+            label_rect = _visible_link_label_rect(link_rect, word_rectangles)
             if (
                 link.get("kind") != pymupdf.LINK_URI
                 or parsed is None
                 or parsed.scheme.casefold() != "https"
                 or not parsed.hostname
-                or not covers_visible_text
+                or uri not in allowed_urls
+                or label_rect is None
+                or not _rect_edges_match(link_rect, label_rect)
             ):
                 raise PublicPdfError(
                     f"Public PDF contains an unsafe or hidden link on page {page_index + 1}"
                 )
+
+
+def _allowed_public_links(person: dict[str, Any], variant: Variant) -> set[str]:
+    if "links" not in variant.contact_fields:
+        return set()
+    raw_links = person.get("links")
+    if not isinstance(raw_links, list):
+        return set()
+    allowed: set[str] = set()
+    for link in raw_links:
+        if not isinstance(link, dict):
+            continue
+        uri = link.get("url")
+        parsed = urlsplit(uri) if isinstance(uri, str) else None
+        if parsed is None or parsed.scheme.casefold() != "https" or not parsed.hostname:
+            raise PublicPdfError("Public Source of Truth links must be absolute HTTPS URLs")
+        allowed.add(uri)
+    return allowed
+
+
+def _visible_link_label_rect(
+    link_rect: pymupdf.Rect,
+    word_rectangles: list[pymupdf.Rect],
+) -> pymupdf.Rect | None:
+    covered = [
+        rect
+        for rect in word_rectangles
+        if link_rect.contains(pymupdf.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2))
+    ]
+    if not covered:
+        return None
+    label_rect = pymupdf.Rect(covered[0])
+    for rect in covered[1:]:
+        label_rect |= rect
+    return label_rect
+
+
+def _rect_edges_match(left: pymupdf.Rect, right: pymupdf.Rect) -> bool:
+    return all(
+        abs(left_value - right_value) <= LINK_LABEL_TOLERANCE_POINTS
+        for left_value, right_value in zip(left, right, strict=True)
+    )
 
 
 def _validate_verifiable_visual_content(document: pymupdf.Document) -> None:
@@ -365,6 +432,57 @@ def _validate_verifiable_visual_content(document: pymupdf.Document) -> None:
                 raise PublicPdfError(
                     f"Public PDF contains unverifiable vector content on page {page_index + 1}"
                 )
+
+
+def _validate_source_visual_contract(
+    document: pymupdf.Document,
+    publish: PublishConfig,
+) -> str:
+    _validate_verifiable_visual_content(document)
+    fingerprint = _visual_fingerprint(document)
+    if fingerprint != publish.approved_visual_fingerprint_sha256:
+        raise PublicPdfError(
+            "Authored PDF visual fingerprint is not approved; review the source layout first, "
+            f"then set approved_visual_fingerprint_sha256 to {fingerprint}"
+        )
+    return fingerprint
+
+
+def _visual_fingerprint(document: pymupdf.Document) -> str:
+    drawings: list[dict[str, Any]] = []
+    for page_index, page in enumerate(document):
+        for drawing in page.get_drawings():
+            drawings.append(
+                {
+                    "page": page_index,
+                    "type": drawing.get("type"),
+                    "rect": _canonical_visual_value(drawing.get("rect")),
+                    "fill": _canonical_visual_value(drawing.get("fill")),
+                    "color": _canonical_visual_value(drawing.get("color")),
+                    "width": _canonical_visual_value(drawing.get("width")),
+                    "dashes": drawing.get("dashes"),
+                    "close_path": drawing.get("closePath"),
+                    "fill_opacity": _canonical_visual_value(drawing.get("fill_opacity")),
+                    "stroke_opacity": _canonical_visual_value(drawing.get("stroke_opacity")),
+                    "even_odd": drawing.get("even_odd"),
+                    "layer": drawing.get("layer"),
+                    "items": _canonical_visual_value(drawing.get("items", [])),
+                }
+            )
+    payload = json.dumps(drawings, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _canonical_visual_value(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return round(value, 5)
+    if isinstance(value, (pymupdf.Point, pymupdf.Rect, pymupdf.Quad)):
+        return [_canonical_visual_value(item) for item in tuple(value)]
+    if isinstance(value, (list, tuple)):
+        return [_canonical_visual_value(item) for item in value]
+    raise PublicPdfError(f"Public PDF contains unsupported visual metadata: {type(value).__name__}")
 
 
 def _mark_private_content(
@@ -577,17 +695,20 @@ def _temporary_pdf_path(output_pdf: Path) -> Path:
     return Path(value)
 
 
-def _write_publication_manifest(
-    path: Path,
+def _publication_manifest_content(
     *,
-    authored_source: Path,
-    source_pdf: Path,
-    output_pdf: Path,
+    authored_name: str,
+    authored_sha256: str,
+    source_pdf_name: str,
+    source_pdf_sha256: str,
+    output_pdf_name: str,
+    output_pdf_sha256: str,
     variant: Variant,
     publish: PublishConfig,
     redaction_count: int,
     source_match: _SourceMatch,
-) -> None:
+    source_visual_fingerprint: str,
+) -> str:
     payload = {
         "schema_version": 1,
         "artifact_kind": "authored-pdf-publication",
@@ -598,15 +719,16 @@ def _write_publication_manifest(
             "order": list(variant.order),
         },
         "formats": ["pdf"],
-        "outputs": {"pdf": output_pdf.name},
-        "output_hashes": {"pdf": _hash_file(output_pdf)},
+        "outputs": {"pdf": output_pdf_name},
+        "output_hashes": {"pdf": output_pdf_sha256},
         "source": {
-            "authored_name": authored_source.name,
-            "authored_sha256": _hash_file(authored_source),
-            "exported_pdf_name": source_pdf.name,
-            "exported_pdf_sha256": _hash_file(source_pdf),
+            "authored_name": authored_name,
+            "authored_sha256": authored_sha256,
+            "exported_pdf_name": source_pdf_name,
+            "exported_pdf_sha256": source_pdf_sha256,
             "pdf_token_coverage": round(source_match.pdf_token_coverage, 6),
             "docx_token_coverage": round(source_match.docx_token_coverage, 6),
+            "visual_fingerprint_sha256": source_visual_fingerprint,
         },
         "transformation": {
             "kind": "semantic-redaction",
@@ -615,9 +737,7 @@ def _write_publication_manifest(
             "redaction_count": redaction_count,
         },
     }
-    temporary_manifest = path.with_name(f".{path.name}.tmp")
-    temporary_manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    os.replace(temporary_manifest, path)
+    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def _hash_file(path: Path) -> str:
