@@ -42,7 +42,9 @@ def test_workflows_use_least_privilege_and_immutable_action_pins() -> None:
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
     assert "dependency-audit:" in ci
     assert "uv run pip-audit" in ci
-    assert "--no-install-recommends lmodern pandoc texlive-xetex" in ci
+    assert "--no-install-recommends lmodern pandoc texlive-fonts-recommended texlive-xetex" in ci
+    assert "kpsewhich lmroman10-regular.otf" in ci
+    assert "kpsewhich pzdr.tfm" in ci
 
 
 def test_dependabot_covers_python_and_workflow_dependencies() -> None:
