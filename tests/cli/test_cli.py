@@ -15,6 +15,7 @@ import importlib
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -468,16 +469,16 @@ def test_project_new_help_mentions_open_json_constraint() -> None:
 def test_help_surfaces_descriptions_for_discovery_commands() -> None:
     runner = CliRunner()
 
-    top_level = runner.invoke(app, ["--help"])
-    variant_help = runner.invoke(app, ["variant", "--help"])
-    workflow_help = runner.invoke(app, ["workflow", "--help"])
+    top_level = runner.invoke(app, ["--help"], terminal_width=160)
+    variant_help = runner.invoke(app, ["variant", "--help"], terminal_width=160)
+    workflow_help = runner.invoke(app, ["workflow", "--help"], terminal_width=160)
 
     assert top_level.exit_code == 0
     assert variant_help.exit_code == 0
     assert workflow_help.exit_code == 0
-    top_level_output = " ".join(strip_ansi(top_level.stdout).split())
-    variant_output = " ".join(strip_ansi(variant_help.stdout).split())
-    workflow_output = " ".join(strip_ansi(workflow_help.stdout).split())
+    top_level_output = " ".join(strip_ansi(top_level.stdout).replace("│", " ").split())
+    variant_output = " ".join(strip_ansi(variant_help.stdout).replace("│", " ").split())
+    workflow_output = " ".join(strip_ansi(workflow_help.stdout).replace("│", " ").split())
     assert "Inspect configured variants and manage ephemeral draft/project" in top_level_output
     assert "Create, inspect, and apply job-tailoring project workspaces." in top_level_output
     assert "Show configured variants alongside lifecycle inbox entries." in variant_output
@@ -616,7 +617,7 @@ def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, mo
             "cleanup_path": proposals_dir,
             "source": "project",
             "status": "ephemeral",
-            "expires_at": "2026-03-17T00:00:00+00:00",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
             "label": "job",
         },
     )()

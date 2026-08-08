@@ -19,7 +19,12 @@ import pytest
 from typer.testing import CliRunner
 
 import cvworkbench.build.rendering as rendering_module
-from cvworkbench.build.rendering import RenderError, RenderRequest, render_documents
+from cvworkbench.build.rendering import (
+    RenderError,
+    RenderRequest,
+    _allocate_temp_output_path,
+    render_documents,
+)
 from cvworkbench.cli import app
 from cvworkbench.variants import DEFAULT_ORDER, Variant
 from tests.utils import strip_ansi
@@ -44,6 +49,7 @@ def test_render_writes_output(tmp_path: Path) -> None:
             "base",
             "--format",
             "md",
+            "--plain",
         ],
     )
 
@@ -141,6 +147,12 @@ def test_render_documents_cleans_up_temp_outputs_on_failure(tmp_path: Path, monk
     assert not (tmp_path / "cv.md").exists()
     assert not (tmp_path / "cv.docx").exists()
     assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_atomic_render_preserves_pdf_output_extension(tmp_path: Path) -> None:
+    temp_path = _allocate_temp_output_path(tmp_path / "cv.pdf")
+
+    assert temp_path.suffix == ".pdf"
 
 
 def _sample_variant(outputs: list[str]) -> Variant:

@@ -1,3 +1,12 @@
+---
+id: concepts-overview
+intent: Explain the workbench capabilities and primary command surfaces.
+audience: [operator, agent, maintainer]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Overview
 
 cv-workbench is a public, deterministic CV/resume build engine. Personal content
@@ -62,6 +71,8 @@ Selection metadata is written to `selection.json` for explainable filtering.
 
 Variants can target different document types (resume, cover-letter). Tag filters
 apply to bullet entries and cover-letter sections for consistent selection.
+`contact_fields` explicitly selects top-level contact data; public policy can
+also forbid sections such as references before site sync.
 
 URL ingestion creates local registry entries under `var/registry/contexts/` and
 stores extracted text, deterministic signals, and a draft strategy file.

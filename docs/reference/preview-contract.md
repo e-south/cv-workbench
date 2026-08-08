@@ -1,3 +1,12 @@
+---
+id: reference-preview-contract
+intent: Define the local-only preview server and browser-control boundary.
+audience: [operator, agent, maintainer]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Preview Contract
 
 The preview server is a local-only HTTP surface that exposes a minimal UI and

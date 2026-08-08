@@ -1,3 +1,12 @@
+---
+id: howto-styling
+intent: Explain theme, format, and style-preset ownership.
+audience: [operator, maintainer]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Styling and themes
 
 cv-workbench styles outputs through theme packs. A theme is a directory under

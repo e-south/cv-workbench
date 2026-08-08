@@ -423,7 +423,7 @@ def test_workflow_json_preserves_explicit_recipe_context(tmp_path: Path) -> None
     payload = json.loads(result.stdout)
     recipe = payload["recipes"][0]
     assert recipe["steps"][0]["command"] == _recipe_command(
-        "status",
+        "status --plain",
         config_path=config_path,
         sot_path=sot_path,
     )

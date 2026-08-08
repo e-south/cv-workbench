@@ -1,3 +1,12 @@
+---
+id: howto-performance
+intent: Provide reproducible performance-profiling procedures.
+audience: [maintainer, agent]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Performance profiling
 
 Profile deterministic commands, not ad hoc interactive runs. Pin the SoT,

@@ -20,6 +20,7 @@ from cvworkbench.config import (
     resolve_drafts_path,
     resolve_project_path,
     resolve_project_root,
+    resolve_publish_path,
     resolve_reviews_path,
     resolve_runs_path,
     resolve_sot_path,
@@ -38,6 +39,7 @@ def test_config_paths_resolve_relative_to_config_dir(tmp_path: Path) -> None:
                 "paths:",
                 "  sot: ../local/sot",
                 "  dist: ../var/dist",
+                "  publish: ../var/publish",
                 "  runs: ../var/runs",
                 "render:",
                 "  themes_dir: ../build/themes",
@@ -51,6 +53,7 @@ def test_config_paths_resolve_relative_to_config_dir(tmp_path: Path) -> None:
 
     assert resolve_sot_path(None, config_path) == (tmp_path / "local" / "sot").resolve()
     assert resolve_dist_path(config_path) == (tmp_path / "var" / "dist").resolve()
+    assert resolve_publish_path(config_path) == (tmp_path / "var" / "publish").resolve()
     assert resolve_runs_path(config_path) == (tmp_path / "var" / "runs").resolve()
     assert resolve_themes_dir(config_path) == (tmp_path / "build" / "themes").resolve()
     assert resolve_default_theme(config_path) == "default"

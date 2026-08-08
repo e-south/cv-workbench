@@ -3,6 +3,10 @@ variant:
   include_tags: []
   exclude_tags:
     - private
+  contact_fields:
+    - email
+    - location
+    - links
   output_name: cv
   document_type: resume
   max_bullets_per_role: 4
@@ -17,7 +21,6 @@ variant:
     - honors
     - service
     - teaching
-    - references
   outputs:
     - md
     - pdf

@@ -74,3 +74,38 @@ def test_markdown_includes_section_intro_snippet() -> None:
     content = build_markdown(sot, variant)
 
     assert "Selected experience across research and industry." in content
+
+
+def test_markdown_only_renders_configured_contact_fields(tmp_path: Path) -> None:
+    variant_path = tmp_path / "public.yaml"
+    variant_path.write_text(
+        "\n".join(
+            [
+                "variant:",
+                "  id: public",
+                "  contact_fields: [email, location]",
+                "  order: [summary]",
+                "  outputs: [md]",
+            ]
+        )
+        + "\n"
+    )
+    variant = load_variant(variant_path)
+    sot = {
+        "person": {
+            "name": "Alex Example",
+            "label": "Private label",
+            "email": "alex@example.com",
+            "phone": "+1 555 555 0100",
+            "location": {"city": "Boston", "region": "MA"},
+            "links": [{"label": "Profile", "url": "https://example.com"}],
+        }
+    }
+
+    content = build_markdown(sot, variant)
+
+    assert "alex@example.com" in content
+    assert "Boston, MA" in content
+    assert "+1 555 555 0100" not in content
+    assert "Private label" not in content
+    assert "https://example.com" not in content

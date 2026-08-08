@@ -130,6 +130,9 @@ def _write_minimal_config(root: Path) -> None:
                 "publish:",
                 "  variants:",
                 "    - base",
+                "  required_exclude_tags: [private]",
+                "  forbidden_contact_fields: [phone]",
+                "  forbidden_sections: [references]",
             ]
         )
         + "\n"
@@ -140,9 +143,9 @@ def _write_minimal_config(root: Path) -> None:
                 "site:",
                 "  repo_path: ../site",
                 "  publish_variant: base",
-                "  cv_markdown: src/content/cv/cv.md",
                 "  cv_pdf_dir: public/cv",
                 "  cv_pdf_name: cv.pdf",
+                "  cv_manifest: scripts/cv/public-cv-manifest.json",
                 "  cv_page: src/content/page-cv/cv.md",
                 "  cv_page_frontmatter_key: cvPdf",
             ]

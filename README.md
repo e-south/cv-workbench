@@ -18,6 +18,9 @@ workflow map, contracts, and maintainer routes.
 - [docs/reference/preview-contract.md](docs/reference/preview-contract.md): local build and preview contract
 - [docs/reference/project-contract.md](docs/reference/project-contract.md): project guide, reviewpack, import, and guarded patching
 - [docs/reference/verify-contract.md](docs/reference/verify-contract.md): repo-local verification harness
+- [docs/reference/site-contract.md](docs/reference/site-contract.md): public artifact and site ownership boundary
+- [docs/howto/publish-site.md](docs/howto/publish-site.md): faithful authored-DOCX publication flow
+- [docs/reference/documentation-contract.md](docs/reference/documentation-contract.md): agent-facing frontmatter and progressive disclosure
 - [docs/concepts/architecture.md](docs/concepts/architecture.md): boundaries and design constraints
 
 ## Start Here
@@ -49,7 +52,8 @@ uv run python scripts/verify_repo.py
 - Build and preview: start with [docs/howto/quickstart.md](docs/howto/quickstart.md), then use [docs/reference/preview-contract.md](docs/reference/preview-contract.md) for explicit render and preview behavior.
 - Job tailoring and proposal review: start with [docs/howto/ingestion.md](docs/howto/ingestion.md), then use [docs/reference/project-contract.md](docs/reference/project-contract.md).
 - Automation and agent bootstrap: start with [docs/reference/context-contract.md](docs/reference/context-contract.md), then narrow to [docs/reference/verify-contract.md](docs/reference/verify-contract.md).
-- Styling, versioned SoT, and site sync: use [docs/howto/styling.md](docs/howto/styling.md), [docs/howto/sot-versions.md](docs/howto/sot-versions.md), and [docs/reference/site-contract.md](docs/reference/site-contract.md).
+- Styling and versioned SoT: use [docs/howto/styling.md](docs/howto/styling.md) and [docs/howto/sot-versions.md](docs/howto/sot-versions.md).
+- Authored CV publication and site sync: use [docs/howto/publish-site.md](docs/howto/publish-site.md), then [docs/reference/site-contract.md](docs/reference/site-contract.md).
 
 ## Scope Boundary
 

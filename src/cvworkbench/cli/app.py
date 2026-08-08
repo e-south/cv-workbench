@@ -95,6 +95,14 @@ from cvworkbench.ops.projects import (
     retarget_project_variant,
     suggest_project_variant_id,
 )
+from cvworkbench.ops.public_pdf import (
+    PublicPdfError,
+    PublicPdfResult,
+)
+from cvworkbench.ops.public_pdf import (
+    prepare_public_pdf as prepare_authored_public_pdf,
+)
+from cvworkbench.ops.publish import PublishError
 from cvworkbench.ops.render_compare import RenderCompareError, compare_rendered_pdfs
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.runs import (
@@ -252,6 +260,8 @@ def _print_sync_summary(result: SyncResult) -> None:
     changed_files = len(plan.copy_ops)
     if plan.frontmatter_content:
         changed_files += 1
+    if plan.manifest_content:
+        changed_files += 1
     status = "no_changes"
     if plan.has_changes():
         status = "pr_created" if result.mode == "pr" else "applied"
@@ -266,6 +276,18 @@ def _print_sync_summary(result: SyncResult) -> None:
     if result.branch:
         rows.append(("branch", result.branch))
     print_summary("sync", rows)
+
+
+def _print_public_pdf_summary(result: PublicPdfResult) -> None:
+    print_summary(
+        "prepare-public-pdf",
+        [
+            ("status", "prepared"),
+            ("output_pdf", result.output_pdf),
+            ("manifest", result.manifest_path),
+            ("redactions", str(result.redaction_count)),
+        ],
+    )
 
 
 def _print_validate_summary(sot_path: Path) -> None:
@@ -882,7 +904,7 @@ def _build_context_recipes(
                 "steps": [
                     {
                         "command": _cvw_recipe_command(
-                            "status",
+                            "status --plain",
                             config_path=config_path,
                             sot_path=sot_path,
                             configured_sot_path=configured_sot_path,
@@ -928,7 +950,7 @@ def _build_context_recipes(
                 "steps": [
                     {
                         "command": _cvw_recipe_command(
-                            "status",
+                            "status --plain",
                             config_path=config_path,
                             sot_path=sot_path,
                             configured_sot_path=configured_sot_path,
@@ -7039,6 +7061,87 @@ def compare(
         return
 
     _print_compare_summary(summary)
+
+
+@app.command("prepare-public-pdf")
+def prepare_public_pdf_command(
+    authored_source: Annotated[
+        Path,
+        typer.Option(
+            "--authored-source",
+            help="Canonical editable DOCX used to create the exported PDF",
+        ),
+    ],
+    source_pdf: Annotated[
+        Path,
+        typer.Option(
+            "--source-pdf",
+            help="Faithful PDF exported from the authored CV source",
+        ),
+    ],
+    variant: Annotated[
+        str | None,
+        typer.Option(
+            "--variant",
+            help="Publish variant id (defaults to config)",
+        ),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            help="Path to workbench config",
+        ),
+    ] = Path("config/workbench.yaml"),
+    publish_config: Annotated[
+        Path | None,
+        typer.Option(
+            "--publish-config",
+            help="Path to public publication policy",
+        ),
+    ] = None,
+    sot_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--sot-path",
+            help="Path to private Source of Truth data",
+        ),
+    ] = None,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Use plain text output (no Rich panels)",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Use JSON output for summaries",
+        ),
+    ] = False,
+) -> None:
+    """Prepare a faithful authored PDF for fail-closed public distribution."""
+
+    configure_output_mode(plain, json_output)
+    try:
+        resolved_config = resolve_config_path(config)
+        resolved_variant = variant or resolve_default_variant(resolved_config)
+        resolved_sot = resolve_sot_path(sot_path, resolved_config)
+        resolved_publish = publish_config or resolved_config.parent / "publish.yaml"
+        result = prepare_authored_public_pdf(
+            authored_source=authored_source.expanduser().resolve(),
+            source_pdf=source_pdf.expanduser().resolve(),
+            config_path=resolved_config,
+            variant_id=resolved_variant,
+            publish_config_path=resolved_publish,
+            sot_path=resolved_sot,
+        )
+    except (FileNotFoundError, PublicPdfError, PublishError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _print_public_pdf_summary(result)
 
 
 @app.command()

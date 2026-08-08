@@ -1,3 +1,12 @@
+---
+id: reference-verify-contract
+intent: Define the repository tracer-bullet verification contract.
+audience: [agent, maintainer]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Verify Contract
 
 `scripts/verify_repo.py` is the repo-local tracer-bullet harness for the

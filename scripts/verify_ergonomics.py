@@ -648,7 +648,7 @@ def main() -> int:
             recipes = context_payload["recipes"]
             automation_recipe = _recipe_by_id(recipes, "automation.verify")
             _require(
-                automation_recipe["steps"][0]["command"] == _repo_cvw_command("status"),
+                automation_recipe["steps"][0]["command"] == _repo_cvw_command("status --plain"),
                 "automation.verify must start with the status command",
             )
             review_recipe = _recipe_by_id(recipes, "review.import")

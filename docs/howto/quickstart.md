@@ -1,3 +1,12 @@
+---
+id: howto-quickstart
+intent: Provide the shortest safe path from setup to verified sample artifacts.
+audience: [operator, agent]
+status: active
+navigation:
+  parent: ../readme.md
+---
+
 # Quickstart
 
 This guide walks through the fastest local path to a generated CV using the
