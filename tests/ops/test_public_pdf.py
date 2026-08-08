@@ -24,6 +24,7 @@ from cvworkbench.cli import app
 from cvworkbench.ops import atomic
 from cvworkbench.ops.public_pdf import (
     PublicPdfError,
+    _visual_fingerprint,
     prepare_public_pdf,
     validate_public_pdf,
     validate_public_pdf_layout,
@@ -175,6 +176,38 @@ def test_validate_public_pdf_rejects_unauthorized_third_party_email(tmp_path: Pa
         )
 
 
+def test_validate_public_pdf_rejects_third_party_phone(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unsafe.pdf"
+    _write_pdf(source_pdf, ["Example Person\nAdvisor | 212.555.0199"])
+
+    with pytest.raises(PublicPdfError, match="forbidden phone number"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
+def test_validate_public_pdf_does_not_treat_citation_numbers_as_phones(
+    tmp_path: Path,
+) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "safe.pdf"
+    _write_pdf(
+        source_pdf,
+        ["Nat Chem Biol 19, 951-961 (2023)\nACS Omega 2022 7 (22), 18331-18338"],
+    )
+
+    validate_public_pdf(
+        source_pdf,
+        variant=load_variant(variant_path),
+        publish=load_publish_config(publish_path),
+        sot_path=sot_path,
+    )
+
+
 def test_prepare_public_pdf_redacts_compact_phone_matching_source_of_truth(
     tmp_path: Path,
 ) -> None:
@@ -194,7 +227,31 @@ def test_prepare_public_pdf_redacts_compact_phone_matching_source_of_truth(
     )
 
     with pymupdf.open(result.output_pdf) as document:
-        assert "5558675309" not in "\n".join(page.get_text() for page in document)
+        public_text = "\n".join(page.get_text() for page in document)
+        assert "5558675309" not in public_text
+        assert "|" not in public_text
+
+
+def test_prepare_public_pdf_redacts_third_party_phone(tmp_path: Path) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "authored.pdf"
+    authored_source = tmp_path / "authored.docx"
+    _write_docx(authored_source, "Example Person Advisor 212.555.0199 Education")
+    _write_pdf(source_pdf, ["Example Person\nAdvisor | 212.555.0199\nEducation"])
+
+    result = prepare_public_pdf(
+        authored_source=authored_source,
+        source_pdf=source_pdf,
+        config_path=config_path,
+        variant_id="base",
+        publish_config_path=publish_path,
+        sot_path=sot_path,
+    )
+
+    with pymupdf.open(result.output_pdf) as document:
+        public_text = "\n".join(page.get_text() for page in document)
+        assert "212.555.0199" not in public_text
+        assert "|" not in public_text
 
 
 def test_validate_public_pdf_rejects_hidden_contact_link(tmp_path: Path) -> None:
@@ -382,6 +439,42 @@ def test_prepare_public_pdf_rejects_unapproved_rectangle_layout(tmp_path: Path) 
         )
 
 
+def test_prepare_public_pdf_preserves_approved_graphics_during_redaction(
+    tmp_path: Path,
+) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "authored.pdf"
+    authored_source = tmp_path / "authored.docx"
+    _write_docx(authored_source, "Example Person 555.867.5309 Education")
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Example Person | 555.867.5309\nEducation", fontsize=11)
+    page.draw_rect(page.search_for("555.867.5309")[0], color=(0, 0, 0))
+    document.save(source_pdf)
+    document.close()
+
+    with pymupdf.open(source_pdf) as source:
+        source_fingerprint = _visual_fingerprint(source)
+    publish_path.write_text(
+        publish_path.read_text().replace(
+            "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            source_fingerprint,
+        )
+    )
+
+    result = prepare_public_pdf(
+        authored_source=authored_source,
+        source_pdf=source_pdf,
+        config_path=config_path,
+        variant_id="base",
+        publish_config_path=publish_path,
+        sot_path=sot_path,
+    )
+
+    with pymupdf.open(result.output_pdf) as public:
+        assert _visual_fingerprint(public) == source_fingerprint
+
+
 def test_prepare_public_pdf_restores_pdf_and_manifest_when_replace_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -473,7 +566,7 @@ def test_validate_public_pdf_layout_rejects_unapproved_text_deletion(tmp_path: P
 
     document = pymupdf.open(source_pdf)
     page = document[0]
-    page.add_redact_annot(page.search_for("Person")[0], fill=(1, 1, 1), cross_out=False)
+    page.add_redact_annot(page.search_for("Person")[0], fill=None, cross_out=False)
     page.apply_redactions(images=0, graphics=0, text=0)
     document.save(public_pdf)
     document.close()
@@ -515,6 +608,30 @@ def test_prepare_public_pdf_anchors_redaction_to_exact_section_heading(
     assert "References appear in this prose." in public_text
     assert "Public retained line" in public_text
     assert "Advisor" not in public_text
+
+
+def test_prepare_public_pdf_rejects_nonterminal_forbidden_section(
+    tmp_path: Path,
+) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "authored.pdf"
+    authored_source = tmp_path / "authored.docx"
+    text = "Example Person References Advisor Education Public research"
+    _write_docx(authored_source, text)
+    _write_pdf(
+        source_pdf,
+        ["Example Person\nReferences\nAdvisor\nEducation\nPublic research"],
+    )
+
+    with pytest.raises(PublicPdfError, match="must be terminal"):
+        prepare_public_pdf(
+            authored_source=authored_source,
+            source_pdf=source_pdf,
+            config_path=config_path,
+            variant_id="base",
+            publish_config_path=publish_path,
+            sot_path=sot_path,
+        )
 
 
 def test_prepare_public_pdf_fails_closed_when_required_heading_cannot_be_redacted(

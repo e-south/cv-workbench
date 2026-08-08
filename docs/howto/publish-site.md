@@ -34,7 +34,9 @@ authored export changes its non-text rectangle layout, preparation reports the
 observed fingerprint and stops. Compare the new export visually with the DOCX;
 only after that review should you update the approved fingerprint and rerun.
 This keeps table rules and underlines possible without treating arbitrary
-rectangle compositions as automatically safe.
+rectangle compositions as automatically safe. Text-only redactions use a
+transparent overlay and the saved public PDF must retain the source rectangle
+fingerprint exactly.
 
 ## Prepare
 
@@ -61,9 +63,13 @@ metadata disagrees, a destination escapes the configured site repository, the
 PDF contains unverifiable raster, annotation, form, or complex-vector data, or
 any removed character falls outside an exact policy-derived redaction region,
 or any surviving character changes its page, order, origin, bounding box, font,
-size, style flags, or color. Section removal starts at the exact heading line,
-not an earlier prose mention. Do not replace this lane with a Markdown-to-PDF
-rebuild when layout fidelity is the requirement.
+size, style flags, or color, or any approved vector graphic changes. Phone
+policy covers recognized third-party phone shapes as well as the owner's Source
+of Truth value and removes an adjacent separator with the contact. Section
+removal starts at the exact heading line, not an earlier prose mention, and a
+forbidden section must be terminal so it cannot consume a later allowed
+section. Do not replace this lane with a Markdown-to-PDF rebuild when layout
+fidelity is the requirement.
 
 Retained links must exactly match a public link in the person Source of Truth,
 use HTTPS, and have a click rectangle that closely matches visible label text.
