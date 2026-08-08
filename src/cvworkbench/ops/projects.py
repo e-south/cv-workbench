@@ -134,8 +134,7 @@ def project_patch_render_warning(
     if not any(operation in _PROJECT_OPS_RESUME_SURFACE for operation in patch_operations):
         return None
     return (
-        "project-ops target resume content and will not appear in "
-        "cover-letter preview/build output"
+        "project-ops target resume content and will not appear in cover-letter preview/build output"
     )
 
 
@@ -744,7 +743,7 @@ def _compile_project_operations(
             new_text = _require_operation_text(operation, "new_text", index=index)
             if project_id in seen_project_targets:
                 raise ProjectError(
-                    "Duplicate project op target for project summary: " f"project_id={project_id}"
+                    f"Duplicate project op target for project summary: project_id={project_id}"
                 )
             seen_project_targets.add(project_id)
             if project_id in duplicate_projects:
@@ -755,7 +754,7 @@ def _compile_project_operations(
             project_entry = project_index.get(project_id)
             if project_entry is None:
                 raise ProjectError(
-                    "Project op target not found in projects.yaml: " f"project_id={project_id}"
+                    f"Project op target not found in projects.yaml: project_id={project_id}"
                 )
             current_summary = project_entry.get("summary")
             if not isinstance(current_summary, str) or not current_summary.strip():
@@ -765,8 +764,7 @@ def _compile_project_operations(
                 )
             if current_summary != old_text:
                 raise ProjectError(
-                    "Project op source text mismatch for project summary: "
-                    f"project_id={project_id}"
+                    f"Project op source text mismatch for project summary: project_id={project_id}"
                 )
             project_entry["summary"] = new_text
             continue
@@ -902,13 +900,11 @@ def _read_project_summary_text(
         )
     project_entry = project_index.get(project_id)
     if project_entry is None:
-        raise ProjectError(
-            "Project op target not found in projects.yaml: " f"project_id={project_id}"
-        )
+        raise ProjectError(f"Project op target not found in projects.yaml: project_id={project_id}")
     current_summary = project_entry.get("summary")
     if not isinstance(current_summary, str) or not current_summary.strip():
         raise ProjectError(
-            "Project summary text is invalid for project op target: " f"project_id={project_id}"
+            f"Project summary text is invalid for project op target: project_id={project_id}"
         )
     return current_summary.strip()
 

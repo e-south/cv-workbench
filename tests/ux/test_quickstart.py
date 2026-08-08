@@ -17,6 +17,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from tests.utils import isolated_filesystem
 
 
 def _cvw_prefix() -> str:
@@ -166,7 +167,7 @@ def test_quickstart_builds_sample(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         result = runner.invoke(app, ["quickstart", "--plain"])
 
     assert result.exit_code == 0
@@ -186,7 +187,7 @@ def test_quickstart_sample_default_updates_config(tmp_path: Path, monkeypatch) -
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         result = runner.invoke(app, ["quickstart", "--sample-default", "--plain"])
 
     assert result.exit_code == 0
@@ -207,7 +208,7 @@ def test_quickstart_sample_default_uses_workspace_sample(tmp_path: Path, monkeyp
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         root = Path(cwd)
         result = runner.invoke(app, ["init", "--sample-default", "--plain"])
         assert result.exit_code == 0
@@ -232,7 +233,7 @@ def test_quickstart_reuses_existing_workspace_root_from_subdir(tmp_path: Path, m
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         root = Path(cwd)
         result = runner.invoke(app, ["init", "--plain"])
         assert result.exit_code == 0

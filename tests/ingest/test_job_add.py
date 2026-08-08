@@ -19,6 +19,7 @@ from typer.testing import CliRunner
 import cvworkbench.ingestion.registry as registry_module
 from cvworkbench.cli import app
 from cvworkbench.ingestion.ingest import ExtractResult
+from tests.utils import isolated_filesystem
 
 
 def _write_minimal_config(root: Path) -> Path:
@@ -64,7 +65,7 @@ def test_job_add_creates_registry_entry(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(registry_module, "fetch_and_extract", fake_extract)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [
@@ -93,7 +94,7 @@ def test_job_add_rejects_unsafe_url(tmp_path: Path) -> None:
     config_path = _write_minimal_config(tmp_path)
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(
             app,
             [

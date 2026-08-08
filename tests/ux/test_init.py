@@ -20,6 +20,7 @@ from typer.testing import CliRunner
 import cvworkbench.ops.scaffold as scaffold_module
 from cvworkbench.cli import app
 from cvworkbench.ops.scaffold import resolve_template_root
+from tests.utils import isolated_filesystem
 
 
 def _write_minimal_sot_sample(root: Path) -> None:
@@ -164,7 +165,7 @@ def test_init_creates_scaffold(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         result = runner.invoke(app, ["init", "--plain"])
 
     assert result.exit_code == 0
@@ -193,7 +194,7 @@ def test_init_sample_default_points_config_to_workspace_sample(tmp_path: Path, m
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         result = runner.invoke(app, ["init", "--sample-default", "--plain"])
 
     assert result.exit_code == 0
@@ -216,7 +217,7 @@ def test_init_installs_precommit_hooks(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         root = Path(cwd)
         subprocess.run(
             ["git", "init"],
@@ -255,7 +256,7 @@ def test_init_reuses_existing_workspace_root_from_subdir(tmp_path: Path, monkeyp
     monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template_root))
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         root = Path(cwd)
         result = runner.invoke(app, ["init", "--plain"])
         assert result.exit_code == 0
@@ -320,7 +321,7 @@ def test_init_reports_precommit_install_error_detail(tmp_path: Path, monkeypatch
     )
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
+    with isolated_filesystem(temp_dir=tmp_path) as cwd:
         root = Path(cwd)
         subprocess.run(
             ["git", "init"],
