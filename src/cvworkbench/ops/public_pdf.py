@@ -65,6 +65,18 @@ class _SourceMatch:
     docx_token_coverage: float
 
 
+@dataclass(frozen=True)
+class _RedactionRegion:
+    page_index: int
+    rect: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class _RedactionPlan:
+    count: int
+    regions: tuple[_RedactionRegion, ...]
+
+
 def prepare_public_pdf(
     *,
     authored_source: Path,
@@ -93,7 +105,7 @@ def prepare_public_pdf(
 
     document = _open_pdf(source_pdf)
     try:
-        redaction_count = _mark_private_content(document, publish, person)
+        redaction_plan = _mark_private_content(document, publish, person)
         for page in document:
             page.apply_redactions(images=0, graphics=0, text=0)
         document.scrub(remove_links=False)
@@ -116,7 +128,11 @@ def prepare_public_pdf(
                 publish=publish,
                 sot_path=sot_path,
             )
-            validate_public_pdf_layout(source_pdf, temporary_pdf)
+            validate_public_pdf_layout(
+                source_pdf,
+                temporary_pdf,
+                allowed_redactions=redaction_plan.regions,
+            )
             os.replace(temporary_pdf, output_pdf)
         finally:
             temporary_pdf.unlink(missing_ok=True)
@@ -131,13 +147,13 @@ def prepare_public_pdf(
         output_pdf=output_pdf,
         variant=variant,
         publish=publish,
-        redaction_count=redaction_count,
+        redaction_count=redaction_plan.count,
         source_match=source_match,
     )
     return PublicPdfResult(
         output_pdf=output_pdf,
         manifest_path=manifest_path,
-        redaction_count=redaction_count,
+        redaction_count=redaction_plan.count,
     )
 
 
@@ -180,14 +196,19 @@ def validate_public_pdf(
     if unauthorized_emails:
         raise PublicPdfError("Public PDF contains an unauthorized email address")
 
-    normalized_text = text.casefold()
+    normalized_lines = {line.strip().casefold() for line in text.splitlines()}
     for section in publish.forbidden_sections:
         marker = _section_label(section).casefold()
-        if re.search(rf"\b{re.escape(marker)}\b", normalized_text):
+        if marker in normalized_lines:
             raise PublicPdfError(f"Public PDF contains forbidden section heading: {section}")
 
 
-def validate_public_pdf_layout(source_path: Path, public_path: Path) -> None:
+def validate_public_pdf_layout(
+    source_path: Path,
+    public_path: Path,
+    *,
+    allowed_redactions: tuple[_RedactionRegion, ...] = (),
+) -> None:
     """Prove that sanitization did not reflow or restyle surviving text."""
 
     source = _open_pdf(source_path)
@@ -195,6 +216,14 @@ def validate_public_pdf_layout(source_path: Path, public_path: Path) -> None:
     try:
         if source.page_count != public.page_count:
             raise PublicPdfError("Public PDF layout drift: page count changed")
+
+        allowed_by_page: dict[int, list[pymupdf.Rect]] = {}
+        for region in allowed_redactions:
+            if region.page_index < 0 or region.page_index >= source.page_count:
+                raise PublicPdfError(
+                    "Public PDF layout contract contains an invalid redaction page"
+                )
+            allowed_by_page.setdefault(region.page_index, []).append(pymupdf.Rect(region.rect))
 
         for page_index in range(source.page_count):
             source_page = source[page_index]
@@ -216,18 +245,33 @@ def validate_public_pdf_layout(source_path: Path, public_path: Path) -> None:
             source_characters = _pdf_characters(source_page)
             public_characters = _pdf_characters(public_page)
             source_cursor = 0
-            for public_character in public_characters:
-                while source_cursor < len(source_characters) and not _characters_match(
-                    source_characters[source_cursor], public_character
+            public_cursor = 0
+            while source_cursor < len(source_characters):
+                source_character = source_characters[source_cursor]
+                if public_cursor < len(public_characters) and _characters_match(
+                    source_character,
+                    public_characters[public_cursor],
                 ):
                     source_cursor += 1
-                if source_cursor == len(source_characters):
-                    value = repr(public_character.value)
-                    raise PublicPdfError(
-                        "Public PDF layout drift on page "
-                        f"{page_index + 1} near character {value}"
-                    )
-                source_cursor += 1
+                    public_cursor += 1
+                    continue
+                if _character_is_within_redaction(
+                    source_character,
+                    allowed_by_page.get(page_index, []),
+                ):
+                    source_cursor += 1
+                    continue
+                value = repr(source_character.value)
+                raise PublicPdfError(
+                    "Public PDF layout drift on page "
+                    f"{page_index + 1}: unapproved removal near character {value}"
+                )
+            if public_cursor != len(public_characters):
+                value = repr(public_characters[public_cursor].value)
+                raise PublicPdfError(
+                    "Public PDF layout drift on page "
+                    f"{page_index + 1}: unexpected character near {value}"
+                )
     finally:
         public.close()
         source.close()
@@ -273,6 +317,14 @@ def _coordinates_match(source: tuple[float, ...], public: tuple[float, ...]) -> 
     )
 
 
+def _character_is_within_redaction(
+    character: _PdfCharacter,
+    regions: list[pymupdf.Rect],
+) -> bool:
+    character_rect = pymupdf.Rect(character.bbox)
+    return any(character_rect.intersects(region) for region in regions)
+
+
 def _validate_pdf_links(document: pymupdf.Document) -> None:
     for page_index, page in enumerate(document):
         word_rectangles = [pymupdf.Rect(*word[:4]) for word in page.get_text("words")]
@@ -297,22 +349,25 @@ def _mark_private_content(
     document: pymupdf.Document,
     publish: PublishConfig,
     person: dict[str, Any],
-) -> int:
-    redaction_count = 0
+) -> _RedactionPlan:
+    regions: list[_RedactionRegion] = []
     forbidden_phone_digits = _forbidden_phone_digits(person, publish)
     if forbidden_phone_digits:
-        for page in document:
+        for page_index, page in enumerate(document):
             page_text = page.get_text()
             for match in PHONE_CANDIDATE_PATTERN.finditer(page_text):
                 if not _matches_forbidden_phone(match.group(0), forbidden_phone_digits):
                     continue
                 for rect in page.search_for(match.group(0)):
+                    region = _RedactionRegion(page_index=page_index, rect=tuple(rect))
+                    if region in regions:
+                        continue
                     page.add_redact_annot(rect, fill=(1, 1, 1), cross_out=False)
-                    redaction_count += 1
+                    regions.append(region)
 
     for section in publish.forbidden_sections:
-        redaction_count += _mark_section_and_following_pages(document, section)
-    return redaction_count
+        regions.extend(_mark_section_and_following_pages(document, section))
+    return _RedactionPlan(count=len(regions), regions=tuple(regions))
 
 
 def _forbidden_phone_digits(
@@ -348,7 +403,10 @@ def _matches_forbidden_phone(candidate: str, forbidden_digits: tuple[str, ...]) 
     return False
 
 
-def _mark_section_and_following_pages(document: pymupdf.Document, section: str) -> int:
+def _mark_section_and_following_pages(
+    document: pymupdf.Document,
+    section: str,
+) -> list[_RedactionRegion]:
     label = _section_label(section)
     heading_page: int | None = None
     heading_rect: pymupdf.Rect | None = None
@@ -359,22 +417,19 @@ def _mark_section_and_following_pages(document: pymupdf.Document, section: str) 
         marker_exists = marker_exists or bool(
             re.search(rf"\b{re.escape(label)}\b", page_text, re.IGNORECASE)
         )
-        lines = [line.strip() for line in page_text.splitlines()]
-        if not any(line.casefold() == label.casefold() for line in lines):
+        exact_heading_rect = _exact_line_rect(page, label)
+        if exact_heading_rect is None:
             continue
-        rectangles = page.search_for(label)
-        if not rectangles:
-            raise PublicPdfError(f"Could not locate forbidden section heading: {section}")
         heading_page = page_index
-        heading_rect = rectangles[0]
+        heading_rect = exact_heading_rect
         break
 
     if heading_page is None or heading_rect is None:
         if marker_exists:
             raise PublicPdfError(f"Could not isolate forbidden section heading: {section}")
-        return 0
+        return []
 
-    count = 0
+    regions: list[_RedactionRegion] = []
     for page_index in range(heading_page, document.page_count):
         page = document[page_index]
         if page_index == heading_page:
@@ -387,8 +442,18 @@ def _mark_section_and_following_pages(document: pymupdf.Document, section: str) 
         else:
             rect = page.rect
         page.add_redact_annot(rect, fill=(1, 1, 1), cross_out=False)
-        count += 1
-    return count
+        regions.append(_RedactionRegion(page_index=page_index, rect=tuple(rect)))
+    return regions
+
+
+def _exact_line_rect(page: pymupdf.Page, label: str) -> pymupdf.Rect | None:
+    payload = page.get_text("dict", sort=True)
+    for block in payload.get("blocks", []):
+        for line in block.get("lines", []):
+            text = "".join(span.get("text", "") for span in line.get("spans", [])).strip()
+            if text.casefold() == label.casefold():
+                return pymupdf.Rect(line["bbox"])
+    return None
 
 
 def _validate_publish_variant(variant: Variant, publish: PublishConfig) -> None:

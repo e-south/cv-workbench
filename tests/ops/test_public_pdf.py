@@ -288,6 +288,57 @@ def test_validate_public_pdf_layout_rejects_moved_surviving_text(tmp_path: Path)
         validate_public_pdf_layout(source_pdf, public_pdf)
 
 
+def test_validate_public_pdf_layout_rejects_unapproved_text_deletion(tmp_path: Path) -> None:
+    source_pdf = tmp_path / "source.pdf"
+    public_pdf = tmp_path / "public.pdf"
+    _write_pdf(source_pdf, ["Example Person"])
+
+    document = pymupdf.open(source_pdf)
+    page = document[0]
+    page.add_redact_annot(page.search_for("Person")[0], fill=(1, 1, 1), cross_out=False)
+    page.apply_redactions(images=0, graphics=0, text=0)
+    document.save(public_pdf)
+    document.close()
+
+    with pytest.raises(PublicPdfError, match="unapproved removal"):
+        validate_public_pdf_layout(source_pdf, public_pdf)
+
+
+def test_prepare_public_pdf_anchors_redaction_to_exact_section_heading(
+    tmp_path: Path,
+) -> None:
+    config_path, _, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "authored.pdf"
+    authored_source = tmp_path / "authored.docx"
+    text = (
+        "Example Person References appear in this prose Public retained line "
+        "References Advisor advisor@example.org"
+    )
+    _write_docx(authored_source, text)
+    _write_pdf(
+        source_pdf,
+        [
+            "Example Person\nReferences appear in this prose.\nPublic retained line\n"
+            "References\nAdvisor | advisor@example.org"
+        ],
+    )
+
+    result = prepare_public_pdf(
+        authored_source=authored_source,
+        source_pdf=source_pdf,
+        config_path=config_path,
+        variant_id="base",
+        publish_config_path=publish_path,
+        sot_path=sot_path,
+    )
+
+    with pymupdf.open(result.output_pdf) as document:
+        public_text = "\n".join(page.get_text() for page in document)
+    assert "References appear in this prose." in public_text
+    assert "Public retained line" in public_text
+    assert "Advisor" not in public_text
+
+
 def test_prepare_public_pdf_fails_closed_when_required_heading_cannot_be_redacted(
     tmp_path: Path,
 ) -> None:

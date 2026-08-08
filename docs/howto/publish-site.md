@@ -50,8 +50,10 @@ Preparation and sync fail closed when the source pair is unrelated, the PDF is
 invalid or encrypted, embedded files are present, a forbidden phone or section
 survives, an unauthorized email or hidden link appears, provenance or policy
 metadata disagrees, a destination escapes the configured site repository, or
-any surviving character changes its page, order, origin, bounding box, font,
-size, style flags, or color. Do not replace this lane with a Markdown-to-PDF
+any removed character falls outside an exact policy-derived redaction region,
+or any surviving character changes its page, order, origin, bounding box, font,
+size, style flags, or color. Section removal starts at the exact heading line,
+not an earlier prose mention. Do not replace this lane with a Markdown-to-PDF
 rebuild when layout fidelity is the requirement.
 
 Continue with [the site contract](../reference/site-contract.md) for ownership
