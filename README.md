@@ -1,4 +1,4 @@
-# cv-workbench
+# ![cv-workbench deterministic CV toolkit](assets/cv-workbench-banner.svg)
 
 [![CI](https://github.com/e-south/cv-workbench/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/e-south/cv-workbench/actions/workflows/ci.yml?query=branch%3Amain)
 
