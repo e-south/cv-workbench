@@ -62,6 +62,16 @@ def test_pull_request_template_routes_human_and_codex_review() -> None:
     assert "@codex review" in template
 
 
+def test_readme_banner_uses_package_safe_absolute_url() -> None:
+    readme = (ROOT / "README.md").read_text()
+
+    assert readme.startswith(
+        "# ![cv-workbench deterministic CV toolkit]("
+        "https://raw.githubusercontent.com/e-south/cv-workbench/main/"
+        "assets/cv-workbench-banner.svg)\n"
+    )
+
+
 def test_live_documentation_has_unique_agent_routing_frontmatter() -> None:
     documents = [ROOT / "docs/readme.md"]
     for section in ("concepts", "howto", "reference"):
