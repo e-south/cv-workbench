@@ -174,6 +174,103 @@ def test_failed_directory_mode_commit_recovers_files_and_created_tree(tmp_path, 
     assert list(tmp_path.iterdir()) == [original]
 
 
+def test_file_deletion_commits_with_replacements(tmp_path):
+    removed = tmp_path / "remove.txt"
+    removed.write_bytes(b"old")
+    updated = tmp_path / "update.txt"
+    updated.write_bytes(b"original")
+    absent = tmp_path / "missing/absent.txt"
+    atomic.replace_files_atomically(
+        [(updated, b"updated")],
+        delete_paths=[removed, absent],
+        expected_contents={removed: b"old", updated: b"original", absent: None},
+    )
+    assert updated.read_bytes() == b"updated"
+    assert not removed.exists()
+    assert not absent.parent.exists()
+
+
+@pytest.mark.parametrize("error", [OSError, KeyboardInterrupt])
+@pytest.mark.parametrize("after_unlink", [False, True])
+def test_failed_file_deletion_recovers_the_entire_group(tmp_path, monkeypatch, error, after_unlink):
+    removed = tmp_path / "remove.txt"
+    removed.write_bytes(b"private original")
+    removed.chmod(0o600)
+    updated = tmp_path / "update.txt"
+    updated.write_bytes(b"original")
+    unlink = Path.unlink
+    failures = []
+
+    def fail_delete(path, *args, **kwargs):
+        if path == removed:
+            failures.append(path)
+            if after_unlink:
+                unlink(path, *args, **kwargs)
+            raise error("deletion interrupted")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_delete)
+    with pytest.raises(atomic.AtomicWriteError if error is OSError else KeyboardInterrupt):
+        atomic.replace_files_atomically([(updated, b"updated")], delete_paths=[removed])
+    assert failures == [removed]
+    assert updated.read_bytes() == b"original"
+    assert removed.read_bytes() == b"private original"
+    assert removed.stat().st_mode & 0o777 == 0o600
+    assert set(tmp_path.iterdir()) == {updated, removed}
+
+
+@pytest.mark.parametrize("case", ["overlap", "directory", "symlink", "changed"])
+def test_unsafe_deletions_fail_before_replacing_files(tmp_path, case):
+    target = tmp_path / "update.txt"
+    target.write_bytes(b"original")
+    deleted = tmp_path / "delete.txt"
+    expected = None
+    if case == "overlap":
+        deleted = target
+    elif case == "directory":
+        deleted.mkdir()
+    elif case == "symlink":
+        deleted.symlink_to(target)
+    else:
+        deleted.write_bytes(b"independent edit")
+        expected = {deleted: b"stale"}
+    with pytest.raises(atomic.AtomicWriteError):
+        atomic.replace_files_atomically(
+            [(target, b"updated")], delete_paths=[deleted], expected_contents=expected
+        )
+    assert target.read_bytes() == b"original"
+    assert deleted.exists()
+    if case == "changed":
+        assert deleted.read_bytes() == b"independent edit"
+
+
+def test_failed_deletion_restore_retains_its_backup(tmp_path, monkeypatch):
+    target = tmp_path / "original.txt"
+    target.write_bytes(b"recover this original")
+    unlink = Path.unlink
+    replace = atomic.os.replace
+
+    def fail_after_deletion(path, *args, **kwargs):
+        result = unlink(path, *args, **kwargs)
+        if path == target:
+            raise OSError("delete interrupted")
+        return result
+
+    def refuse_restore(source, destination):
+        if Path(destination) == target:
+            raise OSError("restore failed")
+        return replace(source, destination)
+
+    monkeypatch.setattr(Path, "unlink", fail_after_deletion)
+    monkeypatch.setattr(atomic.os, "replace", refuse_restore)
+    with pytest.raises(atomic.AtomicWriteError, match="rollback was incomplete") as caught:
+        atomic.replace_files_atomically([], delete_paths=[target])
+    backups = list(tmp_path.glob(".original.txt.cvw-backup-*"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == b"recover this original"
+    assert str(backups[0]) in str(caught.value)
+
+
 def test_failed_rollback_retains_original_recovery_copy(tmp_path, monkeypatch):
     first, second = tmp_path / "first.pdf", tmp_path / "manifest.json"
     first.write_bytes(b"original PDF")

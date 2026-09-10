@@ -456,6 +456,11 @@ bundle locations, import selection, and `draft.json` applyability states.
 Project proposal artifacts must use `project-ops`. Unsupported legacy patch
 formats fail fast instead of being interpreted heuristically.
 
+The [patch application contract](patch-application.md) owns unified-diff
+execution, captured target inputs, source-write recovery, and file permissions.
+The same executor handles explicit application and temporary source preparation;
+project operation compilation retains the stable-target checks described here.
+
 ## Saved guidance
 
 `job/proposal-plan.json` records the recommendations and selection made when

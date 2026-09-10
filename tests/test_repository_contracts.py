@@ -202,3 +202,19 @@ def test_project_run_recovery_has_one_allocation_and_storage_contract() -> None:
     assert "`new_directories`" in storage
     assert "Existing directory modes" in storage
     assert "`build/runs.py`" in architecture
+
+
+def test_patch_application_routes_its_shared_execution_and_recovery_contract() -> None:
+    contract = (ROOT / "docs/reference/patch-application.md").read_text()
+    assert "`ops/patches.py`" in contract
+    assert "`delete_paths`" in contract
+    assert "inherited umask" in contract
+    assert "not writer" in contract
+    for relative in (
+        "docs/readme.md",
+        "docs/reference/project-contract.md",
+        "docs/reference/review-contract.md",
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/AGENTS.md",
+    ):
+        assert "patch-application.md" in (ROOT / relative).read_text()

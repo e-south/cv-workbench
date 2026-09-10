@@ -35,6 +35,77 @@ source of truth.
 
 ## Findings and disposition
 
+### High for source integrity — patch application used live temporary files and partial mutation — fixed
+
+`ops/patches.py` wrote `.cvw.patch.tmp` inside the selected source directory and
+unconditionally removed that filename afterward. Isolated tests reproduced loss
+of an existing file and overwriting an unrelated file through a symlink. The
+file-based entrypoint validated text from one read but then gave the external
+tool the original mutable patch path, allowing a later edit to change execution.
+Both dry run and real application operated on live source files; a change after
+dry run or interruption after writes could leave partial edits and reject files.
+Six regressions failed for these boundaries
+(`/tmp/cvw-patch-application-red.log`).
+
+The shared executor now captures patch text, target bytes, and source permission
+bits; runs both tool phases against temporary copies; and commits completed
+outcomes through shared storage with original-byte preconditions. Project
+application, draft application, and project source preparation share this owner.
+Temporary/reject files stay outside the live source directory. The text entrypoint
+accepts text alone; the ambiguous optional `patch_path` argument was removed from
+its sole repository caller. File-based application reads UTF-8 bytes once and
+delegates to that text entrypoint. No compatibility alias was added.
+
+Storage now supports explicit file deletions in the same recoverable group as
+replacements. Five initial contract tests defined successful mixed changes and
+recovery before/after an interrupted deletion. Follow-up checks cover conflicting
+roles, directories, symlinks, observed edits, permission preservation, and a
+retained deletion backup when restoration itself fails. Evidence:
+`/tmp/cvw-patch-storage-delete-red.log` and
+`/tmp/cvw-patch-storage-delete-green.log`.
+
+The parser now counts unified hunks instead of treating header-like document
+text as additional filenames. Eleven follow-up regressions covered that parsing
+failure, valid identical replacements, malformed grammar reaching tool discovery,
+and untyped/unreadable input (`/tmp/cvw-patch-grammar-red.log`). Matching headers,
+regular targets, explicit creation/deletion, no parent traversal, and no duplicate
+targets form the supported input contract. Renames, arbitrary preambles, and
+other patch formats fail closed. The tool runs noninteractively with fuzz
+disabled. These are deliberate input-contract changes, not a claim of preserving
+every input accepted by the earlier permissive scanner.
+
+A regression in the new staging implementation initially widened newly created
+source-file permissions under a private umask. It was caught before commit and
+fixed by retaining the tool-created mode; existing files retain their captured
+permission bits (`/tmp/cvw-patch-permissions-red.log`).
+
+The focused suite passed 133 tests. The full suite passed 1,020 tests with one
+opt-in skip and five existing PyMuPDF/SWIG warnings in 99.23 seconds
+(`/tmp/cvw-patch-application-full.log`). Seven standard CLI journeys passed with
+zero exit codes and empty stderr. A separate five-step CLI journey authored an
+edit, built the project, applied the edit, rebuilt ordinary output, and rejected
+a stale second application. Only the intended source file changed; proposal
+artifacts and an existing operator-owned `.cvw.patch.tmp` were preserved
+(`/tmp/cvw-patch-application-operator.json`).
+Final repository/documentation/import contracts passed 30 tests. Ruff and all
+pre-commit checks, including the secret scan, passed
+(`/tmp/cvw-patch-application-final-contracts.log`,
+`/tmp/cvw-patch-application-hooks.log`). The slice's TDD handoff gate is `pass`.
+
+All 8,317 live private entries retained their recorded metadata, master/candidate
+hashes remained unchanged, and the site stayed clean and untouched
+(`/tmp/cvw-patch-application-live-preservation.json`). The candidate remains
+`review_required`. The new [patch application reference](../reference/patch-application.md)
+is routed from project/review contracts, shared storage documentation, the docs
+index, and scoped operations instructions. It states the limits: per-input
+capture and recoverable writes do not establish locking, simultaneous reader
+visibility, crash durability, or an external-tool sandbox.
+
+This source-mutation finding took priority over patch-authoring decomposition.
+Proposal append still uses direct `write_text` under its cooperative authoring
+lock; atomic proposal replacement and whole-request configuration/source-version
+selection remain follow-up work. The broader audit remains active.
+
 ### High for run integrity — failed project builds retained incomplete source/run history — fixed
 
 The outer project operation allocated a persistent run and moved its prepared
@@ -1646,7 +1717,9 @@ audited builds. Explicit render assets now have observed lifetime checks and
 filter provenance, and engine metadata follows actual format selection. Project
 runs now retain completed outputs and prepared source together, with shared run
 allocation and permission-preserving recovery. Continue with preview-retention
-planning and remaining apply/patch orchestration. Full render dependency snapshots need their own
+planning, recoverable proposal authoring, and remaining apply/patch orchestration.
+Unified-diff execution now stages captured inputs and recovers mixed source-file
+changes through shared storage. Full render dependency snapshots need their own
 explicit asset-pack contract.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;

@@ -59,6 +59,7 @@ task instead of browsing the whole docs tree.
 | Retain project runs and inspect artifact cleanup plans | [reference/artifact-retention.md](reference/artifact-retention.md) | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) |
 | Compare a project run against a baseline before export or review | [reference/project-contract.md](reference/project-contract.md) | [concepts/overview.md](concepts/overview.md) |
 | Package a review run and import reviewed DOCX edits | [reference/review-contract.md](reference/review-contract.md) | [reference/project-contract.md](reference/project-contract.md) |
+| Apply reviewed source edits and understand failure recovery | [reference/patch-application.md](reference/patch-application.md) | [reference/project-contract.md](reference/project-contract.md) |
 
 ### Automation, Verification, And Performance
 

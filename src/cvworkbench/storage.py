@@ -15,7 +15,7 @@ import os
 import shutil
 import stat
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,13 +27,14 @@ class AtomicWriteError(RuntimeError):
 @dataclass(frozen=True)
 class _StagedWrite:
     destination: Path
-    staged: Path
+    staged: Path | None
     backup: Path | None
 
 
 def replace_files_atomically(
     writes: list[tuple[Path, bytes]],
     *,
+    delete_paths: Sequence[Path] = (),
     file_modes: Mapping[Path, int] | None = None,
     new_directories: Mapping[Path, int] | None = None,
     expected_contents: Mapping[Path, bytes | None] | None = None,
@@ -44,7 +45,8 @@ def replace_files_atomically(
     absent destination. These byte checks do not lock out concurrent writers.
     """
 
-    destinations = [destination for destination, _ in writes]
+    write_destinations = [destination for destination, _ in writes]
+    destinations = [*write_destinations, *delete_paths]
     if len(destinations) != len({path.resolve() for path in destinations}):
         raise AtomicWriteError("Atomic replacement destinations must be unique")
     modes = file_modes or {}
@@ -57,7 +59,7 @@ def replace_files_atomically(
         raise AtomicWriteError("New directories must be unique and have valid permission bits")
     if set(path.resolve() for path in directory_modes) & {path.resolve() for path in destinations}:
         raise AtomicWriteError("New directories must not overlap file destinations")
-    if not set(modes).issubset(destinations) or any(
+    if not set(modes).issubset(write_destinations) or any(
         type(mode) is not int or not 0 <= mode <= 0o777 for mode in modes.values()
     ):
         raise AtomicWriteError("File modes must name write destinations and valid permission bits")
@@ -109,13 +111,22 @@ def replace_files_atomically(
             staged_writes.append(
                 _StagedWrite(destination=destination, staged=staged, backup=backup)
             )
+        for destination in delete_paths:
+            if destination.exists():
+                backup = _temporary_sibling(destination, "backup")
+                temporary_paths.add(backup)
+                shutil.copy2(destination, backup)
+                staged_writes.append(_StagedWrite(destination, None, backup))
 
         _check_expected_contents(expected)
         for staged_write in staged_writes:
             # Register before replacement: cancellation may arrive after the syscall.
             applied.append(staged_write)
-            os.replace(staged_write.staged, staged_write.destination)
-            temporary_paths.discard(staged_write.staged)
+            if staged_write.staged is None:
+                staged_write.destination.unlink()
+            else:
+                os.replace(staged_write.staged, staged_write.destination)
+                temporary_paths.discard(staged_write.staged)
         for directory in sorted(directory_modes, key=lambda path: len(path.parts), reverse=True):
             directory.chmod(directory_modes[directory])
         committed = True
@@ -136,7 +147,11 @@ def replace_files_atomically(
             try:
                 # A refused replacement leaves its staged source in place.
                 # A completed syscall consumes it, even if cancellation follows.
-                if staged_write.staged.exists():
+                if staged_write.staged is None and (
+                    staged_write.destination.exists() or staged_write.destination.is_symlink()
+                ):
+                    continue
+                if staged_write.staged is not None and staged_write.staged.exists():
                     continue
                 if staged_write.backup is None:
                     staged_write.destination.unlink(missing_ok=True)

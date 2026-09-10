@@ -210,6 +210,10 @@ If restoration fails, recovery copies remain and the error reports incomplete
 rollback. CLI builds report storage failures as errors; preview retains its
 previous build id/document and records the error.
 
+Source patch application adds explicit deletions to the same storage group;
+see the [patch application contract](patch-application.md#ownership-and-recovery)
+for target checks, deletion recovery, and source permissions.
+
 Storage optionally accepts `new_directories`, a mapping of absent directories to
 permission bits. Entries must be unique, have valid modes, and not collide with
 file destinations; existing directories and symbolic links are rejected. New

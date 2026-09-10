@@ -73,6 +73,9 @@ the baseline. These hashes establish identity since bundle creation, not a
 human review decision or proof that current SoT files still match the build.
 Supported patches separately enforce the
 [compare-and-set source contract](project-contract.md#patch-format).
+Applying an eligible draft also uses the shared
+[patch application contract](patch-application.md) for staged execution and
+recovery across source-file changes.
 
 `context` and `status` expose a review's `source` object with its run, record
 path, filenames, issues, and one of these states:
