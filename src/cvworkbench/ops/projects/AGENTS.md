@@ -7,6 +7,12 @@
   entrypoint. Do not import workspace, CLI, or preview presentation here.
 - Keep inventory identity separate from executable-project prerequisites and
   review readiness. Preserve retained projects when proposal artifacts expire.
+- Use `load_project_summary` for partial inventory descriptions and
+  `load_project_details` for validated descriptive/proposal state. Metadata
+  parsing belongs in `manifest.py`; do not stringify malformed YAML values in
+  presentation code or treat recorded digests as proof of current contents.
+- Read optional saved guidance through `load_project_plan`; consumers must not
+  independently derive and open its path or bypass project ownership checks.
 - Validate inputs before artifact writes. Project creation, retargeting, patch
   application, and proposal registration need explicit failure and recovery
   behavior; moving code does not establish transaction safety.

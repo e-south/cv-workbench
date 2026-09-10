@@ -157,6 +157,7 @@ def _print_workflow_summary(
 
 
 def _compact_context_payload(summary: dict[str, Any]) -> dict[str, Any]:
+    """Present an inspection requested with compact=True."""
     return {
         "config": summary["config"],
         "publication": summary["publication"],
@@ -182,11 +183,7 @@ def _compact_context_payload(summary: dict[str, Any]) -> dict[str, Any]:
             "latest_summary": summary["runs"]["latest_summary"],
             "invalid_summary": summary["runs"]["invalid_summary"],
         },
-        "projects": {
-            "count": summary["projects"]["count"],
-            "summary": summary["projects"]["summary"],
-            "invalid_summary": summary["projects"]["invalid_summary"],
-        },
+        "projects": summary["projects"],
         "reviews": {
             "count": summary["reviews"]["count"],
             "summary": summary["reviews"]["summary"],

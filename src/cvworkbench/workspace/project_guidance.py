@@ -3,7 +3,7 @@
 cv-workbench
 cv-workbench/src/cvworkbench/workspace/project_guidance.py
 
-Read optional project-plan metadata and summarize recommendation text.
+Explain saved project guidance and summarize recommendation text.
 
 Module Author(s): Eric J. South
 --------------------------------------------------------------------------------
@@ -11,27 +11,9 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from cvworkbench.variants import validate_variant_id
-
-
-def load_optional_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
-    if not path.exists():
-        return None, None
-    try:
-        raw = json.loads(path.read_text())
-    except json.JSONDecodeError as exc:
-        return None, f"Invalid JSON at {path}: {exc.msg}"
-    except UnicodeError:
-        return None, f"Optional JSON must contain valid UTF-8: {path}"
-    except OSError:
-        return None, f"Optional JSON could not be read: {path}"
-    if not isinstance(raw, dict):
-        return None, f"Optional JSON payload must be an object: {path}"
-    return raw, None
 
 
 def proposal_plan_selection_warning(

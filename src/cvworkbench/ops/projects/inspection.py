@@ -11,9 +11,12 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 from cvworkbench.ops.projects.manifest import (
+    _project_metadata,
     _project_relative_path,
     _project_spec,
     load_project_metadata,
@@ -59,33 +62,7 @@ def project_patch_render_warning(
 def load_project_details(project_dir: Path) -> ProjectDetails:
     project_data = load_project_metadata(project_dir)
     spec = _project_spec(project_dir, project_data)
-
-    created_at = str(project_data.get("created_at", "")).strip()
-    if not created_at:
-        raise ProjectError("Project created_at is required")
-
-    job_data = project_data.get("job")
-    if not isinstance(job_data, dict):
-        raise ProjectError("Project job metadata is invalid")
-    source_data = job_data.get("source")
-    if not isinstance(source_data, dict):
-        raise ProjectError("Project job source metadata is invalid")
-    job_source_type = str(source_data.get("type", "")).strip()
-    job_source_value = str(source_data.get("value", "")).strip()
-    if not job_source_type or not job_source_value:
-        raise ProjectError("Project job source metadata is incomplete")
-
-    extracted_path = _project_relative_path(project_dir, job_data.get("extracted_path"))
-    raw_value = job_data.get("raw_path")
-    raw_path = _project_relative_path(project_dir, raw_value) if raw_value else None
-
-    signals_data = project_data.get("signals")
-    if not isinstance(signals_data, dict):
-        raise ProjectError("Project signals metadata is invalid")
-    signals_path = _project_relative_path(project_dir, signals_data.get("path"))
-    signals_hash = str(signals_data.get("hash", "")).strip()
-    if not signals_hash:
-        raise ProjectError("Project signals hash is required")
+    metadata = _project_metadata(project_dir, project_data)
 
     try:
         proposal_variant = load_variant(spec.variant_path)
@@ -102,13 +79,13 @@ def load_project_details(project_dir: Path) -> ProjectDetails:
 
     return ProjectDetails(
         spec=spec,
-        created_at=created_at,
-        job_source_type=job_source_type,
-        job_source_value=job_source_value,
-        extracted_path=extracted_path,
-        raw_path=raw_path,
-        signals_path=signals_path,
-        signals_hash=signals_hash,
+        created_at=metadata.created_at,
+        job_source_type=metadata.source.kind,
+        job_source_value=metadata.source.value,
+        extracted_path=metadata.extracted.path,
+        raw_path=metadata.raw_path,
+        signals_path=metadata.signals.path,
+        signals_hash=metadata.signals.recorded_sha256,
         proposal_variant_id=proposal_variant_id,
         proposal_document_type=proposal_variant.document_type,
         patch_format=patch.format,
@@ -116,3 +93,28 @@ def load_project_details(project_dir: Path) -> ProjectDetails:
         patch_line_count=patch_line_count,
         patch_operations=patch_operations,
     )
+
+
+def load_project_plan(details: ProjectDetails) -> tuple[dict[str, Any] | None, str | None]:
+    """Read optional saved guidance within its project, preserving inspection on error."""
+    try:
+        path = _project_relative_path(
+            details.spec.project_dir,
+            str(details.signals_path.parent / "proposal-plan.json"),
+            "proposal_plan",
+        )
+    except ProjectError as exc:
+        return None, str(exc)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, None
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON at {path}: {exc.msg}"
+    except UnicodeError:
+        return None, f"Optional JSON must contain valid UTF-8: {path}"
+    except OSError:
+        return None, f"Optional JSON could not be read: {path}"
+    if not isinstance(raw, dict):
+        return None, f"Optional JSON payload must be an object: {path}"
+    return raw, None

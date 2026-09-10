@@ -102,3 +102,51 @@ def test_optional_guidance_read_errors_preserve_inspection_and_preview(tmp_path,
     assert "private-fixture-marker" not in shown["proposal_plan_error"]
     assert str(plan) in shown["proposal_plan_error"]
     assert preview["proposal_plan_error"] == shown["proposal_plan_error"]
+
+
+@pytest.mark.parametrize("consumer", ["show", "preview"])
+def test_saved_guidance_rejects_external_symlink_before_read(tmp_path, monkeypatch, consumer):
+    config, project = _guided_project(tmp_path)
+    outside = tmp_path / "outside-plan.json"
+    outside.write_text(json.dumps({"summary": "external-private-fixture-marker"}))
+    original = outside.read_bytes()
+    plan = project.job_dir / "proposal-plan.json"
+    plan.unlink()
+    plan.symlink_to(outside)
+    outside_reads = []
+    original_read = Path.read_text
+
+    def observe_read(path, *args, **kwargs):
+        if path.resolve() == outside:
+            outside_reads.append(path)
+        return original_read(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "read_text", observe_read)
+        payload = (
+            _show(config, project.project_dir)
+            if consumer == "show"
+            else _load_project_context(project.project_dir)
+        )
+
+    assert outside_reads == []
+    assert "proposal_plan_error" in payload
+    assert "within the project directory" in payload["proposal_plan_error"]
+    assert "external-private-fixture-marker" not in json.dumps(payload)
+    assert outside.read_bytes() == original
+    assert plan.is_symlink()
+
+
+def test_saved_guidance_accepts_internal_symlink(tmp_path):
+    config, project = _guided_project(tmp_path)
+    plan = project.job_dir / "proposal-plan.json"
+    retained = project.job_dir / "retained-plan.json"
+    plan.rename(retained)
+    plan.symlink_to(retained)
+
+    shown = _show(config, project.project_dir)
+    preview = _load_project_context(project.project_dir)
+
+    assert "proposal_plan_error" not in shown
+    assert "proposal_plan_error" not in preview
+    assert shown["proposal_plan"]["summary"] == preview["recommendation_summary"]

@@ -121,6 +121,14 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "## Saved guidance" in contract
     assert "`proposal_plan_warning`" in contract
     assert "Matching IDs do" in contract
+    assert "### Descriptive metadata" in contract
+    assert "`load_project_summary`" in contract
+    assert "`ProjectSummary`" in contract
+    assert "64 hexadecimal characters" in contract
+    assert "`metadata_error_count`" in contract
+    assert "Format validation does not verify current file" in contract
+    assert "`load_project_plan(details)`" in contract
+    assert "before reading\nits contents" in contract
 
 
 def test_docs_make_bounded_editing_scope_explicit() -> None:

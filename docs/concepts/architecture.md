@@ -97,7 +97,8 @@ defines the callable API and its error semantics.
 | Build history and review readiness | `workspace/runs.py` |
 | Project inventory and available project commands | `workspace/projects.py` |
 | Job evidence, variant recommendations, and proposal planning | `ops/projects/guidance.py` |
-| Optional project-plan inspection and recommendation summaries | `workspace/project_guidance.py` |
+| Project metadata, proposal inspection, and bounded saved-plan reads | `ops/projects/inspection.py` |
+| Saved-guidance selection warnings and recommendation summaries | `workspace/project_guidance.py` |
 | Content-review inventory and source health | `workspace/reviews.py` |
 | Authored publication state and review/sync recipe | `workspace/publication.py` |
 | Command quoting and workspace/source argument propagation | `workspace/commands.py` |

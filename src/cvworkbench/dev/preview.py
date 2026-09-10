@@ -46,6 +46,7 @@ from cvworkbench.ops.projects import (
     ProjectError,
     load_project,
     load_project_details,
+    load_project_plan,
     prepare_project_sot,
     project_patch_render_warning,
     project_patch_status,
@@ -53,7 +54,6 @@ from cvworkbench.ops.projects import (
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
 from cvworkbench.workspace.project_guidance import (
-    load_optional_json,
     proposal_plan_selection_warning,
 )
 
@@ -143,8 +143,7 @@ def _load_project_context(project_dir: Path) -> dict[str, Any]:
         patch_is_empty=details.patch_is_empty,
         patch_line_count=details.patch_line_count,
     )
-    proposal_plan_path = details.signals_path.parent / "proposal-plan.json"
-    proposal_plan, proposal_plan_error = load_optional_json(proposal_plan_path)
+    proposal_plan, proposal_plan_error = load_project_plan(details)
     payload: dict[str, Any] = {
         "project_id": details.spec.project_id,
         "proposal_document_type": details.proposal_document_type,

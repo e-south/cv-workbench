@@ -111,9 +111,43 @@ with an actionable message; parser diagnostics do not echo manifest contents.
 Executable project loading additionally requires `sot_path` and the proposal
 variant and patch files. Detailed inspection uses one manifest read for both
 identity and descriptive metadata. This does not snapshot proposal files.
-Additional metadata fields retain their operation-specific
-checks; successful identity inspection alone does not establish build or review
-readiness.
+Descriptive fields follow the contract below; successful identity inspection
+alone does not establish build or review readiness.
+
+### Descriptive metadata
+
+Detailed inspection parses descriptive fields into typed records owned by
+`manifest.py` and `records.py`, then combines them with proposal/patch state.
+It requires:
+
+- `created_at`: an ISO 8601 timestamp with a timezone. Quoted strings and native
+  YAML timestamps are accepted; date-only, naive, null, and non-time values are
+  rejected. Valid timestamp text retains its existing presentation.
+- `job.source.type`: `file` or `url`; `job.source.value`: a nonempty string
+  recording the source. This provenance value does not trigger a read or fetch.
+- `job.extracted_hash` and `signals.hash`: recorded SHA-256 digests, each with
+  64 hexadecimal characters. Format validation does not verify current file
+  contents or establish artifact freshness.
+- `job.extracted_path`, `signals.path`, and optional `job.raw_path`: nonempty
+  artifact paths. Omission/null means no raw artifact; other false-valued inputs
+  are invalid. Paths resolve within the owning project directory, including
+  symlink resolution. Absolute references inside that directory remain valid;
+  traversal and symlinks to outside artifacts are rejected before guidance reads.
+
+Recorded artifact paths and digests describe the stored job context. Parsing
+does not require every recorded artifact to still exist or compare its bytes
+with the recorded digest. Filesystem changes after path resolution remain a
+separate input-lifetime concern. The explicitly selected SoT and original job
+source may be outside the project; they are distinct from project-owned artifacts.
+
+`load_project_summary` returns a typed `ProjectSummary` for inventory. It requires
+valid identity and validates any displayed creation-time/source fields that are
+present, without requiring the complete descriptive record or proposal files.
+Missing fields remain unknown. Malformed displayed values become `None` with
+field-specific `metadata_errors`; the project remains visible. Full inventory
+items carry these diagnostics, and full/compact context includes
+`metadata_error_count` when they exist. This count concerns displayed metadata,
+not complete project validation or review readiness.
 
 ## Creation preflight
 
@@ -280,6 +314,14 @@ summaries, and the preview warning area. Read, encoding, and JSON-format errors
 appear as `proposal_plan_error`, allowing the remaining project information to
 remain available. Diagnostics identify files without echoing their contents.
 
+`load_project_plan(details)` in the project inspection owner derives the optional
+plan location beside the recorded signals artifact and checks that the resolved
+plan itself stays within the project. Both the CLI and preview use this read API;
+they do not derive and read artifact paths independently. Internal symlinks are
+valid; a symlink to an outside plan produces `proposal_plan_error` before reading
+its contents. An absent plan is optional and produces no error. This check does
+not isolate the read from filesystem changes after path resolution.
+
 This comparison concerns the recorded variant selection only. Matching IDs do
 not establish freshness of the job, source facts, or variant catalog; review
 the recommendations against current evidence before applying content changes.
@@ -337,10 +379,10 @@ Internal modules import concrete owners rather than the public entrypoint.
 
 | Responsibility | Owner beneath `ops/projects/` |
 | --- | --- |
-| Artifact records, patch vocabulary, record timestamps | `records.py` |
+| Artifact, summary, typed metadata records, patch vocabulary, timestamps | `records.py` |
 | Project identity validation, selectors, and proposal identities | `identity.py` |
-| Manifest reading and executable-project prerequisites | `manifest.py` |
-| Detailed metadata and proposal visibility | `inspection.py` |
+| Manifest reading, typed metadata validation, and executable prerequisites | `manifest.py` |
+| Descriptive/proposal inspection and bounded saved-plan reads | `inspection.py` |
 | Creation preflight, captured inputs, retargeting, registration, and discard | `creation.py` |
 | Guarded edit authoring, compilation, and application | `patches.py` |
 | Job evidence, variant ranking, and proposal plans | `guidance.py` |
@@ -354,9 +396,12 @@ launch remain in the CLI. Other project adapters retain their own extraction
 boundaries.
 
 `cvworkbench.ops.projects.load_project_metadata` owns manifest reading and
-delegates project identity validation to `identity.py`. Workspace inventory consumes that reader;
+delegates project identity validation to `identity.py`.
+`load_project_summary` adapts that read into the partial inventory contract;
 `load_project` adds executable-project prerequisites, and `load_project_details`
-adds descriptive and proposal information from the same manifest generation.
+adds typed descriptive and proposal information from the same manifest generation.
+`load_project_plan` reads optional saved guidance from those details, returning
+the plan or a diagnostic while leaving the rest of inspection available.
 
 Review implementation boundaries are owned by
 [Content Review](review-contract.md#python-ownership). Project patch compilation

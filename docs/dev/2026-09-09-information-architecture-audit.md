@@ -35,6 +35,66 @@ source of truth.
 
 ## Findings and disposition
 
+### High for local confidentiality — project guidance followed paths outside its owner — fixed for stable paths
+
+Detailed inspection accepted absolute/traversing artifact locators and symlinks
+outside the project. Real CLI fixtures read an unrelated `proposal-plan.json`
+through all three routes. A second fixture showed that valid signals metadata
+still allowed an outside plan through a symlink on the plan file itself, in
+both CLI inspection and preview context.
+
+The manifest owner now resolves stored job artifact locators within the owning
+project. `ops.projects.load_project_plan` additionally checks the derived plan
+file before reading it; CLI and preview share this operation. Original source
+provenance and explicitly selected SoT paths remain separate external inputs.
+Outside plan contents are not read or echoed, and optional-plan failures retain
+other inspection data. Internal absolute references and symlinks still work.
+Resolution checks do not isolate later reads from concurrent filesystem edits.
+
+Evidence: `/tmp/cvw-project-artifact-path-red.log` (three external reads),
+`/tmp/cvw-project-plan-symlink-red.log` (both consumers read the outside plan),
+and `/tmp/cvw-project-plan-symlink-green.log` (focused regression and compatibility
+checks). Fixtures and checks use local files; no external destination was contacted.
+
+### Medium — project metadata coercion hid errors and broke inventory JSON — fixed
+
+Detailed inspection stringified malformed timestamps, source values, and hashes,
+ignored the extracted-text digest, and accepted false-valued raw-path metadata
+as absence. Inventory emitted arbitrary YAML values, including a set that
+prevented context JSON serialization. Compact CLI projection also dropped the
+new diagnostic count after workspace inspection supplied it.
+
+Typed metadata now belongs to `ops/projects/manifest.py` and `records.py`.
+Detailed reads validate timestamps, source type/value, digest shape, and artifact
+locators. Inventory uses `ProjectSummary`: identity remains visible while
+malformed displayed fields become unknown with field-specific diagnostics.
+Both full and compact context expose the error count; compact CLI output keeps
+the project section supplied by its inventory owner. This partial summary does
+not require executable proposals or establish build/review readiness. Recorded
+hash syntax is validated separately from current file presence and byte freshness.
+
+Evidence: `/tmp/cvw-project-metadata-red.log` (27 failing cases),
+`/tmp/cvw-project-metadata-focused-final.log` (compact projection failures), and
+`/tmp/cvw-project-metadata-focused-green.log` (129 passing checks, including both
+strict modes). Older detailed-inspection fixtures now record actual local-file
+digests instead of short placeholder strings.
+
+Final metadata/ownership verification: 721 tests passed, one opt-in remote test
+skipped, and the five existing PyMuPDF/SWIG warnings remained. The seven-step
+isolated document journey passed, with no stderr from the journey driver.
+Ruff, formatting, and all-file pre-commit checks passed. Evidence:
+`/tmp/cvw-project-metadata-full.log`, `/tmp/cvw-project-metadata-journey.json`,
+and `/tmp/cvw-project-metadata-hooks.log`. No presentation assets changed in
+this pass; preview-context regression tests covered its read behavior.
+
+Live read-only inspection found 25 identifiable projects with no displayed
+metadata errors. Eighteen passed detailed inspection; seven reached the existing
+unsupported patch-format error in the unchanged patch loader. Retain these as
+a migration/disposition follow-up, rather than interpreting inventory visibility
+as executable readiness. Source data was ready, publication remained
+`review_required`, and master/candidate hashes plus the personal-site tree were
+unchanged. No publication approval, site sync, or push occurred.
+
 ### High for local edit preservation — retargeting overwrote intervening edits — fixed for observed changes
 
 Retargeting loaded validated manifest metadata, then reread the raw document for
@@ -829,13 +889,12 @@ recovery. Creation cleanup now tracks directory ownership, and retarget writes
 recover from ordinary I/O failures. Direct creation now preflights local inputs
 and captures its job text and variant definition. Retargeting now reads one
 validated manifest generation, checks for observed intervening edits, and
-exposes changed saved-guidance selections. Continue with remaining project
-command orchestration and full metadata contracts.
-Manifest, creation/retarget, and
-guarded patch responsibilities now have verified owners beneath the project
-package. A complete metadata model
-must keep inventory existence, executable proposals, and review readiness
-distinct instead of inferring all three from one successful load.
+exposes changed saved-guidance selections. Typed descriptive metadata now has a
+single parser, inventory preserves partial/invalid descriptions, and saved-plan
+reads enforce project ownership. Continue with remaining project command
+orchestration and explicit artifact-presence/freshness checks where an operation
+requires them. Keep inventory existence, executable proposals, recorded metadata,
+current artifact validity, and review readiness distinct.
 
 Extend explicit configuration snapshots to publication preparation/sync,
 lifecycle mutations, and preview selection. Follow with semantic document styles and further

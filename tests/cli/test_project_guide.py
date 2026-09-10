@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import shlex
@@ -496,11 +497,11 @@ def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> N
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -599,11 +600,11 @@ def test_project_show_surfaces_invalid_proposal_plan_without_failing(tmp_path: P
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -664,11 +665,11 @@ def test_project_show_suggests_safe_keep_id_for_legacy_base_proposal(tmp_path: P
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -722,11 +723,11 @@ def test_project_show_reports_project_ops_patch_metadata(tmp_path: Path) -> None
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -826,11 +827,11 @@ def test_project_show_warns_when_resume_patch_is_hidden_by_cover_letter_variant(
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -1235,11 +1236,11 @@ def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -1312,11 +1313,11 @@ def test_project_show_requires_review_artifact_files_for_ready_status(tmp_path: 
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"

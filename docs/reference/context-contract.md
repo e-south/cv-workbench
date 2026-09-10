@@ -114,7 +114,13 @@ Top-level keys:
   Project-scoped runs are inspected via `project show` or explicit
   `reviewpack --project/--run` resolution so variant inventory is not polluted
   by newer project-only runs.
-- `projects`: local projects list and invalid entries.
+- `projects`: local projects list and invalid-identity entries. Identifiable
+  projects stay visible when displayed metadata is malformed; full items carry
+  `metadata_errors`, and full/compact output includes `metadata_error_count`
+  and a summary hint when such errors exist. These per-project diagnostics
+  remain in the inventory in both strict modes. They do not establish detailed
+  project or review readiness; see the
+  [descriptive metadata contract](project-contract.md#descriptive-metadata).
 - `reviews`: actual review packets, including nested project/run packs and
   publication packets. Each full entry includes `kind` (`content` or
   `publication`) and its review path. Container directories are not review

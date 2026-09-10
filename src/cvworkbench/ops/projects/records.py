@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 
 class ProjectError(RuntimeError):
@@ -49,6 +49,37 @@ class ProjectSpec:
     variant_path: Path
     patch_path: Path
     sot_path: Path
+
+
+@dataclass(frozen=True)
+class ProjectSummary:
+    project_id: str
+    project_dir: Path
+    base_variant_id: str
+    created_at: str | None
+    job_source: str | None
+    metadata_errors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ProjectJobSource:
+    kind: Literal["file", "url"]
+    value: str
+
+
+@dataclass(frozen=True)
+class ProjectArtifactMetadata:
+    path: Path
+    recorded_sha256: str
+
+
+@dataclass(frozen=True)
+class ProjectMetadata:
+    created_at: str
+    source: ProjectJobSource
+    extracted: ProjectArtifactMetadata
+    raw_path: Path | None
+    signals: ProjectArtifactMetadata
 
 
 @dataclass(frozen=True)

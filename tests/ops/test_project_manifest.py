@@ -24,6 +24,7 @@ from cvworkbench.ops.projects import (
     load_project_details,
 )
 from cvworkbench.ops.scaffold import init_project
+from cvworkbench.workspace.context import inspect_workspace
 from cvworkbench.workspace.projects import load_project_summaries
 
 
@@ -48,6 +49,149 @@ def _tree(root: Path) -> dict[Path, bytes | None]:
         path.relative_to(root): path.read_bytes() if path.is_file() else None
         for path in root.rglob("*")
     }
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("created_at", None),
+        ("created_at", True),
+        ("created_at", 42),
+        ("created_at", {}),
+        ("created_at", "yesterday"),
+        ("created_at", "2026-01-01"),
+        ("job.source.type", None),
+        ("job.source.type", False),
+        ("job.source.type", ["file"]),
+        ("job.source.type", "email"),
+        ("job.source.value", None),
+        ("job.source.value", False),
+        ("job.source.value", 42),
+        ("job.source.value", {"private": "fixture-marker"}),
+        ("signals.hash", None),
+        ("signals.hash", False),
+        ("signals.hash", []),
+        ("signals.hash", "cafebabe"),
+        ("job.extracted_hash", None),
+        ("job.extracted_hash", False),
+        ("job.extracted_hash", "deadbeef"),
+        ("job.raw_path", False),
+        ("job.raw_path", 0),
+        ("job.raw_path", []),
+        ("job.raw_path", ""),
+    ],
+)
+def test_project_details_reject_malformed_descriptive_metadata(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    _, project_dir = _project(tmp_path)
+    manifest = project_dir / "project.yaml"
+    payload = yaml.safe_load(manifest.read_text())
+    cursor = payload["project"]
+    parts = field.split(".")
+    for key in parts[:-1]:
+        cursor = cursor[key]
+    cursor[parts[-1]] = value
+    manifest.write_text(yaml.safe_dump(payload))
+    before = _tree(tmp_path)
+
+    with pytest.raises(ProjectError) as caught:
+        load_project_details(project_dir)
+
+    assert field in str(caught.value)
+    assert "fixture-marker" not in str(caught.value)
+    assert _tree(tmp_path) == before
+
+
+@pytest.mark.parametrize("field,value", [("created_at", {}), ("source_value", {"marker"})])
+def test_inventory_preserves_identity_and_reports_invalid_description(tmp_path, field, value):
+    config, project_dir = _project(tmp_path)
+    manifest = project_dir / "project.yaml"
+    payload = yaml.safe_load(manifest.read_text())
+    if field == "created_at":
+        payload["project"]["created_at"] = value
+    else:
+        payload["project"]["job"]["source"]["value"] = value
+    manifest.write_text(yaml.safe_dump(payload))
+    before = _tree(tmp_path)
+
+    result = CliRunner().invoke(app, ["context", "--json", "--config", str(config)])
+
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    projects = json.loads(result.stdout)["projects"]
+    assert projects["invalid"] == []
+    assert projects["count"] == 1
+    item = projects["items"][0]
+    assert item["project_id"] == "research"
+    assert item["created_at" if field == "created_at" else "job_source"] is None
+    assert item["metadata_errors"]
+    compact = CliRunner().invoke(app, ["context", "--json", "--compact", "--config", str(config)])
+    assert compact.exit_code == 0, compact.output
+    compact_projects = json.loads(compact.stdout)["projects"]
+    assert compact_projects["metadata_error_count"] == 1
+    assert "metadata_errors=1" in compact_projects["summary"]
+    strict = inspect_workspace(config=config, sot_path=None, strict=True, compact=False)
+    assert strict["projects"]["metadata_error_count"] == 1
+    assert _tree(tmp_path) == before
+
+
+@pytest.mark.parametrize("route", ["absolute", "relative", "symlink"])
+def test_project_inspection_does_not_read_guidance_outside_its_workspace(
+    tmp_path: Path, monkeypatch, route: str
+) -> None:
+    config, project_dir = _project(tmp_path)
+    outside = tmp_path / "outside-project"
+    outside.mkdir()
+    secret_plan = outside / "proposal-plan.json"
+    secret_plan.write_text(json.dumps({"summary": "outside-private-fixture-marker"}))
+    if route == "absolute":
+        signals_path = str(outside / "signals.json")
+    elif route == "relative":
+        signals_path = "../../../outside-project/signals.json"
+    else:
+        (project_dir / "outside-link").symlink_to(outside, target_is_directory=True)
+        signals_path = "outside-link/signals.json"
+    manifest = project_dir / "project.yaml"
+    payload = yaml.safe_load(manifest.read_text())
+    payload["project"]["signals"]["path"] = signals_path
+    manifest.write_text(yaml.safe_dump(payload))
+    before = _tree(tmp_path)
+    outside_reads = []
+    original_read = Path.read_text
+
+    def observe_read(path, *args, **kwargs):
+        if path.resolve() == secret_plan:
+            outside_reads.append(path)
+        return original_read(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "read_text", observe_read)
+        result = CliRunner().invoke(
+            app, ["project", "show", str(project_dir), "--config", str(config), "--json"]
+        )
+
+    assert outside_reads == []
+    assert result.exit_code == 1, result.output
+    assert "signals.path" in result.stderr
+    assert "outside-private-fixture-marker" not in result.output
+    assert _tree(tmp_path) == before
+
+
+@pytest.mark.parametrize("route", ["absolute", "symlink"])
+def test_project_details_accept_internal_artifact_references(tmp_path: Path, route: str) -> None:
+    _, project_dir = _project(tmp_path)
+    manifest = project_dir / "project.yaml"
+    payload = yaml.safe_load(manifest.read_text())
+    signals = project_dir / "job/signals.json"
+    if route == "absolute":
+        payload["project"]["signals"]["path"] = str(signals)
+    else:
+        (project_dir / "job-link").symlink_to(project_dir / "job", target_is_directory=True)
+        payload["project"]["signals"]["path"] = "job-link/signals.json"
+    manifest.write_text(yaml.safe_dump(payload))
+
+    assert load_project_details(project_dir).signals_path == signals
 
 
 @pytest.mark.parametrize("field", ["id", "base_variant"])

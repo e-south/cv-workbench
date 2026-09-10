@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -248,11 +249,11 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -329,6 +330,7 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
     proposals_dir.mkdir(parents=True, exist_ok=True)
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / "signals.json").write_text('{"keywords": ["leadership"]}\n')
+    (job_dir / "extracted.txt").write_text("Leadership role.\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -342,7 +344,7 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
@@ -377,7 +379,7 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
 
     assert payload == {
         "project_id": "job",
-        "project_context_error": "Project signals hash is required",
+        "project_context_error": "Project signals.hash must be a nonempty string",
     }
 
 

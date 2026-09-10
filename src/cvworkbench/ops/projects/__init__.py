@@ -18,12 +18,14 @@ from cvworkbench.ops.projects.identity import (
     suggest_project_variant_id as suggest_project_variant_id,
 )
 from cvworkbench.ops.projects.inspection import load_project_details as load_project_details
+from cvworkbench.ops.projects.inspection import load_project_plan as load_project_plan
 from cvworkbench.ops.projects.inspection import (
     project_patch_render_warning as project_patch_render_warning,
 )
 from cvworkbench.ops.projects.inspection import project_patch_status as project_patch_status
 from cvworkbench.ops.projects.manifest import load_project as load_project
 from cvworkbench.ops.projects.manifest import load_project_metadata as load_project_metadata
+from cvworkbench.ops.projects.manifest import load_project_summary as load_project_summary
 from cvworkbench.ops.projects.patches import (
     append_replace_experience_bullet_operation as append_replace_experience_bullet_operation,
 )
@@ -42,6 +44,7 @@ from cvworkbench.ops.projects.records import ProjectError as ProjectError
 from cvworkbench.ops.projects.records import ProjectPatch as ProjectPatch
 from cvworkbench.ops.projects.records import ProjectPaths as ProjectPaths
 from cvworkbench.ops.projects.records import ProjectSpec as ProjectSpec
+from cvworkbench.ops.projects.records import ProjectSummary as ProjectSummary
 from cvworkbench.ops.projects.workflow import ProjectGuideError as ProjectGuideError
 from cvworkbench.ops.projects.workflow import ProjectGuideResult as ProjectGuideResult
 from cvworkbench.ops.projects.workflow import guide_project as guide_project
