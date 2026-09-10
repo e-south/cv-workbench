@@ -11,13 +11,14 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from cvworkbench.build.artifacts import artifact_paths, write_build_artifacts
 from cvworkbench.build.planning import BuildPlan, plan_build
+from cvworkbench.build.runs import allocate_run
 from cvworkbench.config import (
     ConfigSource,
     resolve_dist_path,
@@ -113,12 +114,10 @@ def execute_build(
         # Capture completed payloads before reserving a persistent run.
         contents = {key: path.read_bytes() for key, path in staged.items()}
         allocated = run_dir is None
-        run_identity = None
-        if run_dir is None:
-            run_dir = create_run_dir(resolve_runs_path(configuration))
-            identity = run_dir.lstat()
-            run_identity = (identity.st_dev, identity.st_ino)
-        try:
+        allocation = (
+            allocate_run(resolve_runs_path(configuration)) if allocated else nullcontext(run_dir)
+        )
+        with allocation as run_dir:
             if allocated:
                 destinations = artifact_paths(
                     build_plan,
@@ -138,17 +137,6 @@ def execute_build(
                 ordered,
                 expected_contents={path: expected[path] for path, _ in ordered},
             )
-        except BaseException as exc:
-            if allocated:
-                try:
-                    current = run_dir.lstat()
-                    if (current.st_dev, current.st_ino) == run_identity:
-                        run_dir.rmdir()
-                    else:
-                        exc.add_note(f"Build run replaced during commit; preserved: {run_dir}")
-                except OSError:
-                    exc.add_note(f"Build run retained for inspection: {run_dir}")
-            raise
 
     return BuildResult(
         variant=build_plan.variant,
@@ -159,19 +147,3 @@ def execute_build(
         theme_id=build_plan.theme.id,
         style_preset=build_plan.style_preset,
     )
-
-
-def create_run_dir(runs_root: Path) -> Path:
-    base_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-    runs_root.mkdir(parents=True, exist_ok=True)
-
-    for suffix in range(0, 1000):
-        name = base_timestamp if suffix == 0 else f"{base_timestamp}-{suffix:02d}"
-        run_dir = runs_root / name
-        try:
-            run_dir.mkdir(parents=False, exist_ok=False)
-        except FileExistsError:
-            continue
-        return run_dir
-
-    raise RuntimeError(f"Could not allocate unique run directory for timestamp: {base_timestamp}")

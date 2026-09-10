@@ -174,8 +174,9 @@ The negative-path and real-render checks live in
 
 `build/artifacts.py` defines bundle membership and materializes documents,
 styles, selections, resume data, and manifests in temporary directories.
-`build/pipeline.py` owns destination preflight, temporary lifetime, run allocation,
-and the final recoverable write through `storage.replace_files_atomically`.
+`build/pipeline.py` owns destination preflight, temporary lifetime, and the final
+recoverable write through `storage.replace_files_atomically`. `build/runs.py`
+owns exclusive run allocation and failure cleanup for ordinary and project builds.
 Storage is a lower-level owner shared by builds and operations; it does not import
 either workflow layer or command/preview adapters.
 
@@ -194,8 +195,9 @@ The collector receives captured resume bytes, so an abandoned metadata task does
 not reopen temporary files after a render failure releases them. Build failures
 return without waiting for that task to finish. Default run allocation occurs
 only after the completed payloads have been captured; explicit run directories
-remain caller-owned. Project operations still own any prepared source/run they
-allocate before this call.
+remain caller-owned. The [project build operation](project-contract.md#project-build-api)
+uses a temporary run for this call and retains its completed documents and
+prepared source together afterward.
 
 Existing destination bytes are captured before rendering and checked again
 before and after replacement staging. Observed edits fail closed. Final writes
@@ -208,11 +210,22 @@ If restoration fails, recovery copies remain and the error reports incomplete
 rollback. CLI builds report storage failures as errors; preview retains its
 previous build id/document and records the error.
 
+Storage optionally accepts `new_directories`, a mapping of absent directories to
+permission bits. Entries must be unique, have valid modes, and not collide with
+file destinations; existing directories and symbolic links are rejected. New
+directories begin owner-only while files are staged, then receive their recorded
+modes after file replacement. Empty directories are retained too. If mode
+application fails, recovery restores access to still-owned new directories before
+recovering files and removing empty directories. Existing directory modes are
+never changed by this option. Project retention uses this contract to preserve
+source permissions without widening private subdirectories.
+
 Failure cleanup removes only empty directories created by the operation whose
 device/inode identities still match. Nonempty directories, replacement
 directories, recovery copies, and caller-owned files survive. A failed default
-run is removed when it is still owned and empty; otherwise its retention is
-reported with the original error.
+run and newly created parents are removed when still owned and empty; otherwise
+retention is reported in notes attached to the original error. Build CLI errors
+print those notes on stderr, including the retained inspection path.
 
 This is recoverable replacement across files, not simultaneous visibility for
 concurrent readers, writer locking, or crash durability. Readers can observe the

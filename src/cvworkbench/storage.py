@@ -35,6 +35,7 @@ def replace_files_atomically(
     writes: list[tuple[Path, bytes]],
     *,
     file_modes: Mapping[Path, int] | None = None,
+    new_directories: Mapping[Path, int] | None = None,
     expected_contents: Mapping[Path, bytes | None] | None = None,
 ) -> None:
     """Stage all payloads and recover prior files after replacement failures.
@@ -47,6 +48,15 @@ def replace_files_atomically(
     if len(destinations) != len({path.resolve() for path in destinations}):
         raise AtomicWriteError("Atomic replacement destinations must be unique")
     modes = file_modes or {}
+    if new_directories is not None and not isinstance(new_directories, Mapping):
+        raise AtomicWriteError("New directories must be a mapping of paths to permission bits")
+    directory_modes = dict(new_directories) if new_directories is not None else {}
+    if len(directory_modes) != len({path.resolve() for path in directory_modes}) or any(
+        type(mode) is not int or not 0 <= mode <= 0o777 for mode in directory_modes.values()
+    ):
+        raise AtomicWriteError("New directories must be unique and have valid permission bits")
+    if set(path.resolve() for path in directory_modes) & {path.resolve() for path in destinations}:
+        raise AtomicWriteError("New directories must not overlap file destinations")
     if not set(modes).issubset(destinations) or any(
         type(mode) is not int or not 0 <= mode <= 0o777 for mode in modes.values()
     ):
@@ -69,11 +79,19 @@ def replace_files_atomically(
     committed = False
     try:
         _check_expected_contents(expected)
+        for directory in directory_modes:
+            if directory.exists() or directory.is_symlink():
+                raise AtomicWriteError(f"New directory must be absent: {directory}")
         for destination in destinations:
             if destination.is_symlink() or (destination.exists() and not destination.is_file()):
                 raise AtomicWriteError(
                     f"Artifact destinations must be regular files or absent: {destination}"
                 )
+        for directory in sorted(directory_modes, key=lambda path: len(path.parts)):
+            _ensure_parent(directory.parent, created_directories)
+            directory.mkdir(mode=0o700)
+            metadata = directory.lstat()
+            created_directories[directory] = (metadata.st_dev, metadata.st_ino)
         for destination, content in writes:
             _ensure_parent(destination.parent, created_directories)
             staged = _temporary_sibling(destination, "stage")
@@ -97,9 +115,23 @@ def replace_files_atomically(
             # Register before replacement: cancellation may arrive after the syscall.
             applied.append(staged_write)
             os.replace(staged_write.staged, staged_write.destination)
+            temporary_paths.discard(staged_write.staged)
+        for directory in sorted(directory_modes, key=lambda path: len(path.parts), reverse=True):
+            directory.chmod(directory_modes[directory])
         committed = True
     except BaseException as exc:
         rollback_errors: list[OSError] = []
+        # Restore access before removing files from a newly created restrictive tree.
+        for directory in sorted(directory_modes, key=lambda path: len(path.parts)):
+            if directory not in created_directories:
+                continue
+            try:
+                metadata = directory.lstat()
+                if (metadata.st_dev, metadata.st_ino) != created_directories[directory]:
+                    raise OSError(f"New directory ownership changed: {directory}")
+                directory.chmod(0o700)
+            except OSError as rollback_exc:
+                rollback_errors.append(rollback_exc)
         for staged_write in reversed(applied):
             try:
                 # A refused replacement leaves its staged source in place.

@@ -29,8 +29,12 @@
   destination outside source/project trees; cleanup must verify directory
   ownership. Preview callers own temporary lifetimes rather than replacing an
   existing staging directory.
-- `building.py::build_project` owns project build orchestration. Validate prepared
-  source and construct the shared build plan before allocating a persistent run.
+- `building.py::build_project` owns project build orchestration. Complete source
+  preparation, planning, rendering, and metadata in temporary directories before
+  retaining source and outputs as one recoverable group. Preserve source file
+  and directory permissions. Use `build/runs.py` for exclusive run allocation
+  and cleanup of still-owned empty directories; preserve unrelated artifacts
+  and surface any retained inspection path.
   Keep render/content planning in `build/planning.py`, temporary bundle generation
   in `build/artifacts.py`, commit orchestration in `build/pipeline.py`, and terminal
   errors/output in the CLI adapter. Shared file recovery belongs to `storage.py`;

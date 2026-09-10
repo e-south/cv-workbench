@@ -94,6 +94,86 @@ def test_invalid_file_modes_fail_before_creating_outputs(tmp_path, mode):
     assert not target.parent.exists()
 
 
+@pytest.mark.parametrize("invalid", [[], "invalid", True])
+def test_new_directories_require_an_explicit_mapping(tmp_path, invalid):
+    target = tmp_path / "output.txt"
+    with pytest.raises(atomic.AtomicWriteError, match="New directories must be a mapping"):
+        atomic.replace_files_atomically([(target, b"private")], new_directories=invalid)
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("case", ["mode", "alias", "file_collision", "existing", "symlink"])
+def test_invalid_new_directories_fail_before_writes(tmp_path, case):
+    directory = tmp_path / "new"
+    target = tmp_path / "output.txt"
+    mapping = {directory: 0o700}
+    if case == "mode":
+        mapping[directory] = True
+    elif case == "alias":
+        mapping[tmp_path / "other/../new"] = 0o700
+    elif case == "file_collision":
+        mapping[target] = 0o700
+    elif case == "existing":
+        directory.mkdir(mode=0o750)
+    else:
+        directory.symlink_to(tmp_path / "absent", target_is_directory=True)
+    with pytest.raises(atomic.AtomicWriteError, match="New director"):
+        atomic.replace_files_atomically([(target, b"private")], new_directories=mapping)
+    assert not target.exists()
+    if case == "existing":
+        assert directory.stat().st_mode & 0o777 == 0o750
+    elif case == "symlink":
+        assert directory.is_symlink()
+    else:
+        assert not list(tmp_path.iterdir())
+
+
+def test_new_directory_modes_are_applied_after_payloads_and_preserve_empty_directories(tmp_path):
+    directory = tmp_path / "private"
+    empty = directory / "empty"
+    target = directory / "context.txt"
+    try:
+        atomic.replace_files_atomically(
+            [(target, b"private context")],
+            new_directories={directory: 0o500, empty: 0o700},
+            file_modes={target: 0o600},
+        )
+        assert target.read_bytes() == b"private context"
+        assert directory.stat().st_mode & 0o777 == 0o500
+        assert target.stat().st_mode & 0o777 == 0o600
+        assert empty.is_dir()
+        assert empty.stat().st_mode & 0o777 == 0o700
+    finally:
+        if directory.exists():
+            directory.chmod(0o700)
+
+
+def test_failed_directory_mode_commit_recovers_files_and_created_tree(tmp_path, monkeypatch):
+    original = tmp_path / "existing.txt"
+    original.write_bytes(b"original")
+    directory = tmp_path / "private"
+    empty = directory / "empty"
+    target = directory / "context.txt"
+    chmod = Path.chmod
+    failures = []
+
+    def fail_final_mode(path, mode, *args, **kwargs):
+        if path == directory and mode == 0o500:
+            failures.append(path)
+            raise OSError("directory mode refused")
+        return chmod(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "chmod", fail_final_mode)
+    with pytest.raises(atomic.AtomicWriteError, match="prior artifacts were restored"):
+        atomic.replace_files_atomically(
+            [(original, b"updated"), (target, b"private context")],
+            new_directories={directory: 0o500, empty: 0o500},
+        )
+    assert failures == [directory]
+    assert original.read_bytes() == b"original"
+    assert list(tmp_path.iterdir()) == [original]
+
+
 def test_failed_rollback_retains_original_recovery_copy(tmp_path, monkeypatch):
     first, second = tmp_path / "first.pdf", tmp_path / "manifest.json"
     first.write_bytes(b"original PDF")

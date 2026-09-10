@@ -59,7 +59,8 @@ than maintaining executable copies beneath `docs/`.
 | Read-only content and render planning | `build/planning.py` |
 | Explicit render-input fingerprints and lifetime checks | `build/assets.py` |
 | Bundle membership and temporary artifact generation | `build/artifacts.py` |
-| Build lifetime, persistent run allocation, and commit orchestration | `build/pipeline.py` |
+| Build lifetime and commit orchestration | `build/pipeline.py` |
+| Exclusive run allocation and owned-directory cleanup | `build/runs.py` |
 | Recoverable file replacements shared by workflows | `storage.py` |
 
 The [build recovery contract](../reference/configuration-contract.md#build-bundle-recovery)

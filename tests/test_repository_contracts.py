@@ -190,3 +190,15 @@ def test_render_asset_contract_routes_fingerprints_and_limits() -> None:
     assert "Transient edits reverted between checks can go undetected" in contract
     assert "`build/assets.py`" in architecture
     assert "configuration-contract.md#render-asset-lifetime" in styling
+
+
+def test_project_run_recovery_has_one_allocation_and_storage_contract() -> None:
+    project = (ROOT / "docs/reference/project-contract.md").read_text()
+    storage = (ROOT / "docs/reference/configuration-contract.md").read_text()
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    assert "build/runs.py::allocate_run" in project
+    assert "exception notes and CLI stderr" in project
+    assert "configuration-contract.md#build-bundle-recovery" in project
+    assert "`new_directories`" in storage
+    assert "Existing directory modes" in storage
+    assert "`build/runs.py`" in architecture

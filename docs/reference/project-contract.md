@@ -238,10 +238,12 @@ captures one configuration generation for project/source resolution, run
 placement, content selection, and render choices, and prints nothing.
 
 Guarded edits are prepared in a temporary source copy. Source schema validation,
-variant/content selection, format normalization, filter resolution, and render
-planning complete before a persistent project run is allocated. Preflight errors
-leave the workspace unchanged and release temporary preparation. An explicit
-source override selects that source instead of the manifest's active version.
+variant/content selection, format normalization, filter resolution, render
+planning, rendering, and metadata collection complete in temporary directories
+before a persistent project run is allocated. Preflight, render, and metadata
+errors leave the workspace unchanged and release temporary preparation. An
+explicit source override selects that source instead of the manifest's active
+version.
 
 The returned `BuildResult` exposes `run_dir`, `dist_dir`, `canonical_path`, the
 selected variant, formats, theme, and preset. Both artifact destinations are the
@@ -250,13 +252,27 @@ prepared source is retained in that run's `sot/`; an
 empty patch uses the selected source directly. The operation does not modify the
 source or project, publish output, or start a preview.
 
+`building.py` captures the completed run's files and directory permission bits
+before allocation. It retains outputs and prepared source through one
+recoverable file group, including empty source directories. File and directory
+permission bits survive retention; this is not an archival copy of all filesystem
+metadata. Manifests follow other files in the commit order. Returned paths refer
+to the persistent run, never the released temporary workspace.
+
 `ProjectBuildError.errors` preserves individual source-validation diagnostics;
 the CLI prints each on stderr and exits with code 1 without partial JSON. Other
 selection, configuration, preparation, and renderer exceptions retain their
-domain types for Python callers and become CLI errors. Filesystem or renderer
-failures after successful preflight can leave an incomplete run for inspection;
-preflight is not rollback or a guarantee of external-tool success. Configuration
-capture does not freeze every source, variant, and theme file; see
+domain types for Python callers and become CLI errors. The shared
+`build/runs.py::allocate_run` owns exclusive timestamp/suffix allocation and
+failure cleanup for both ordinary and project builds. Storage recovers file
+writes, then allocation removes only still-owned empty run/parent directories.
+Existing history, independently written files, and replacement directories are
+preserved. A retained directory is named in exception notes and CLI stderr.
+Cancellation preserves its exception type. Recovery failures retain evidence;
+no writer locking, simultaneous reader visibility, or crash durability is
+promised. See the shared
+[bundle recovery contract](configuration-contract.md#build-bundle-recovery).
+Configuration capture does not freeze every source, variant, and theme file; see
 [build planning and input lifetime](configuration-contract.md#build-and-render-boundaries).
 
 ## Source preparation

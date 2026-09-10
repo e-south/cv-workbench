@@ -21,6 +21,7 @@ from typer.testing import CliRunner
 
 import cvworkbench.build.artifacts as artifacts_module
 import cvworkbench.build.pipeline as pipeline_module
+import cvworkbench.build.runs as runs_module
 from cvworkbench.build.rendering import RenderError
 from cvworkbench.cli import app
 
@@ -61,7 +62,7 @@ def test_build_marks_publication_roles() -> None:
     assert "Alex Example\\*" in content
 
 
-def test_create_run_dir_adds_suffix_when_timestamp_collides(
+def test_run_allocation_adds_suffix_when_timestamp_collides(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -70,11 +71,13 @@ def test_create_run_dir_adds_suffix_when_timestamp_collides(
         def now(cls, tz=None):  # type: ignore[override]
             return cls(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
-    monkeypatch.setattr(pipeline_module, "datetime", FrozenDateTime)
+    monkeypatch.setattr(runs_module, "datetime", FrozenDateTime)
 
     runs_root = tmp_path / "var" / "runs"
-    first = pipeline_module.create_run_dir(runs_root)
-    second = pipeline_module.create_run_dir(runs_root)
+    with runs_module.allocate_run(runs_root) as first:
+        pass
+    with runs_module.allocate_run(runs_root) as second:
+        pass
 
     assert first.name == "2026-01-01T00-00-00Z"
     assert second.name == "2026-01-01T00-00-00Z-01"

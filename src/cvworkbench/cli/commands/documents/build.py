@@ -212,6 +212,8 @@ def build(
         AtomicWriteError,
     ) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
+        for note in getattr(exc, "__notes__", ()):
+            typer.echo(f"NOTE: {note}", err=True)
         raise typer.Exit(code=1) from exc
     _print_build_summary(result)
 

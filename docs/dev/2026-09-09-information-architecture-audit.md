@@ -35,6 +35,73 @@ source of truth.
 
 ## Findings and disposition
 
+### High for run integrity — failed project builds retained incomplete source/run history — fixed
+
+The outer project operation allocated a persistent run and moved its prepared
+source into that run before rendering and metadata collection. The shared build
+pipeline recovered its own output group, but did not own the already-retained
+project source or run directory. Four real Lua-filter regressions reproduced
+this through Python and CLI, with both empty and nonempty patches: failed builds
+left new directories, and tailored builds also left their copied source
+(`/tmp/cvw-project-recovery-red.log`). The criterion is that preflight, render,
+and metadata failures create no persistent project run.
+
+`ops/projects/building.py` now executes the entire build in temporary directories
+and captures its completed files before reserving a persistent run. Documents,
+metadata, and prepared source are retained through one shared storage group.
+Returned paths point to the retained run. The existing public build API, CLI
+flags, project hierarchy, and timestamp/suffix naming remain unchanged.
+
+Four commit-failure tests, before/after the final manifest replacement with both
+I/O errors and cancellation, then exposed empty project-parent directories left
+behind (`/tmp/cvw-project-recovery-commit-red.log`). `build/runs.py::allocate_run`
+now owns exclusive allocation and cleanup for ordinary and project builds.
+It removes only still-owned empty directories, including newly created parents.
+Existing history, replacement directories, independent files, and unrecovered
+evidence survive. The internal pipeline allocator was removed; callers and its
+collision test use the new owner directly, without a compatibility alias.
+
+A separate regression proved that the CLI omitted exception notes identifying
+a retained run containing an independently written file. Build errors now print
+those notes on stderr (`/tmp/cvw-project-recovery-diagnostics-red.log`). Python
+callers retain the domain exception; cancellation retains its original type.
+
+Validation of the new retention implementation caught a permission regression
+before commit: recreating only files widened a private source directory and
+omitted empty directories. Storage now accepts an explicit `new_directories`
+mapping for absent directories, initially creates them owner-only, and applies
+recorded permission bits after file writes. Failed mode application participates
+in recovery. Existing directories, symlinks, duplicate paths, file-role
+collisions, invalid modes, and non-mapping inputs fail closed. File and directory
+permission bits and empty source directories survive retention; archival
+filesystem metadata is outside this contract. Evidence:
+`/tmp/cvw-project-recovery-permissions-red.log` and
+`/tmp/cvw-project-recovery-directory-contract-red.log`.
+
+The final focused suite passed 86 tests, including ownership replacement,
+foreign-file preservation, source permissions, mode failure, and previous-run
+preservation after metadata failure. The full suite passed 981 tests, with one
+opt-in skip and five existing PyMuPDF/SWIG warnings in 97.07 seconds
+(`/tmp/cvw-project-recovery-full.log`). All seven standard CLI journeys passed
+with zero exit codes and empty stderr. A separate tailored-project journey built
+Markdown, PDF, DOCX, and HTML, then produced a review pack while preserving
+source/proposal/run fingerprints and source permissions
+(`/tmp/cvw-project-recovery-operator.json`).
+Final repository/documentation/import contracts passed 29 tests. Ruff and all
+pre-commit checks, including the secret scan, passed
+(`/tmp/cvw-project-recovery-final-contracts.log`,
+`/tmp/cvw-project-recovery-hooks.log`). The slice's TDD handoff gate is `pass`;
+the broader product audit remains active.
+
+All 8,317 private entries retained their recorded metadata; master/candidate
+hashes were unchanged (`/tmp/cvw-project-recovery-live-preservation.json`).
+The site remains clean and untouched, and the public candidate remains
+`review_required`. The live [project build API](../reference/project-contract.md#project-build-api)
+and [shared recovery contract](../reference/configuration-contract.md#build-bundle-recovery)
+own the guarantees and limits. This is recoverable file replacement, not writer
+locking, simultaneous visibility to readers, or crash durability. External tools
+remain trusted; their independent side effects are outside run recovery.
+
 ### High for artifact provenance — rendering could outlive recorded inputs — fixed within explicit lifetime checks
 
 Theme definitions, templates, defaults, styles, and selected Lua filters could
@@ -1576,9 +1643,10 @@ render outputs now share staging and ordered promotion, and test execution owns
 temporary workspaces. Complete build bundles now stage before recoverable file
 replacement. Preview now owns independent input/output directories and preserves
 audited builds. Explicit render assets now have observed lifetime checks and
-filter provenance, and engine metadata follows actual format selection. Continue
-with outer project-run recovery, preview-retention planning, and remaining
-apply/patch orchestration. Full render dependency snapshots need their own
+filter provenance, and engine metadata follows actual format selection. Project
+runs now retain completed outputs and prepared source together, with shared run
+allocation and permission-preserving recovery. Continue with preview-retention
+planning and remaining apply/patch orchestration. Full render dependency snapshots need their own
 explicit asset-pack contract.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
