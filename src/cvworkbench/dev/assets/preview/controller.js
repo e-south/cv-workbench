@@ -379,6 +379,7 @@ function renderProjectGuidance(data) {
   const warnings = [];
   if (context.render_warning) warnings.push(context.render_warning);
   if (context.proposal_plan_error) warnings.push(context.proposal_plan_error);
+  if (context.proposal_plan_warning) warnings.push(context.proposal_plan_warning);
   warnings.forEach((message) => {
     const line = document.createElement('div');
     line.textContent = message;

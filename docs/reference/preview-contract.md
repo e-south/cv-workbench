@@ -61,6 +61,10 @@ instead of following `ACTIVE`.
   `recommendation_summary`, `job_keywords_missing`, `steps`). If preview can
   still render the project patch but detailed project metadata is incomplete,
   `project_context_error` is returned instead of silently omitting the failure.
+  Optional `proposal_plan_error` and `proposal_plan_warning` identify unreadable
+  guidance or a changed/unverifiable recorded selection; see the
+  [saved-guidance contract](project-contract.md#saved-guidance). Both appear in
+  the existing project warning area as text.
 - `outputs` (format -> filename)
 
 `POST /api/render` rebuilds with optional overrides:

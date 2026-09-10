@@ -155,14 +155,27 @@ identity and deletion, or reserve the destination against an empty directory
 appearing before rename. Input preflight does not guarantee future filesystem
 writes will succeed.
 
-`retarget_project_variant` stages the proposal variant and project manifest
-together using `ops.atomic.replace_files_atomically`. An ordinary I/O failure
-during replacement restores the prior files. If restoration fails, the error
-reports the incomplete rollback and retained recovery-backup paths. Reported
-replacement failures surface as `ProjectError` with their cause preserved. This provides
-recoverable writes, not simultaneous visibility to other readers; cancellation,
-process termination, concurrent writers, and independently read inputs remain
-outside the retarget recovery contract.
+`retarget_project_variant` uses one validated manifest read and captures the
+proposal bytes from which it obtains the proposal ID. It preserves manifest
+extension fields and returns the `ProjectSpec` it wrote rather than rereading
+possibly newer metadata after completion. Malformed proposal YAML/encoding and
+variant-schema failures surface as `ProjectError` without YAML source snippets.
+
+The operation stages proposal and manifest writes together using
+`ops.atomic.replace_files_atomically`, passing their original bytes through
+`expected_contents`. The helper checks those bytes before staging and again
+before the first replacement. An observed edit or deletion aborts replacement
+and preserves the editor's files. In the shared helper, an expected value of
+`None` requires an absent destination; an empty file or dangling symlink is not
+absent.
+
+An ordinary I/O failure during replacement restores the prior files. If
+restoration fails, the error reports incomplete rollback and retained
+recovery-backup paths. Replacement failures retain their cause through
+`ProjectError`. Byte checks do not lock out concurrent writers or provide
+simultaneous multi-file visibility. Edits after the final check, cancellation,
+process termination, and a snapshot across all source files remain outside
+this recovery contract.
 
 ## Apply semantics
 
@@ -253,6 +266,23 @@ bundle locations, import selection, and `draft.json` applyability states.
 
 Project proposal artifacts must use `project-ops`. Unsupported legacy patch
 formats fail fast instead of being interpreted heuristically.
+
+## Saved guidance
+
+`job/proposal-plan.json` records the recommendations and selection made when
+guidance was generated. Retargeting preserves that evidence. `project show`
+and preview compare its recorded `applied_variant` with the current manifest's
+base variant through the shared workspace guidance owner.
+
+An optional `proposal_plan_warning` reports a different recorded selection or
+a missing/invalid applied variant. It appears in JSON inspection, plain/rich
+summaries, and the preview warning area. Read, encoding, and JSON-format errors
+appear as `proposal_plan_error`, allowing the remaining project information to
+remain available. Diagnostics identify files without echoing their contents.
+
+This comparison concerns the recorded variant selection only. Matching IDs do
+not establish freshness of the job, source facts, or variant catalog; review
+the recommendations against current evidence before applying content changes.
 
 ## Guidance API
 

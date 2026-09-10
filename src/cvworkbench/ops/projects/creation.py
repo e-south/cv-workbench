@@ -16,6 +16,7 @@ import json
 import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -38,7 +39,7 @@ from cvworkbench.ops.projects.identity import (
     suggest_project_variant_id,
     validate_project_id,
 )
-from cvworkbench.ops.projects.manifest import load_project
+from cvworkbench.ops.projects.manifest import _project_spec, _read_project_manifest, load_project
 from cvworkbench.ops.projects.records import (
     _PROJECT_PATCH_FORMAT_OPS,
     ProjectError,
@@ -52,7 +53,7 @@ from cvworkbench.ops.variant_lifecycle import (
     preflight_variant_registration,
     register_variant,
 )
-from cvworkbench.variants import load_variant, parse_variant
+from cvworkbench.variants import parse_variant
 
 
 def create_project_from_url(
@@ -192,16 +193,21 @@ def retarget_project_variant(
     base_variant_id: str,
     config_path: ConfigSource,
 ) -> ProjectSpec:
-    spec = load_project(project_dir)
+    manifest = _read_project_manifest(project_dir)
+    project_data = manifest.document["project"]
+    spec = _project_spec(project_dir, project_data)
     project_file = project_dir / "project.yaml"
-    raw_project = yaml.safe_load(project_file.read_text())
-    if not isinstance(raw_project, dict):
-        raise ProjectError("Project manifest must be a mapping")
-    project_data = raw_project.get("project")
-    if not isinstance(project_data, dict):
-        raise ProjectError("Project manifest is invalid")
-
-    proposal_variant_id = load_variant(spec.variant_path).id
+    try:
+        proposal_content = spec.variant_path.read_bytes()
+        proposal_variant_id = parse_variant(yaml.safe_load(proposal_content.decode("utf-8"))).id
+    except (UnicodeError, yaml.YAMLError) as exc:
+        raise ProjectError(
+            f"Project variant must contain valid UTF-8 YAML: {spec.variant_path}"
+        ) from exc
+    except (OSError, ValueError) as exc:
+        raise ProjectError(
+            f"Project variant could not be loaded: {spec.variant_path}: {exc}"
+        ) from exc
     variant_payload = _build_project_variant_payload(
         base_variant_id=base_variant_id,
         proposal_variant_id=proposal_variant_id,
@@ -215,12 +221,16 @@ def retarget_project_variant(
                     spec.variant_path,
                     yaml.safe_dump(variant_payload, sort_keys=False).encode("utf-8"),
                 ),
-                (project_file, yaml.safe_dump(raw_project, sort_keys=False).encode("utf-8")),
-            ]
+                (project_file, yaml.safe_dump(manifest.document, sort_keys=False).encode("utf-8")),
+            ],
+            expected_contents={
+                spec.variant_path: proposal_content,
+                project_file: manifest.source_bytes,
+            },
         )
     except AtomicWriteError as exc:
         raise ProjectError(f"Project retarget failed: {exc}") from exc
-    return load_project(project_dir)
+    return replace(spec, base_variant_id=base_variant_id)
 
 
 def discard_project_workspace(*, project_dir: Path, config_path: ConfigSource) -> None:
@@ -349,7 +359,10 @@ def _build_project_variant_payload(
         raise ProjectError(
             f"Variant file must contain valid UTF-8 YAML: {variant_source_path}"
         ) from exc
-    parse_variant(raw_variant)
+    try:
+        parse_variant(raw_variant)
+    except ValueError as exc:
+        raise ProjectError(f"Invalid base variant at {variant_source_path}: {exc}") from exc
     variant_data = raw_variant["variant"]
     variant_data["id"] = proposal_variant_id
     return raw_variant

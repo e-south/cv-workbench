@@ -45,6 +45,7 @@ from cvworkbench.ops.projects import (
 from cvworkbench.variants import load_variant
 from cvworkbench.workspace.project_guidance import (
     load_optional_json,
+    proposal_plan_selection_warning,
 )
 from cvworkbench.workspace.projects import (
     project_commands,
@@ -290,6 +291,9 @@ def project_show(
         summary["proposal_plan"] = proposal_plan
     if proposal_plan_error is not None:
         summary["proposal_plan_error"] = proposal_plan_error
+    plan_warning = proposal_plan_selection_warning(proposal_plan, details.spec.base_variant_id)
+    if plan_warning is not None:
+        summary["proposal_plan_warning"] = plan_warning
 
     if get_output_mode() == OutputMode.JSON:
         typer.echo(json.dumps({"command": "project.show", **summary}, indent=2, sort_keys=True))

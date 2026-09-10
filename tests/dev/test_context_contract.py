@@ -116,6 +116,11 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "before\nfetching" in contract
     assert "variant-lifecycle.md#registration-preflight" in contract
     assert "not a snapshot of all source files" in contract
+    assert "`expected_contents`" in contract
+    assert "before the first replacement" in contract
+    assert "## Saved guidance" in contract
+    assert "`proposal_plan_warning`" in contract
+    assert "Matching IDs do" in contract
 
 
 def test_docs_make_bounded_editing_scope_explicit() -> None:

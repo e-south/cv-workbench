@@ -15,6 +15,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.variants import validate_variant_id
+
 
 def load_optional_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not path.exists():
@@ -23,9 +25,35 @@ def load_optional_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         raw = json.loads(path.read_text())
     except json.JSONDecodeError as exc:
         return None, f"Invalid JSON at {path}: {exc.msg}"
+    except UnicodeError:
+        return None, f"Optional JSON must contain valid UTF-8: {path}"
+    except OSError:
+        return None, f"Optional JSON could not be read: {path}"
     if not isinstance(raw, dict):
         return None, f"Optional JSON payload must be an object: {path}"
     return raw, None
+
+
+def proposal_plan_selection_warning(
+    plan: dict[str, Any] | None, current_base_variant: str
+) -> str | None:
+    if plan is None:
+        return None
+    recorded = plan.get("applied_variant")
+    try:
+        validate_variant_id(recorded)
+    except ValueError:
+        return (
+            "Saved guidance does not identify an applied variant. "
+            "Compare its recommendations with the current proposal before using them."
+        )
+    if recorded != current_base_variant:
+        return (
+            f"Saved guidance was recorded for '{recorded}'; "
+            f"the current base variant is '{current_base_variant}'. "
+            "Review its recommendations before using them."
+        )
+    return None
 
 
 def recommendations_summary_line(recommendations: list[dict[str, Any]], limit: int = 5) -> str:

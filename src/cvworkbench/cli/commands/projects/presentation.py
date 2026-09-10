@@ -168,6 +168,8 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         rows.append(("review_run", summary["review"]["run_id"]))
     if "proposal_plan_error" in summary:
         rows.append(("proposal_plan_error", summary["proposal_plan_error"]))
+    if "proposal_plan_warning" in summary:
+        rows.append(("proposal_plan_warning", summary["proposal_plan_warning"]))
     print_summary("project.show", rows)
 
 

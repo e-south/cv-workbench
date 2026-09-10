@@ -52,6 +52,10 @@ from cvworkbench.ops.projects import (
 )
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
+from cvworkbench.workspace.project_guidance import (
+    load_optional_json,
+    proposal_plan_selection_warning,
+)
 
 
 class PreviewError(RuntimeError):
@@ -113,18 +117,6 @@ class ClientActivity:
         return time.monotonic() - self.last_seen_monotonic
 
 
-def _load_optional_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
-    if not path.exists():
-        return None, None
-    try:
-        raw = json.loads(path.read_text())
-    except json.JSONDecodeError as exc:
-        return None, f"Invalid JSON at {path}: {exc.msg}"
-    if not isinstance(raw, dict):
-        return None, f"Optional JSON payload must be an object: {path}"
-    return raw, None
-
-
 def _project_context_error_payload(project_dir: Path, error: str) -> dict[str, Any]:
     project_id = project_dir.name
     try:
@@ -152,7 +144,7 @@ def _load_project_context(project_dir: Path) -> dict[str, Any]:
         patch_line_count=details.patch_line_count,
     )
     proposal_plan_path = details.signals_path.parent / "proposal-plan.json"
-    proposal_plan, proposal_plan_error = _load_optional_object(proposal_plan_path)
+    proposal_plan, proposal_plan_error = load_optional_json(proposal_plan_path)
     payload: dict[str, Any] = {
         "project_id": details.spec.project_id,
         "proposal_document_type": details.proposal_document_type,
@@ -178,6 +170,9 @@ def _load_project_context(project_dir: Path) -> dict[str, Any]:
             ]
     if proposal_plan_error is not None:
         payload["proposal_plan_error"] = proposal_plan_error
+    plan_warning = proposal_plan_selection_warning(proposal_plan, details.spec.base_variant_id)
+    if plan_warning is not None:
+        payload["proposal_plan_warning"] = plan_warning
     return payload
 
 

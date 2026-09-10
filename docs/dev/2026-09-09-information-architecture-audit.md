@@ -35,6 +35,66 @@ source of truth.
 
 ## Findings and disposition
 
+### High for local edit preservation — retargeting overwrote intervening edits — fixed for observed changes
+
+Retargeting loaded validated manifest metadata, then reread the raw document for
+serialization. A fixture replaced the manifest after the first read with an
+invalid project identity: retargeting wrote from that unvalidated generation
+before its final load failed. A separate fixture edited the proposal after it
+was read; retargeting silently overwrote the edit. These violate the requirement
+to validate the inputs used for mutation and preserve observed intervening edits.
+
+The manifest owner now returns original bytes and the parsed document from one
+read. Retargeting derives its metadata and output from that validated document,
+captures the proposal bytes used for its ID, and returns the spec it wrote.
+The existing recoverable-write helper accepts expected destination bytes and
+checks them before staging and before replacement. Mismatches abort without
+replacing files. Tests also cover edits during backup staging, absent versus
+empty destinations, dangling symlinks, malformed expectations, and safe errors
+for invalid proposal/base-variant inputs. Existing rollback coverage remains.
+
+Evidence: `/tmp/cvw-retarget-intervening-edit-red.log`,
+`/tmp/cvw-atomic-expected-red.log`, `/tmp/cvw-retarget-input-errors-red.log`, and
+`/tmp/cvw-retarget-guards-green.log` (100 focused checks passed). Byte checks do
+not serialize other writers or guarantee a multi-file transaction. Edits after
+the final check, process termination, cancellation, and global source freshness
+remain outside this contract.
+
+### Medium — saved guidance hid selection changes and could break inspection — fixed
+
+Retargeting left the original recommendation plan in place, but neither project
+inspection nor preview explained that its recorded applied variant differed
+from the current manifest. Invalid UTF-8 or an unreadable optional plan also
+aborted those read paths instead of preserving the available project details.
+
+Both consumers now share optional JSON loading and selection-warning semantics
+through `workspace.project_guidance`. Changed or unverifiable recorded selections
+produce `proposal_plan_warning`; read/encoding/JSON errors produce
+`proposal_plan_error`. The CLI and preview show these diagnostics. Retargeting
+does not rewrite historical guidance to imply a fresh recommendation. Matching
+variant IDs do not prove freshness of source facts, job content, or catalog data.
+
+Six RED cases and one positive control exercised the real guide, retarget,
+inspection, and preview-context paths. Evidence:
+`/tmp/cvw-guidance-selection-red.log` and
+`/tmp/cvw-guidance-selection-green.log` (80 checks passed). A local Chrome
+DevTools inspection confirmed the warning as rendered text, no horizontal
+overflow, and no console warnings/errors. Snapshot, screenshot, and console
+evidence live under the isolated fixture's `var/runs/preview/retarget-audit/`;
+`/tmp/cvw-retarget-preview-fixture.json` records its location. The preview tab
+and server were closed after inspection.
+
+Final retarget/guidance verification: 686 tests passed, with one opt-in remote
+skip and the five existing PyMuPDF/SWIG warnings. An older preview fixture
+without an applied variant now expects the explicit unknown-selection warning;
+its focused check and the repeated full suite passed. The seven-step isolated
+journey passed with empty stderr at each step. Ruff, formatting, and pre-commit
+checks passed. Evidence: `/tmp/cvw-retarget-full-final.log`,
+`/tmp/cvw-retarget-preview-compatibility.log`, `/tmp/cvw-retarget-journey.json`,
+and `/tmp/cvw-retarget-hooks.log`. Live context reported ready source data,
+no issues, and `review_required` publication. Master/candidate hashes and the
+personal site were unchanged; no publication approval, sync, or push occurred.
+
 ### Medium — direct creation validated inputs after artifact writes — fixed
 
 Nine local fixtures demonstrated late validation or acceptance of invalid job
@@ -767,8 +827,10 @@ Project identity now has one read owner shared by inspection and execution.
 Guided creation now has a callable workflow, captured settings, and explicit
 recovery. Creation cleanup now tracks directory ownership, and retarget writes
 recover from ordinary I/O failures. Direct creation now preflights local inputs
-and captures its job text and variant definition. Continue with consistent
-retarget input reads, then remaining project command orchestration.
+and captures its job text and variant definition. Retargeting now reads one
+validated manifest generation, checks for observed intervening edits, and
+exposes changed saved-guidance selections. Continue with remaining project
+command orchestration and full metadata contracts.
 Manifest, creation/retarget, and
 guarded patch responsibilities now have verified owners beneath the project
 package. A complete metadata model

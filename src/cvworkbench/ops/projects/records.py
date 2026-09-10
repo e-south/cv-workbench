@@ -11,7 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -31,6 +31,14 @@ class ProjectPaths:
     raw_path: Path | None
     variant_path: Path
     patch_path: Path
+
+
+@dataclass(frozen=True)
+class ProjectManifest:
+    """One file read, with original bytes and its independently mutable document."""
+
+    source_bytes: bytes = field(repr=False)
+    document: dict[str, Any] = field(repr=False)
 
 
 @dataclass(frozen=True)

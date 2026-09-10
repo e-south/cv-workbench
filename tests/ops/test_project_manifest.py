@@ -143,7 +143,7 @@ def test_project_details_use_one_manifest_generation(tmp_path: Path, monkeypatch
     changed = yaml.safe_load(manifest.read_text())
     changed["project"]["id"] = "next-generation"
     changed["project"]["created_at"] = "2026-01-01T00:00:00+00:00"
-    original_read = Path.read_text
+    original_read = Path.read_bytes
     reads = []
 
     def replace_after_read(path, *args, **kwargs):
@@ -154,7 +154,7 @@ def test_project_details_use_one_manifest_generation(tmp_path: Path, monkeypatch
         return content
 
     with monkeypatch.context() as patch:
-        patch.setattr(Path, "read_text", replace_after_read)
+        patch.setattr(Path, "read_bytes", replace_after_read)
         observed = load_project_details(project_dir)
 
     assert observed == expected

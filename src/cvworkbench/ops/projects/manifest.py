@@ -17,19 +17,24 @@ from typing import Any
 import yaml
 
 from cvworkbench.ops.projects.identity import validate_project_id
-from cvworkbench.ops.projects.records import ProjectError, ProjectSpec
+from cvworkbench.ops.projects.records import ProjectError, ProjectManifest, ProjectSpec
 from cvworkbench.variants import validate_variant_id
 
 
 def load_project_metadata(project_dir: Path) -> dict[str, Any]:
     """Read manifest identity without requiring retained proposal artifacts."""
+    return _read_project_manifest(project_dir).document["project"]
+
+
+def _read_project_manifest(project_dir: Path) -> ProjectManifest:
     if not project_dir.exists():
         raise ProjectError(f"Project directory not found: {project_dir}")
     project_file = project_dir / "project.yaml"
     if not project_file.exists():
         raise ProjectError(f"Project manifest not found: {project_file}")
     try:
-        raw = yaml.safe_load(project_file.read_text(encoding="utf-8"))
+        content = project_file.read_bytes()
+        raw = yaml.safe_load(content.decode("utf-8"))
     except (UnicodeError, yaml.YAMLError) as exc:
         raise ProjectError(
             f"Project manifest must contain valid UTF-8 YAML: {project_file}"
@@ -49,7 +54,7 @@ def load_project_metadata(project_dir: Path) -> dict[str, Any]:
         validate_variant_id(base_variant)
     except ValueError as exc:
         raise ProjectError(f"Project base_variant is invalid: {exc}") from exc
-    return project_data
+    return ProjectManifest(source_bytes=content, document=raw)
 
 
 def load_project(project_dir: Path) -> ProjectSpec:

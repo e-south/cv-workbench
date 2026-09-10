@@ -310,6 +310,10 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
         "recommended_variant": "project-focus",
         "recommendation_status": "targeted",
         "recommendation_summary": "matched include tags: leadership",
+        "proposal_plan_warning": (
+            "Saved guidance does not identify an applied variant. "
+            "Compare its recommendations with the current proposal before using them."
+        ),
         "job_keywords_missing": ["stakeholder-management"],
         "steps": [
             "Inspect `project show job` and preview the proposal variant.",
