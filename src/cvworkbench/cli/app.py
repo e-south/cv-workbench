@@ -91,7 +91,6 @@ from cvworkbench.ops.projects import (
 )
 from cvworkbench.ops.render_compare import RenderCompareError, compare_rendered_pdfs
 from cvworkbench.ops.review import ReviewError
-from cvworkbench.ops.review.catalog import list_review_summaries
 from cvworkbench.ops.review.importing import import_docx_review
 from cvworkbench.ops.review.packs import build_review_pack
 from cvworkbench.ops.review.record import SOURCE_RECORD_NAME
@@ -100,7 +99,6 @@ from cvworkbench.ops.runs import (
     RunGcCandidate,
     RunGcSummary,
     gc_runs,
-    latest_runs_by_variant,
 )
 from cvworkbench.ops.scaffold import ScaffoldError, init_project, resolve_template_root
 from cvworkbench.ops.sot_versions import (
@@ -142,26 +140,17 @@ from cvworkbench.workspace.project_guidance import (
     recommendations_summary_line,
 )
 from cvworkbench.workspace.projects import (
-    load_project_summaries,
     project_commands,
     project_review_payload,
-    projects_summary_line,
 )
-from cvworkbench.workspace.publication import inspect_workspace_publication
-from cvworkbench.workspace.reviews import reviews_summary_line
 from cvworkbench.workspace.runs import (
-    invalid_runs_line,
     run_payload,
-    runs_recents_line,
-    runs_summary_line,
 )
 from cvworkbench.workspace.source import (
-    build_sot_details,
-    build_versions_info,
-    inspect_source,
     tags_summary_line,
     top_tags,
 )
+from cvworkbench.workspace.status import StatusInspectionError, inspect_status
 from cvworkbench.workspace.variants import (
     inbox_entry_payload,
     inbox_summary_line,
@@ -1293,110 +1282,15 @@ def status(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
-    config_path = resolve_config_path(config)
     try:
-        resolved_sot = resolve_sot_path(sot_path, config_path)
-    except (FileNotFoundError, ValueError) as exc:
-        typer.echo(f"ERROR: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    inspection = inspect_source(resolved_sot)
-    if inspection.errors:
-        for error in inspection.errors:
+        summary = inspect_status(config=config, sot_path=sot_path)
+    except StatusInspectionError as exc:
+        for error in exc.errors:
             typer.echo(f"ERROR: {error}", err=True)
-        raise typer.Exit(code=1)
-    payload = inspection.payload or {}
-
-    sot_details = build_sot_details(resolved_sot, payload)
-    files = sot_details["files"]
-    files_summary = sot_details["files_summary"]
-    sections = sot_details["sections"]
-    sections_summary = sot_details["sections_summary"]
-    tags_top = sot_details["tags_top"]
-    tags_summary = sot_details["tags_summary"]
-
-    versions_info, versions_summary, versions_error = build_versions_info(resolved_sot)
-    if versions_error:
-        typer.echo(f"ERROR: {versions_error}", err=True)
-        raise typer.Exit(code=1)
-
-    try:
-        variants = load_variants_from_config(config_path)
-    except ValueError as exc:
+        raise typer.Exit(code=1) from exc
+    except (OSError, ValueError, RunError, VariantLifecycleError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    variants_summary = variants_summary_line(variants)
-
-    inbox_entries = list_variant_inbox(config_path)
-    inbox_payload = [inbox_entry_payload(entry, config_path) for entry in inbox_entries]
-    inbox_summary = inbox_summary_line(inbox_payload)
-    ttl_days = resolve_variant_ttl_days(config_path)
-
-    recents_by_variant, invalid_runs = latest_runs_by_variant(
-        config_path,
-        limit=3,
-        include_project_runs=False,
-    )
-    recents_payload: dict[str, list[dict[str, Any]]] = {}
-    for variant in variants:
-        runs = recents_by_variant.get(variant["id"], [])
-        recents_payload[variant["id"]] = [run_payload(run) for run in runs]
-    latest_payload = {key: value[:1] for key, value in recents_payload.items()}
-
-    latest_summary = runs_summary_line(latest_payload)
-    recents_summary = runs_recents_line(recents_payload)
-    invalid_summary = invalid_runs_line(invalid_runs)
-
-    projects, invalid_projects = load_project_summaries(config_path)
-    projects_summary = projects_summary_line(projects)
-    invalid_projects_summary = invalid_runs_line(invalid_projects)
-
-    reviews = list_review_summaries(config_path)
-    reviews_summary = reviews_summary_line(reviews)
-
-    summary = {
-        "publication": asdict(inspect_workspace_publication(config_path, sot_path=sot_path)),
-        "sot": {
-            "path": str(resolved_sot),
-            "files": files,
-            "files_summary": files_summary or "none",
-            "sections": sections,
-            "sections_summary": sections_summary,
-            "tags_top": tags_top,
-            "tags_summary": tags_summary,
-            "versions": versions_info,
-            "versions_summary": versions_summary,
-        },
-        "variants": {
-            "config": variants,
-            "config_count": len(variants),
-            "summary": variants_summary,
-            "inbox": inbox_payload,
-            "inbox_count": len(inbox_payload),
-            "inbox_summary": inbox_summary,
-            "ttl_days": ttl_days,
-        },
-        "runs": {
-            "latest_by_variant": latest_payload,
-            "recents_by_variant": recents_payload,
-            "latest_summary": latest_summary,
-            "recents_summary": recents_summary,
-            "invalid": [str(path) for path in invalid_runs],
-            "invalid_summary": invalid_summary,
-        },
-        "projects": {
-            "items": projects,
-            "count": len(projects),
-            "summary": projects_summary,
-            "invalid": [str(path) for path in invalid_projects],
-            "invalid_summary": invalid_projects_summary,
-        },
-        "reviews": {
-            "items": reviews,
-            "count": len(reviews),
-            "summary": reviews_summary,
-        },
-    }
 
     if get_output_mode() == OutputMode.JSON:
         typer.echo(json.dumps({"command": "status", **summary}, indent=2, sort_keys=True))

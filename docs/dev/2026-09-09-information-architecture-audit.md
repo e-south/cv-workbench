@@ -230,7 +230,8 @@ workspace module shared by context and status.
 
 Workspace inspection now lives in `workspace/context.py`, backed by separate
 source, variant, run, project, review, publication, and project-guidance owners.
-`cli/app.py` is 5,163 lines; further command-adapter extraction remains open.
+`cli/app.py` is 5,068 lines after status extraction; further command-adapter
+extraction remains open.
 The recipe catalog selects and orders descriptions from setup, build, review,
 project, and maintenance modules. No recipe body spans the whole product flow.
 The inspection API raises domain exceptions without terminal output; the CLI
@@ -240,7 +241,7 @@ selection. Import-direction tests protect workspace/adapter and domain owners.
 
 Proposed extraction order:
 
-1. Context and recipe extraction is complete. Further reduce status and
+1. Context, status, and recipe extraction is complete. Further reduce
    project-guide orchestration in CLI adapters using the explicit configuration
    snapshot contract.
 2. Publication command extraction is complete. Register review, tailoring and
@@ -280,6 +281,15 @@ snapshot, and preserve missing-source bootstrap guidance. Two more checks cover
 the complete prepared-publication path. Subsequent operations see updated
 settings. Workflow descriptions receive resolved workspace locations rather than
 reading configuration themselves.
+
+Status follow-up: `workspace/status.py::inspect_status` composes the shared
+inventory helpers, validates its selected source, and returns data without
+terminal output or writes. `StatusInspectionError.errors` retains all source
+diagnostics. The CLI adapter owns output modes and exception translation; a
+missing config now produces an actionable error instead of a silent failed
+invocation. Status uses one workbench snapshot, honors explicit source selection,
+and does not require the default build variant. Normal context/status/workflow
+outputs remain unchanged in all seven recorded comparisons.
 
 ### Medium — artifact retention is not dependency-aware — partly fixed
 
@@ -469,6 +479,14 @@ Evidence: `/tmp/cvw-inspection-config-red.log`,
 `/tmp/cvw-inspection-config-green.log`, `/tmp/cvw-inspection-targeted.log`, and
 `/tmp/cvw-inspection-full.log`.
 
+Status API follow-up: 559 tests passed in the inclusive default suite, with the
+same one skip and five upstream warnings. The 57 targeted checks and seven-step
+isolated journey passed; journey stderr was empty. Six initial RED cases covered
+the missing API, missing-config diagnostic, and mixed status settings after
+config edit/removal. Evidence: `/tmp/cvw-status-red.log`,
+`/tmp/cvw-status-green.log`, `/tmp/cvw-status-targeted.log`,
+`/tmp/cvw-status-full.log`, and `/tmp/cvw-status-journey.json`.
+
 Useful verification commands:
 
 ```bash
@@ -494,8 +512,9 @@ review item. No exploit against an external destination was attempted.
 
 Portability, preview presentation extraction, and publication freshness/review
 contracts, workspace inspection, and workflow-family extraction are complete.
-Next extend explicit configuration snapshots beyond build/render and address
-the remaining status/project command orchestration. Follow with semantic document styles and further
+Next extend explicit configuration snapshots to publication preparation/sync,
+lifecycle mutations, and preview selection, and address project command
+orchestration. Follow with semantic document styles and further
 owner-bounded decomposition, each behind its own behavior tests. Extend retention
 to standalone draft references and inspect historical untracked bundles before
 pruning the workspace. Keep the personal

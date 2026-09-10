@@ -89,7 +89,9 @@ the file is edited during rendering; the manifest does not re-read the config.
 `inspect_workspace` captures one snapshot for the source selection, default
 variant, retention setting, run/project/review locations, and publication
 inventory. The `context`, `bootstrap`, and `workflow` commands share this API.
-Its Python callers may supply an existing snapshot. Editing or removing the
+`inspect_status` and its `status` command capture the same settings boundary
+while requiring a valid selected source. Python callers may supply an existing
+snapshot to either inspector. Editing or removing the
 workbench file after capture does not change that inspection's settings; the
 next path-based invocation reads current contents.
 
@@ -105,7 +107,7 @@ file or directory. Source facts, active-version pointers, variant files, theme
 assets, publication policy, and site configuration have separate lifetimes.
 Their existing hashes/checks do not establish a global immutable input bundle.
 
-Status/project command orchestration, publication preparation/sync, lifecycle
+Project command orchestration, publication preparation/sync, lifecycle
 mutations, and preview controller selection still include path-based resolution
 outside the captured boundaries. Adopt explicit snapshots at those operation
 boundaries with their own behavior tests. Do not infer that accepting

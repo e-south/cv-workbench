@@ -80,6 +80,27 @@ details and recipes to the documented summary representation. See the
 [architecture owner map](../concepts/architecture.md#workspace-inspection-and-command-adapters)
 before extending inspection or recipe behavior.
 
+### Validated-source status
+
+```python
+from pathlib import Path
+from cvworkbench.workspace.status import inspect_status
+
+status = inspect_status(config=Path("config/workbench.yaml"), sot_path=None)
+```
+
+`inspect_status` supplies the data behind `cvw status` without its CLI `command`
+envelope, terminal output, or workspace writes. It requires a valid selected
+source and reports its sections, variants, runs, projects, reviews, and authored
+publication. It accepts a config path or snapshot and shares inventory owners
+with `inspect_workspace`. Status does not require a default build variant and
+does not produce repair recipes; context owns repair and workflow guidance.
+
+Source/version validation raises `StatusInspectionError` with an `errors`
+tuple preserving individual diagnostics. Configuration and inventory exceptions
+remain available to Python callers. The CLI prints each diagnostic and exits
+with code 1. Missing configuration also produces an explicit CLI error.
+
 ## Payload (JSON)
 
 Top-level keys:

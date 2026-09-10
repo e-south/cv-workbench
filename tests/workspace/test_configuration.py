@@ -50,7 +50,7 @@ def _populated_workspace(root: Path) -> Path:
     return config
 
 
-@pytest.mark.parametrize("entrypoint", ["api", "context", "bootstrap", "workflow"])
+@pytest.mark.parametrize("entrypoint", ["api", "context", "bootstrap", "workflow", "status"])
 @pytest.mark.parametrize("mutation", ["edit", "remove"])
 def test_inspection_uses_one_configuration_generation(tmp_path, monkeypatch, entrypoint, mutation):
     config = _populated_workspace(tmp_path)

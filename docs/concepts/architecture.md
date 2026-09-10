@@ -84,6 +84,8 @@ checks this boundary with checkout imports excluded.
 
 `workspace/context.py::inspect_workspace` composes local inventories into the
 context payload. It has no terminal output and performs no workspace writes.
+`workspace/status.py::inspect_status` uses the same inventory owners for the
+validated-source status view and preserves individual source diagnostics.
 CLI adapters own command parsing, output formatting, and exception-to-exit-code
 translation. The [context contract](../reference/context-contract.md#python-inspection-api)
 defines the callable API and its error semantics.
@@ -116,8 +118,8 @@ publication inspection an explicit immutable workbench configuration generation,
 recorded by hash in build manifests. Workflow descriptions receive resolved
 locations without selecting settings themselves. The
 [configuration contract](../reference/configuration-contract.md) defines
-resolution, preflight, and the remaining adoption boundaries. Status and several
-command adapters retain orchestration that can move behind workspace owners as
+resolution, preflight, and the remaining adoption boundaries. Project and several
+other command adapters retain orchestration that can move behind workspace owners as
 their behavior is characterized.
 
 ## Preview presentation boundary
