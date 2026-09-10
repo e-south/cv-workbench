@@ -432,11 +432,12 @@ Internal modules import concrete owners rather than the public entrypoint.
 | Guided creation, preflight, result records, and recovery | `workflow.py` |
 
 Catalog loading is shared through `cvworkbench.variants.load_variants_from_config`.
-Workspace modules own inventory and optional-plan presentation. Project
-operations do not import workspace, CLI, or preview presentation. The guide
+`cvworkbench.workspace.projects` owns inventory, command descriptions, and shared
+full/preview inspection; see its [inspection contract](project-inspection.md).
+Project operations do not import workspace, CLI, or preview presentation. The guide
 adapter delegates to `guide_project`; terminal summaries and optional preview
-launch remain in the CLI. Other project adapters retain their own extraction
-boundaries.
+launch remain in the CLI. The show adapter delegates to `inspect_project`.
+Other project adapters retain their own extraction boundaries.
 
 `cvworkbench.ops.projects.load_project_metadata` owns manifest reading and
 delegates project identity validation to `identity.py`.

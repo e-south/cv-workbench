@@ -121,6 +121,12 @@ snapshot to either inspector. Editing or removing the
 workbench file after capture does not change that inspection's settings; the
 next path-based invocation reads current contents.
 
+`inspect_project` shares one captured configuration across project resolution,
+latest-run lookup, proposal-ID suggestions, and saved-guidance comparisons.
+Its `project show` adapter owns terminal error translation. Preview observation
+inspection can consume that same explicit snapshot without acquiring run or
+command state. See the [project inspection contract](project-inspection.md).
+
 `inspect_publication` likewise captures or reuses a snapshot for publication,
 review, and person-source locations. It retains its explicit freshness and
 review checks. Workflow descriptions receive the resolved workspace location

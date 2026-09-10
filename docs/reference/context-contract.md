@@ -101,6 +101,10 @@ tuple preserving individual diagnostics. Configuration and inventory exceptions
 remain available to Python callers. The CLI prints each diagnostic and exits
 with code 1. Missing configuration also produces an explicit CLI error.
 
+For a single project, use the [project inspection APIs](project-inspection.md).
+They supply full CLI state and compact preview observations without requiring
+workspace-wide inspection.
+
 ## Payload (JSON)
 
 Top-level keys:

@@ -54,7 +54,7 @@ task instead of browsing the whole docs tree.
 | Need | Start here | Verify next |
 | --- | --- | --- |
 | Ingest a job and create a project-scoped proposal | [howto/ingestion.md](howto/ingestion.md) | [reference/project-contract.md](reference/project-contract.md) |
-| Inspect project guidance, patch status, and next commands | [reference/project-contract.md](reference/project-contract.md) | [reference/preview-contract.md](reference/preview-contract.md) |
+| Inspect project guidance, patch status, and next commands | [reference/project-contract.md](reference/project-contract.md) | [reference/project-inspection.md](reference/project-inspection.md) |
 | Inspect, keep, discard, or clean up proposal variants | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) | [reference/project-contract.md](reference/project-contract.md) |
 | Retain project runs and inspect artifact cleanup plans | [reference/artifact-retention.md](reference/artifact-retention.md) | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) |
 | Compare a project run against a baseline before export or review | [reference/project-contract.md](reference/project-contract.md) | [concepts/overview.md](concepts/overview.md) |

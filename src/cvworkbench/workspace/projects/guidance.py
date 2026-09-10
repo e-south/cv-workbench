@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/workspace/project_guidance.py
+cv-workbench/src/cvworkbench/workspace/projects/guidance.py
 
 Explain saved project guidance and summarize recommendation text.
 

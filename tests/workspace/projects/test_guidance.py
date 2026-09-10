@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/tests/workspace/test_project_guidance.py
+cv-workbench/tests/workspace/projects/test_guidance.py
 
 Verifies saved guidance diagnostics across project inspection and preview.
 

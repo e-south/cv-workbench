@@ -90,17 +90,24 @@ CLI adapters own command parsing, output formatting, and exception-to-exit-code
 translation. The [context contract](../reference/context-contract.md#python-inspection-api)
 defines the callable API and its error semantics.
 
+`workspace/projects/` groups project inventory, shared full/preview inspection,
+command descriptions, and guidance presentation. Its
+[inspection contract](../reference/project-inspection.md) defines the two
+projections and their distinct error and read-cost boundaries.
+
 | Responsibility | Owner beneath `src/cvworkbench/` |
 | --- | --- |
 | Source files, sections, tags, and version inventory | `workspace/source.py` |
 | Configured variants and proposal inbox | `workspace/variants.py` |
 | Build history and review readiness | `workspace/runs.py` |
-| Project inventory and available project commands | `workspace/projects.py` |
+| Project inventory | `workspace/projects/inventory.py` |
+| Full project inspection and preview observations | `workspace/projects/inspection.py` |
+| Available project command descriptions | `workspace/projects/commands.py` |
 | Job evidence, variant recommendations, and proposal planning | `ops/projects/guidance.py` |
 | Project metadata, proposal inspection, and bounded saved-plan reads | `ops/projects/inspection.py` |
 | Stored job-file observations against recorded digests | `ops/projects/artifacts.py` |
 | Saved guidance input fingerprints and comparison | `ops/projects/provenance.py` |
-| Saved-guidance selection warnings and recommendation summaries | `workspace/project_guidance.py` |
+| Saved-guidance selection warnings and recommendation summaries | `workspace/projects/guidance.py` |
 | Content-review inventory and source health | `workspace/reviews.py` |
 | Authored publication state and review/sync recipe | `workspace/publication.py` |
 | Command quoting and workspace/source argument propagation | `workspace/commands.py` |

@@ -35,6 +35,51 @@ source of truth.
 
 ## Findings and disposition
 
+### Medium — project inspection mixed settings and duplicated adapter decisions — fixed
+
+CLI show and preview separately loaded project details, optional plans, artifact
+observations, and guidance comparisons. Full inspection also reopened workbench
+settings for selector resolution, run lookup, command suggestions, and provenance.
+An intervening configuration edit hid an existing run and falsely reported a
+changed default variant in the same response; removal caused inspection to fail.
+
+`workspace/projects/` now separates inventory, inspection composition, command
+descriptions, and guidance presentation. Full and preview APIs share the detail
+and observation reads while retaining their different payloads and error
+boundaries. Full inspection passes one captured configuration through all of
+its decision owners. CLI errors now explain missing files, invalid UTF-8,
+malformed YAML, and non-mapping settings without a traceback or partial JSON.
+The [inspection contract](../reference/project-inspection.md) owns these semantics;
+scoped instructions and boundary tests keep implementation out of the package
+entrypoint and adapters out of workspace code.
+
+The extraction baseline and focused suite each passed 109 tests. Before/after
+capture preserved 32 outputs across eight project states: healthy, absent plan,
+invalid plan, changed job file, retargeted proposal, unknown provenance, invalid
+metadata, and absent proposal inputs. Snapshot tests initially failed five cases
+for edited/removed settings and explicit captured settings. Four additional CLI
+tests reproduced missing error diagnostics. After fixes, all 15 focused API and
+boundary checks passed, including read-only and terminal-independent inspection.
+Evidence: `/tmp/cvw-shared-project-inspection-before.json`,
+`/tmp/cvw-shared-project-inspection-after.json`,
+`/tmp/cvw-project-inspection-config-red.log`,
+`/tmp/cvw-project-inspection-errors-red.log`, and
+`/tmp/cvw-project-inspection-final-focused.log`.
+
+The inclusive suite passed 782 tests, with one opt-in remote skip and the five
+existing PyMuPDF/SWIG warnings. The seven-step isolated document journey passed
+with empty stderr, and the final 32-output capture remained byte-identical to
+the baseline. Evidence: `/tmp/cvw-shared-project-inspection-full.log`,
+`/tmp/cvw-shared-project-inspection-journey.json`, and
+`/tmp/cvw-shared-project-inspection-final.json`. The canonical master and public
+candidate hashes remained unchanged; live context was source-ready with zero
+issues and publication `review_required`. The personal-site tree stayed clean.
+
+The configuration guarantee is not a transaction across project, source,
+variant, and run files. Preview retains partial diagnostics when inputs are
+unavailable. Detailed inspection still requires executable proposal artifacts;
+historical/partial project inspection remains a separate improvement.
+
 ### Medium — saved guidance was not bound to its consumed inputs — fixed for declared guidance inputs
 
 Job-file checks compared bytes only with the current project manifest. Updating
@@ -997,8 +1042,10 @@ validated manifest generation, checks for observed intervening edits, and
 exposes changed saved-guidance selections. Typed descriptive metadata now has a
 single parser, inventory preserves partial/invalid descriptions, and saved-plan
 reads enforce project ownership. Stored job-file comparisons now expose missing,
-changed, or unreadable artifacts independently of run review readiness. Continue
-with shared project inspection and remaining command orchestration. New guidance
+changed, or unreadable artifacts independently of run review readiness. Shared
+project inspection now supplies CLI and preview observations with explicit
+configuration capture for full inspection. Continue with remaining project
+command orchestration and historical/partial inspection. New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,
 executable proposals, recorded metadata, current artifact observations, and

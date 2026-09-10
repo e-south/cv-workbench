@@ -16,11 +16,11 @@ from typing import Any
 
 from cvworkbench.cli.output import print_summary
 from cvworkbench.workspace.commands import shell_command
-from cvworkbench.workspace.project_guidance import (
-    recommendations_summary_line,
-)
 from cvworkbench.workspace.projects import (
     project_commands,
+)
+from cvworkbench.workspace.projects.guidance import (
+    recommendations_summary_line,
 )
 
 

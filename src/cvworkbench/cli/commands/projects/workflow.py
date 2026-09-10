@@ -36,23 +36,12 @@ from cvworkbench.ops.projects import (
     apply_project_patch,
     create_project_from_file,
     create_project_from_url,
-    inspect_guidance_inputs,
     load_project,
-    load_project_details,
-    load_project_plan,
-    project_patch_render_warning,
-    project_patch_status,
     resolve_project_dir,
 )
 from cvworkbench.variants import load_variant
-from cvworkbench.workspace.project_guidance import (
-    guidance_input_context,
-    project_artifact_context,
-    proposal_plan_selection_warning,
-)
 from cvworkbench.workspace.projects import (
-    project_commands,
-    project_review_payload,
+    inspect_project,
 )
 
 
@@ -229,79 +218,11 @@ def project_show(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
-    config_path = resolve_config_path(config)
-    project_dir = resolve_project_dir(project, config_path)
     try:
-        details = load_project_details(project_dir)
-    except ProjectError as exc:
+        summary = inspect_project(project, config=config)
+    except (ProjectError, OSError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-
-    review = project_review_payload(details.spec.project_id, config_path)
-    commands = project_commands(
-        details.spec.project_id,
-        config_path=config_path,
-        variant_id=details.proposal_variant_id,
-        review_run_id=review["run_id"] if review["review_ready"] else None,
-    )
-    review["next_command"] = commands.get("reviewpack", commands["build"])
-    render_warning = project_patch_render_warning(
-        proposal_document_type=details.proposal_document_type,
-        patch_operations=details.patch_operations,
-    )
-    patch_status = project_patch_status(
-        patch_format=details.patch_format,
-        patch_is_empty=details.patch_is_empty,
-        patch_line_count=details.patch_line_count,
-    )
-    proposal_plan, proposal_plan_error = load_project_plan(details)
-    summary = {
-        "project": {
-            "project_id": details.spec.project_id,
-            "project_dir": str(details.spec.project_dir),
-            "created_at": details.created_at,
-            "base_variant": details.spec.base_variant_id,
-            "sot_path": str(details.spec.sot_path),
-        },
-        "proposal": {
-            "variant_id": details.proposal_variant_id,
-            "variant_path": str(details.spec.variant_path),
-            "document_type": details.proposal_document_type,
-        },
-        "job": {
-            "source_type": details.job_source_type,
-            "source": details.job_source_value,
-            "extracted_path": str(details.extracted_path),
-            "raw_path": str(details.raw_path) if details.raw_path is not None else None,
-        },
-        "signals": {
-            "path": str(details.signals_path),
-        },
-        "patch": {
-            "path": str(details.spec.patch_path),
-            "format": details.patch_format,
-            "is_empty": details.patch_is_empty,
-            "line_count": details.patch_line_count,
-            "operations": list(details.patch_operations),
-            "render_warning": render_warning,
-            "status": patch_status,
-        },
-        "review": review,
-        "commands": commands,
-        **project_artifact_context(details.artifact_checks, include_details=True),
-    }
-    if proposal_plan is not None:
-        summary["proposal_plan"] = proposal_plan
-        summary.update(
-            guidance_input_context(
-                inspect_guidance_inputs(proposal_plan, details=details, config_path=config_path)
-            )
-        )
-    if proposal_plan_error is not None:
-        summary["proposal_plan_error"] = proposal_plan_error
-    plan_warning = proposal_plan_selection_warning(proposal_plan, details.spec.base_variant_id)
-    if plan_warning is not None:
-        summary["proposal_plan_warning"] = plan_warning
 
     if get_output_mode() == OutputMode.JSON:
         typer.echo(json.dumps({"command": "project.show", **summary}, indent=2, sort_keys=True))

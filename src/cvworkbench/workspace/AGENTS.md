@@ -8,6 +8,8 @@
   their own module. `context.py` composes them; it does not own artifact mutation.
 - Workflow descriptions live by intent under `workflows/`. Keep recipe IDs,
   ordering, placeholder handling, and config/source propagation stable.
+- Project inventory, inspection, command descriptions, and guidance live under
+  `projects/`; read its scoped `AGENTS.md` before extending those owners.
 - Commands are descriptions only. Build, import, apply, cleanup, and publication
   writes remain in their existing `build/` or `ops/` owners.
 - Workspace code must not import `cli`, `dev`, `typer`, or `rich`. Lower-level

@@ -45,21 +45,12 @@ from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_
 from cvworkbench.inputs.validation import validate_sot
 from cvworkbench.ops.projects import (
     ProjectError,
-    inspect_guidance_inputs,
     load_project,
-    load_project_details,
-    load_project_plan,
     prepare_project_sot,
-    project_patch_render_warning,
-    project_patch_status,
 )
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
-from cvworkbench.workspace.project_guidance import (
-    guidance_input_context,
-    project_artifact_context,
-    proposal_plan_selection_warning,
-)
+from cvworkbench.workspace.projects import inspect_project_preview
 
 
 class PreviewError(RuntimeError):
@@ -121,72 +112,10 @@ class ClientActivity:
         return time.monotonic() - self.last_seen_monotonic
 
 
-def _project_context_error_payload(project_dir: Path, error: str) -> dict[str, Any]:
-    project_id = project_dir.name
-    try:
-        project_id = load_project(project_dir).project_id
-    except ProjectError:
-        pass
-    return {
-        "project_id": project_id,
-        "project_context_error": error,
-    }
-
-
 def _load_project_context(
     project_dir: Path, *, config_path: ConfigSource | None = None, sot_path: Path | None = None
 ) -> dict[str, Any]:
-    try:
-        details = load_project_details(project_dir)
-    except ProjectError as exc:
-        return _project_context_error_payload(project_dir, str(exc))
-    patch_warning = project_patch_render_warning(
-        proposal_document_type=details.proposal_document_type,
-        patch_operations=details.patch_operations,
-    )
-    patch_status = project_patch_status(
-        patch_format=details.patch_format,
-        patch_is_empty=details.patch_is_empty,
-        patch_line_count=details.patch_line_count,
-    )
-    proposal_plan, proposal_plan_error = load_project_plan(details)
-    payload: dict[str, Any] = {
-        "project_id": details.spec.project_id,
-        "proposal_document_type": details.proposal_document_type,
-        "patch_status": patch_status,
-        "patch_operations": list(details.patch_operations),
-        "render_warning": patch_warning,
-        **project_artifact_context(details.artifact_checks),
-    }
-    if proposal_plan is not None:
-        payload.update(
-            guidance_input_context(
-                inspect_guidance_inputs(
-                    proposal_plan, details=details, config_path=config_path, sot_path=sot_path
-                )
-            )
-        )
-        payload["recommended_variant"] = proposal_plan.get("selected_variant")
-        payload["recommendation_status"] = proposal_plan.get("status")
-        payload["recommendation_summary"] = proposal_plan.get("summary")
-        missing_values = proposal_plan.get("job_keywords_missing_in_sot")
-        if isinstance(missing_values, list):
-            payload["job_keywords_missing"] = [
-                str(item).strip()
-                for item in missing_values
-                if isinstance(item, str) and item.strip()
-            ]
-        step_values = proposal_plan.get("steps")
-        if isinstance(step_values, list):
-            payload["steps"] = [
-                str(item).strip() for item in step_values if isinstance(item, str) and item.strip()
-            ]
-    if proposal_plan_error is not None:
-        payload["proposal_plan_error"] = proposal_plan_error
-    plan_warning = proposal_plan_selection_warning(proposal_plan, details.spec.base_variant_id)
-    if plan_warning is not None:
-        payload["proposal_plan_warning"] = plan_warning
-    return payload
+    return inspect_project_preview(project_dir, config=config_path, sot_path=sot_path)
 
 
 class PreviewController:

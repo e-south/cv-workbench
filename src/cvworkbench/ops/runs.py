@@ -187,7 +187,7 @@ def resolve_latest_run(
 
 
 def resolve_latest_project_run(
-    config_path: Path,
+    config_path: ConfigSource,
     project_id: str,
     *,
     variant_id: str | None = None,

@@ -13,9 +13,13 @@ import ast
 from importlib.util import resolve_name
 from pathlib import Path
 
+import pytest
 
-def test_project_api_exposes_owned_implementations_without_reverse_imports() -> None:
-    package = Path(__file__).resolve().parents[2] / "src/cvworkbench/ops/projects"
+
+@pytest.mark.parametrize("owner", ["ops", "workspace"])
+def test_project_api_exposes_owned_implementations_without_reverse_imports(owner) -> None:
+    module_name = f"cvworkbench.{owner}.projects"
+    package = Path(__file__).resolve().parents[2] / f"src/cvworkbench/{owner}/projects"
     api = ast.parse((package / "__init__.py").read_text())
     assert not any(
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
@@ -23,7 +27,7 @@ def test_project_api_exposes_owned_implementations_without_reverse_imports() -> 
     )
     for node in api.body:
         if isinstance(node, ast.ImportFrom):
-            assert (node.module or "").startswith("cvworkbench.ops.projects.")
+            assert (node.module or "").startswith(module_name + ".")
             assert all(alias.name != "*" for alias in node.names)
 
     violations = []
@@ -34,13 +38,13 @@ def test_project_api_exposes_owned_implementations_without_reverse_imports() -> 
             if isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 if node.level:
-                    module = resolve_name("." * node.level + module, "cvworkbench.ops.projects")
+                    module = resolve_name("." * node.level + module, module_name)
                 imports = [module, *(f"{module}.{alias.name}" for alias in node.names)]
             elif isinstance(node, ast.Import):
                 imports = [alias.name for alias in node.names]
             else:
                 continue
-            if "cvworkbench.ops.projects" in imports:
+            if module_name in imports:
                 violations.append(f"{path.name}:{node.lineno}")
     assert not violations, f"Project owners must not import the public entrypoint: {violations}"
 
