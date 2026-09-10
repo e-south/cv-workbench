@@ -108,6 +108,10 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "`ProjectGuideResult`" in contract
     assert "`ProjectGuideError`" in contract
     assert "`errors` tuple" in contract
+    assert "## Mutation recovery" in contract
+    assert "original staging directory" in contract
+    assert "ops.atomic.replace_files_atomically" in contract
+    assert "concurrent writers" in contract
 
 
 def test_docs_make_bounded_editing_scope_explicit() -> None:

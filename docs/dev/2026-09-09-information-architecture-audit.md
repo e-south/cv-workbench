@@ -35,6 +35,53 @@ source of truth.
 
 ## Findings and disposition
 
+### High for local artifact integrity — creation cleanup deleted another directory — fixed
+
+Creation previously removed both staging and final paths after any failure,
+without establishing ownership of the final directory. A real rename collision
+deleted a competing destination and its sentinel file. A second fixture replaced
+the published directory during registration; cleanup also deleted that
+replacement. Both failures violate the project operation's artifact-ownership
+boundary.
+
+File and URL creation now share one lifecycle context. Cleanup follows the
+successful rename state and checks the original directory identity before
+deletion. An observed replacement remains intact; deletion failures retain both
+the creation and cleanup diagnostics. Tests use real local scaffold, filesystem,
+and registry operations with narrowly injected failures. The implementation
+does not establish exclusive creation or eliminate filesystem races. See the
+[mutation contract](../reference/project-contract.md#mutation-recovery).
+
+Evidence: `/tmp/cvw-project-creation-ownership-red.log`,
+`/tmp/cvw-project-creation-replacement-red.log`,
+`/tmp/cvw-project-creation-replacement-green.log`, and
+`/tmp/cvw-project-creation-cleanup-green.log`.
+
+### Medium — retargeting could leave proposal and manifest inconsistent — fixed for I/O recovery
+
+The two direct writes could leave the proposal changed after the manifest save
+failed. A real project fixture with an injected second-save failure reproduced
+the mismatch. Retargeting now uses the existing recoverable file-replacement
+owner, restoring the prior files after an ordinary replacement failure. It
+preserves the public proposal ID and reports recovery errors through
+`ProjectError`. Shared-helper tests cover incomplete rollback and retained
+backups. Independent input reads, process termination, cancellation, and
+concurrent visibility remain outside this guarantee.
+
+Evidence: `/tmp/cvw-project-retarget-recovery-red.log` and
+`/tmp/cvw-project-mutation-recovery-green.log` (38 passing focused tests).
+
+Mutation-recovery verification: 649 tests passed, one opt-in integration test
+was skipped, and the five existing PyMuPDF/SWIG warnings remained. The isolated
+seven-step build/preview/review journey passed with empty stderr at each step.
+Ruff, formatting, and pre-commit checks including secret scanning passed.
+Evidence is `/tmp/cvw-project-mutation-full.log`,
+`/tmp/cvw-project-mutation-journey.json`, and
+`/tmp/cvw-project-mutation-hooks.log`. Live source status was ready without
+context issues; publication remained `review_required`. The canonical master
+and candidate PDF hashes were unchanged, and the personal site stayed clean.
+No site sync, publication approval, or push was performed.
+
 ### Medium — guidance lived in the CLI and missed cleanup after failures — fixed
 
 The guide adapter coordinated source loading, creation, ranking, retargeting,
@@ -62,8 +109,9 @@ verifying that recovery uses the captured generation too.
 
 Source facts, job files, variant definitions, project manifests, and proposal
 files retain independent read lifetimes. Direct creation still stages before
-some registration checks; direct retargeting is not atomic across variant and
-manifest writes. Those remain distinct mutation-contract follow-ups.
+some registration checks. The subsequent mutation-recovery pass addresses
+ordinary creation and retarget write failures; concurrent isolation remains a
+distinct mutation-contract follow-up.
 
 Four real stable-input comparisons (recommended/explicit selection in JSON/plain
 mode) match the previous guide adapter byte-for-byte. All 65 help screens, seven
@@ -675,8 +723,10 @@ contracts, workspace inspection, workflow-family extraction, and CLI command
 ownership are complete.
 Project identity now has one read owner shared by inspection and execution.
 Guided creation now has a callable workflow, captured settings, and explicit
-recovery. Continue with direct creation preflight and retarget consistency,
-then remaining project command orchestration. Manifest, creation/retarget, and
+recovery. Creation cleanup now tracks directory ownership, and retarget writes
+recover from ordinary I/O failures. Continue with direct creation preflight and
+consistent retarget input reads, then remaining project command orchestration.
+Manifest, creation/retarget, and
 guarded patch responsibilities now have verified owners beneath the project
 package. A complete metadata model
 must keep inventory existence, executable proposals, and review readiness

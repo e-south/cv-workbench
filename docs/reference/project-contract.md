@@ -110,10 +110,35 @@ with an actionable message; parser diagnostics do not echo manifest contents.
 
 Executable project loading additionally requires `sot_path` and the proposal
 variant and patch files. Detailed inspection uses one manifest read for both
-identity and descriptive metadata. This does not snapshot proposal files or make
-retargeting atomic. Additional metadata fields retain their operation-specific
+identity and descriptive metadata. This does not snapshot proposal files.
+Additional metadata fields retain their operation-specific
 checks; successful identity inspection alone does not establish build or review
 readiness.
+
+## Mutation recovery
+
+File and URL creation share one staging, publication, and registration lifecycle
+in `creation.py`. On failure, cleanup targets the staging directory until rename
+succeeds, then the published directory. It compares the directory's device/inode
+identity with the original staging directory before deletion. An observed
+replacement is left intact and reported alongside the original failure. Cleanup
+errors are reported rather than ignored; cancellation retains the interrupt and
+adds a note if cleanup also fails.
+
+This ownership check does not provide exclusive creation or isolation from
+concurrent filesystem changes. It does not prevent every race between checking
+identity and deletion, or reserve the destination against an empty directory
+appearing before rename. Direct creation still validates some inputs after
+staging; the guide workflow provides additional preflight checks.
+
+`retarget_project_variant` stages the proposal variant and project manifest
+together using `ops.atomic.replace_files_atomically`. An ordinary I/O failure
+during replacement restores the prior files. If restoration fails, the error
+reports the incomplete rollback and retained recovery-backup paths. Reported
+replacement failures surface as `ProjectError` with their cause preserved. This provides
+recoverable writes, not simultaneous visibility to other readers; cancellation,
+process termination, concurrent writers, and independently read inputs remain
+outside the retarget recovery contract.
 
 ## Apply semantics
 
@@ -246,9 +271,9 @@ errors. Invalid catalog/selected-variant and local job-file inputs fail before
 project creation. Failures during guidance, retargeting, or plan writing discard
 the project and its active proposal; the registry can retain its discarded
 record. A cleanup failure adds a diagnostic alongside the original failure.
-Cancellation performs the same cleanup while preserving the interrupt. Process
-termination and multi-file retarget atomicity remain outside this recovery
-contract.
+Cancellation performs the same cleanup while preserving the interrupt. See
+[mutation recovery](#mutation-recovery) for the narrower direct-operation
+guarantees and their concurrency and termination limits.
 
 ## Python Ownership
 

@@ -14,6 +14,8 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -29,6 +31,7 @@ from cvworkbench.config import (
 from cvworkbench.ingestion.ingest import IngestError, fetch_and_extract
 from cvworkbench.ingestion.registry import load_registry_settings
 from cvworkbench.ingestion.signals import build_signals
+from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.projects.identity import (
     _project_id_from_url,
     _slugify,
@@ -75,9 +78,7 @@ def create_project_from_url(
     if not project_id:
         raise ProjectError("Project id could not be derived from URL")
 
-    final_dir, staging_dir = _prepare_project_dir(project_id, config_path)
-    committed = False
-    try:
+    with _project_creation(project_id, config_path) as (final_dir, staging_dir):
         job_dir = staging_dir / "job"
         job_dir.mkdir(parents=True, exist_ok=True)
 
@@ -116,14 +117,7 @@ def create_project_from_url(
             signals_path=signals_path,
             config_path=config_path,
         )
-        staging_dir.rename(final_dir)
-        _register_project_variant(final_dir=final_dir, config_path=config_path, label=project_id)
-        committed = True
-        return _project_paths(final_dir)
-    finally:
-        if not committed:
-            _cleanup_project_dir(staging_dir)
-            _cleanup_project_dir(final_dir)
+    return _project_paths(final_dir)
 
 
 def create_project_from_file(
@@ -147,9 +141,7 @@ def create_project_from_file(
     if not project_id:
         raise ProjectError("Project id could not be derived from job file")
 
-    final_dir, staging_dir = _prepare_project_dir(project_id, config_path)
-    committed = False
-    try:
+    with _project_creation(project_id, config_path) as (final_dir, staging_dir):
         job_dir = staging_dir / "job"
         job_dir.mkdir(parents=True, exist_ok=True)
 
@@ -181,14 +173,7 @@ def create_project_from_file(
             signals_path=signals_path,
             config_path=config_path,
         )
-        staging_dir.rename(final_dir)
-        _register_project_variant(final_dir=final_dir, config_path=config_path, label=project_id)
-        committed = True
-        return _project_paths(final_dir)
-    finally:
-        if not committed:
-            _cleanup_project_dir(staging_dir)
-            _cleanup_project_dir(final_dir)
+    return _project_paths(final_dir)
 
 
 def retarget_project_variant(
@@ -212,10 +197,19 @@ def retarget_project_variant(
         proposal_variant_id=proposal_variant_id,
         config_path=config_path,
     )
-    spec.variant_path.write_text(yaml.safe_dump(variant_payload, sort_keys=False))
-
     project_data["base_variant"] = base_variant_id
-    project_file.write_text(yaml.safe_dump(raw_project, sort_keys=False))
+    try:
+        replace_files_atomically(
+            [
+                (
+                    spec.variant_path,
+                    yaml.safe_dump(variant_payload, sort_keys=False).encode("utf-8"),
+                ),
+                (project_file, yaml.safe_dump(raw_project, sort_keys=False).encode("utf-8")),
+            ]
+        )
+    except AtomicWriteError as exc:
+        raise ProjectError(f"Project retarget failed: {exc}") from exc
     return load_project(project_dir)
 
 
@@ -321,6 +315,28 @@ def _build_project_variant_payload(
     return raw_variant
 
 
+@contextmanager
+def _project_creation(project_id: str, config_path: ConfigSource) -> Iterator[tuple[Path, Path]]:
+    final_dir, staging_dir = _prepare_project_dir(project_id, config_path)
+    identity = _directory_identity(staging_dir)
+    published = False
+    try:
+        yield final_dir, staging_dir
+        staging_dir.rename(final_dir)
+        published = True
+        _register_project_variant(final_dir=final_dir, config_path=config_path, label=project_id)
+    except BaseException as exc:
+        owned_dir = final_dir if published else staging_dir
+        try:
+            _cleanup_project_dir(owned_dir, identity)
+        except (OSError, ProjectError) as cleanup_exc:
+            detail = f"Project creation cleanup failed at {owned_dir}: {cleanup_exc}"
+            if isinstance(exc, Exception):
+                raise ProjectError(f"{exc}; {detail}") from exc
+            exc.add_note(detail)
+        raise
+
+
 def _prepare_project_dir(project_id: str, config_path: ConfigSource) -> tuple[Path, Path]:
     projects_root = resolve_projects_path(config_path)
     projects_root.mkdir(parents=True, exist_ok=True)
@@ -361,9 +377,19 @@ def _register_project_variant(*, final_dir: Path, config_path: ConfigSource, lab
         raise ProjectError(str(exc)) from exc
 
 
-def _cleanup_project_dir(project_dir: Path) -> None:
-    if project_dir.exists():
-        shutil.rmtree(project_dir, ignore_errors=True)
+def _directory_identity(project_dir: Path) -> tuple[int, int]:
+    metadata = project_dir.lstat()
+    return metadata.st_dev, metadata.st_ino
+
+
+def _cleanup_project_dir(project_dir: Path, expected_identity: tuple[int, int]) -> None:
+    try:
+        observed = _directory_identity(project_dir)
+    except FileNotFoundError:
+        return
+    if observed != expected_identity:
+        raise ProjectError(f"Project directory was replaced; left intact: {project_dir}")
+    shutil.rmtree(project_dir)
 
 
 def _relative_path(root: Path, target: Path | None) -> Path | None:
