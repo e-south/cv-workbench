@@ -52,6 +52,34 @@ Configuration lives in the root `config/` tree, sample inputs in `sot.sample/`,
 and theme assets in `build/themes/`. Documentation links to these owners rather
 than maintaining executable copies beneath `docs/`.
 
+## Distribution and workspace ownership
+
+The wheel's `cvworkbench_data` package contains immutable rendering filters and
+workspace templates. Explicit mappings in `pyproject.toml` bundle the canonical
+sample inputs, themes, workbench settings, and base/cover-letter variants. The
+neutral publication and destination templates live in `build/scaffold/config/`;
+they deliberately contain no approved fingerprint or site path. The checkout's
+configured `config/publish.yaml` and `config/site-sync.yaml` are not bundled.
+
+`resources.py` resolves this data through `importlib.resources` for installed
+and editable runtimes. Missing data is an installation error; runtime code does
+not guess repository ancestors. `build/package/__init__.py` anchors the data
+package so separate installations cannot merge their resource trees.
+
+`init` validates template availability before creating the workspace, then
+copies source examples and themes into editable workspace directories. Existing
+files remain untouched, including the configured source path when
+`--sample-default` is supplied again. `CVW_TEMPLATE_DIR` explicitly replaces the
+workspace template root; it must contain the required sample, themes, workbench,
+base variant, publication, and destination files. A cover-letter variant is
+optional in a custom template and included in the shipped default.
+
+After editing bundled defaults or filters in a checkout, refresh their installed
+snapshot with `uv sync --reinstall-package cv-workbench`. Editing a workspace's
+copied themes or configuration takes effect without reinstalling. The
+[distribution test](../reference/verify-contract.md#installed-distribution)
+checks this boundary with checkout imports excluded.
+
 The personal site is a downstream presenter, not another CV compiler. Editable
 review artifacts remain local to the workbench; the public site exposes one PDF
 view/download surface.

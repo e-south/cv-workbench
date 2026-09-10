@@ -36,6 +36,11 @@ eval "$(/usr/libexec/path_helper)"
 uv sync --locked
 ```
 
+These examples use a source checkout. A wheel installation exposes the same
+commands directly as `cvw`; initialize a new directory with
+`cvw init --workspace /path/to/workspace --sample-default`, then run commands
+inside that workspace. Python, Pandoc, and LaTeX remain runtime requirements.
+
 ## 2) Initialize the workspace
 
 ```bash
@@ -49,6 +54,13 @@ is present in the repo. If hook installation fails, `init` prints
 Use `--sample-default` in this public repo when you want the configured default
 SoT to be `./sot.sample`. Omit the flag when you want the scaffold to copy the
 sample data into `./local/sot` for later replacement with private data.
+
+Initialization preserves existing configuration and theme files. To change the
+source path in an existing workspace, edit `paths.sot` in
+`config/workbench.yaml`; repeating `--sample-default` does not change that
+setting. New workspaces include base and cover-letter variants. Publication
+starts unconfigured: follow [the authored CV guide](publish-site.md) to select
+and review your own source/export pair and destination before syncing.
 
 ## 3) Confirm the runtime toolchain
 
@@ -128,13 +140,13 @@ uv run cvw build --plain --sot-path ./sot.sample --variant base --format md
 uv run cvw build --json --sot-path ./sot.sample --variant base --format md
 ```
 
-## 7) Follow-up: sync to your site (local-first)
+## 7) Follow-up: prepare your authored CV for publication
 
-```bash
-uv run cvw sync --variant base --site /path/to/astro-site
-```
-
-`uv run cvw sync` defaults to local mode. PR sync is opt-in via `--mode pr`.
+The generated sample build is a rendering demonstration. For a faithful public
+CV, follow [Publish the authored CV](publish-site.md) to verify the editable
+DOCX and its PDF export, prepare the sanitized artifact, review it, and sync
+that validated PDF. The site is a downstream presentation surface.
+`sync` defaults to local mode; PR sync remains explicit via `--mode pr`.
 
 ## 8) Follow-up: preview styling quickly
 

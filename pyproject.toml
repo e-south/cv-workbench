@@ -31,6 +31,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/cvworkbench"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"build/package/__init__.py" = "cvworkbench_data/__init__.py"
+"build/filters" = "cvworkbench_data/filters"
+"build/themes" = "cvworkbench_data/workspace/build/themes"
+"sot.sample" = "cvworkbench_data/workspace/sot.sample"
+"build/scaffold/config" = "cvworkbench_data/workspace/config"
+"config/workbench.yaml" = "cvworkbench_data/workspace/config/workbench.yaml"
+"config/variants/base.yaml" = "cvworkbench_data/workspace/config/variants/base.yaml"
+"config/variants/cover-letter.yaml" = "cvworkbench_data/workspace/config/variants/cover-letter.yaml"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

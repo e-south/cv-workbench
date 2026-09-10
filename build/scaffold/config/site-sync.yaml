@@ -1,0 +1,9 @@
+# Configure an explicit destination before syncing any public artifact.
+site:
+  repo_path: null
+  publish_variant: base
+  cv_pdf_dir: public/cv
+  cv_pdf_name: cv.pdf
+  cv_manifest: scripts/cv/public-cv-manifest.json
+  cv_page: src/content/page-cv/cv.md
+  cv_page_frontmatter_key: cvPdf

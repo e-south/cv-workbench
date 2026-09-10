@@ -82,3 +82,25 @@ Required artifact assertions:
 - Any preflight or artifact assertion failure sets `status: failed`
 - The run stops at the first failing step
 - The summary keeps completed-step evidence and records the explicit error
+
+## Installed distribution
+
+```bash
+uv run pytest tests/distribution/test_installed_wheel.py
+```
+
+This test builds and installs a wheel into a new virtual environment, executes
+its installed entry point in an empty workspace, and asserts that both code and
+resource paths come from that installation. It reuses runtime dependencies from
+the locked test environment without processing its editable `.pth` files or
+adding the source checkout to the child interpreter's import path. Dependency
+resolution is separately exercised by `uv sync --locked` in CI.
+
+The journey checks init, doctor, context, Markdown/PDF/DOCX resume and
+cover-letter exports, and one-shot HTML preview. It also checks neutral
+publication defaults, installed-runtime command suggestions, and preservation
+of workspace configuration and theme edits after reinitialization. Each command
+writes stdout/stderr beneath the pytest temporary directory's `evidence/`.
+The test runs as part of the ordinary CI pytest suite; it requires the same
+Pandoc and LaTeX toolchain as the checkout journey. Set `UV_OFFLINE=1` to verify
+with cached build tooling and no package downloads.

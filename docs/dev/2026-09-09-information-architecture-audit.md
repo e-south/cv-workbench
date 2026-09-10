@@ -3,7 +3,7 @@
 Date: 2026-09-09. Scope: local checkout, authored CV preparation, generated
 build/review journeys, preview HTTP boundary, documentation, packaging, and
 artifact lifecycle. The personal site and canonical private CV master were not
-changed. Larger restructuring below is proposed, not implemented.
+changed. Each finding distinguishes completed fixes from proposed next work.
 
 ## Decision
 
@@ -70,7 +70,7 @@ Injected filesystem failures now prove that incomplete rollback retains the
 original recovery bytes and reports their path, while staging failures leave
 the prior destination untouched.
 
-### High for standalone distribution — installed package lacks resources — open
+### High for standalone distribution — installed package lacks resources — fixed
 
 An offline wheel build succeeded, but the wheel contained zero themes, filters,
 or sample templates. Loading that wheel outside the checkout produced a missing
@@ -83,12 +83,21 @@ without the required root resource trees. The
 [verification harness](../reference/verify-contract.md) tests checkout-backed
 journeys, so it does not detect this failure.
 
-Proposed change: give shipped filters, default themes, sample data, and workspace
-templates one package-resource owner, resolved through `importlib.resources`.
-Keep user-customized themes and workspace configuration in the workspace. Add a
-wheel-install test in a clean directory that runs init, doctor, build, and
-one-shot preview without source-checkout paths. This requires a deliberate
-resource move and packaging change; it was not mixed into the header fix.
+Implemented follow-up: explicit wheel mappings expose the existing canonical
+resources through `cvworkbench_data`, resolved by `resources.py` with
+`importlib.resources`. Editable and wheel installations use the same data
+contract. Workspace copies remain editable; source resources are not inferred
+from repository ancestry. Neutral publication/destination templates avoid
+inheriting this checkout's approved CV fingerprint or personal-site path.
+
+The installed-wheel regression builds and installs the distribution, excludes
+checkout imports, then runs init, doctor, context, resume and cover-letter
+exports, and one-shot preview. It reuses locked runtime dependencies locally;
+it does not claim to re-test package-index resolution. The targeted suite passed
+15 tests. Initialization also preserves existing source/theme settings and
+rejects missing template inputs before creating a partial workspace. Installed
+command suggestions now use `cvw` directly. See the
+[distribution contract](../reference/verify-contract.md#installed-distribution).
 
 ### Medium — publication is absent from the bootstrap workflow model — partly fixed
 

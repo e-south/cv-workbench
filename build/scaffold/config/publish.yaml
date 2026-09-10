@@ -1,0 +1,8 @@
+# Publication stays unconfigured until the operator reviews their own export.
+# See docs/howto/publish-site.md before setting the approved visual fingerprint.
+publish:
+  variants: [base]
+  required_exclude_tags: [private]
+  forbidden_contact_fields: [phone]
+  forbidden_sections: [references]
+  approved_visual_fingerprint_sha256: null

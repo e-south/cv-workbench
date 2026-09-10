@@ -491,9 +491,7 @@ def _cvw_command_prefix() -> list[str]:
         except ValueError:
             return ["uv", "run", "--project", str(project_root), "cvw"]
         return ["uv", "run", "cvw"]
-    if (Path.cwd() / "pyproject.toml").exists():
-        return ["uv", "run", "cvw"]
-    return ["uv", "run", "cvw"]
+    return ["cvw"]
 
 
 def _cvw_shell_command(subcommand: str) -> str:

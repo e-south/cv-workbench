@@ -15,12 +15,30 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 import cvworkbench.ops.scaffold as scaffold_module
 from cvworkbench.cli import app
 from cvworkbench.ops.scaffold import resolve_template_root
 from tests.utils import isolated_filesystem
+
+
+def test_incomplete_template_is_rejected_before_workspace_writes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    template = tmp_path / "template"
+    _write_minimal_sot_sample(template)
+    _write_minimal_theme(template)
+    _write_minimal_config(template)
+    (template / "config/publish.yaml").unlink()
+    monkeypatch.setenv("CVW_TEMPLATE_DIR", str(template))
+    workspace = tmp_path / "workspace"
+
+    with pytest.raises(scaffold_module.ScaffoldError, match="publish.yaml"):
+        scaffold_module.init_project(workspace)
+
+    assert not workspace.exists()
 
 
 def _write_minimal_sot_sample(root: Path) -> None:
