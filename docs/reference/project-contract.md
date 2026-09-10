@@ -93,6 +93,27 @@ Use:
 - `uv run cvw variant discard --project <slug> --yes` to discard proposal artifacts.
 - `uv run cvw variant gc --yes` to remove expired proposal artifacts.
 
+## Manifest identity and readiness
+
+`project.yaml` is UTF-8 YAML with a `project` mapping. Its `id` and
+`base_variant` are required strings matching `[A-Za-z0-9][A-Za-z0-9._-]*`.
+Identifiers are single components: paths, whitespace, option-like values, and
+non-string YAML values are invalid. Project builds validate this identity before
+creating a run directory or copying source files.
+
+Workspace inventory reads identity without requiring proposal artifacts. A
+project whose proposals were discarded can remain visible in context. A missing,
+unreadable, malformed, or invalid-identity manifest appears in `projects.invalid`
+instead of aborting the inventory. Explicit project loading raises `ProjectError`
+with an actionable message; parser diagnostics do not echo manifest contents.
+
+Executable project loading additionally requires `sot_path` and the proposal
+variant and patch files. Detailed inspection uses one manifest read for both
+identity and descriptive metadata. This does not snapshot proposal files or make
+retargeting atomic. Additional metadata fields retain their operation-specific
+checks; successful identity inspection alone does not establish build or review
+readiness.
+
 ## Apply semantics
 
 - `uv run cvw build --project <slug>` and `uv run cvw preview --project <slug>` apply proposal
@@ -184,6 +205,11 @@ Project proposal artifacts must use `project-ops`. Unsupported legacy patch
 formats fail fast instead of being interpreted heuristically.
 
 ## Python Ownership
+
+`cvworkbench.ops.projects.load_project_metadata` owns manifest reading and
+identity validation. Workspace inventory consumes that reader;
+`load_project` adds executable-project prerequisites, and `load_project_details`
+adds descriptive and proposal information from the same manifest generation.
 
 Review implementation boundaries are owned by
 [Content Review](review-contract.md#python-ownership). Project patch compilation

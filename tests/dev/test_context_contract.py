@@ -95,6 +95,17 @@ def test_project_review_docs_keep_build_before_reviewpack() -> None:
     assert "get the pinned `--run` command" in contract
 
 
+def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
+    contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
+
+    assert "cvworkbench.ops.projects.load_project_metadata" in contract
+    assert "`load_project`" in contract
+    assert "`load_project_details`" in contract
+    assert "`[A-Za-z0-9][A-Za-z0-9._-]*`" in contract
+    assert "`projects.invalid`" in contract
+    assert "without requiring proposal artifacts" in contract
+
+
 def test_docs_make_bounded_editing_scope_explicit() -> None:
     readme = (REPO_ROOT / "README.md").read_text()
     overview = (REPO_ROOT / "docs" / "concepts" / "overview.md").read_text()

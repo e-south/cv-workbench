@@ -14,13 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from cvworkbench.config import (
     ConfigSource,
     resolve_projects_path,
 )
 from cvworkbench.ops.projects import (
+    ProjectError,
+    load_project_metadata,
     suggest_project_variant_id,
 )
 from cvworkbench.ops.runs import (
@@ -112,20 +112,11 @@ def load_project_summaries(config_path: ConfigSource) -> tuple[list[dict[str, An
     summaries: list[dict[str, Any]] = []
     invalid: list[Path] = []
     for path in sorted([p for p in projects_root.iterdir() if p.is_dir()]):
-        project_file = path / "project.yaml"
-        if not project_file.exists():
+        try:
+            project = load_project_metadata(path)
+        except ProjectError:
             invalid.append(path)
             continue
-        raw = yaml.safe_load(project_file.read_text())
-        if not isinstance(raw, dict):
-            invalid.append(path)
-            continue
-        project = raw.get("project")
-        if not isinstance(project, dict):
-            invalid.append(path)
-            continue
-        project_id = str(project.get("id", "")).strip()
-        base_variant = str(project.get("base_variant", "")).strip()
         created_at = str(project.get("created_at", "")).strip()
         job = project.get("job", {})
         job_source = None
@@ -133,14 +124,11 @@ def load_project_summaries(config_path: ConfigSource) -> tuple[list[dict[str, An
             source = job.get("source", {})
             if isinstance(source, dict):
                 job_source = source.get("value") or source.get("type")
-        if not project_id or not base_variant:
-            invalid.append(path)
-            continue
         summaries.append(
             {
-                "project_id": project_id,
+                "project_id": project["id"],
                 "project_dir": str(path),
-                "base_variant": base_variant,
+                "base_variant": project["base_variant"],
                 "created_at": created_at or None,
                 "job_source": job_source,
             }

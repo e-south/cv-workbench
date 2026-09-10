@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -41,7 +42,7 @@ from cvworkbench.ops.variant_lifecycle import (
     register_variant,
 )
 from cvworkbench.text import slugify
-from cvworkbench.variants import load_variant
+from cvworkbench.variants import load_variant, validate_variant_id
 
 
 class ProjectError(RuntimeError):
@@ -414,24 +415,51 @@ def _build_project_variant_payload(
     return raw_variant
 
 
-def load_project(project_dir: Path) -> ProjectSpec:
+def load_project_metadata(project_dir: Path) -> dict[str, Any]:
+    """Read manifest identity without requiring retained proposal artifacts."""
     if not project_dir.exists():
         raise ProjectError(f"Project directory not found: {project_dir}")
     project_file = project_dir / "project.yaml"
     if not project_file.exists():
         raise ProjectError(f"Project manifest not found: {project_file}")
-    raw = yaml.safe_load(project_file.read_text())
+    try:
+        raw = yaml.safe_load(project_file.read_text(encoding="utf-8"))
+    except (UnicodeError, yaml.YAMLError) as exc:
+        raise ProjectError(
+            f"Project manifest must contain valid UTF-8 YAML: {project_file}"
+        ) from exc
+    except OSError as exc:
+        raise ProjectError(f"Project manifest could not be read: {project_file}") from exc
     if not isinstance(raw, dict):
         raise ProjectError("Project manifest must be a mapping")
     project_data = raw.get("project")
     if not isinstance(project_data, dict):
         raise ProjectError("Project manifest is invalid")
-    project_id = str(project_data.get("id", "")).strip()
+    project_id = project_data.get("id")
     if not project_id:
         raise ProjectError("Project id is required")
-    base_variant = str(project_data.get("base_variant", "")).strip()
+    if (
+        not isinstance(project_id, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", project_id) is None
+    ):
+        raise ProjectError(
+            "Project id must start with a letter or number and contain only letters, numbers, '.', '_' or '-'"
+        )
+    base_variant = project_data.get("base_variant")
     if not base_variant:
         raise ProjectError("Project base_variant is required")
+    try:
+        validate_variant_id(base_variant)
+    except ValueError as exc:
+        raise ProjectError(f"Project base_variant is invalid: {exc}") from exc
+    return project_data
+
+
+def load_project(project_dir: Path) -> ProjectSpec:
+    return _project_spec(project_dir, load_project_metadata(project_dir))
+
+
+def _project_spec(project_dir: Path, project_data: dict[str, Any]) -> ProjectSpec:
     sot_path_value = project_data.get("sot_path")
     if not isinstance(sot_path_value, str) or not sot_path_value.strip():
         raise ProjectError("Project sot_path is required")
@@ -443,9 +471,9 @@ def load_project(project_dir: Path) -> ProjectSpec:
     if not patch_path.exists():
         raise ProjectError(f"Project patch not found: {patch_path}")
     return ProjectSpec(
-        project_id=project_id,
+        project_id=project_data["id"],
         project_dir=project_dir,
-        base_variant_id=base_variant,
+        base_variant_id=project_data["base_variant"],
         variant_path=variant_path,
         patch_path=patch_path,
         sot_path=sot_path,
@@ -453,12 +481,8 @@ def load_project(project_dir: Path) -> ProjectSpec:
 
 
 def load_project_details(project_dir: Path) -> ProjectDetails:
-    spec = load_project(project_dir)
-    project_file = project_dir / "project.yaml"
-    raw = yaml.safe_load(project_file.read_text())
-    project_data = raw.get("project") if isinstance(raw, dict) else None
-    if not isinstance(project_data, dict):
-        raise ProjectError("Project manifest is invalid")
+    project_data = load_project_metadata(project_dir)
+    spec = _project_spec(project_dir, project_data)
 
     created_at = str(project_data.get("created_at", "")).strip()
     if not created_at:

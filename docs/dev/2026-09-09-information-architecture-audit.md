@@ -35,6 +35,45 @@ source of truth.
 
 ## Findings and disposition
 
+### High for local artifact integrity — project identity escaped run destinations — fixed
+
+Real isolated project builds accepted both `../../outside-runs` and an absolute
+temporary path as a manifest's project ID, then wrote source copies and build
+outputs outside the intended project-run directory. The loader only coerced the
+field with `str(...).strip()`. Null, boolean, numeric, collection, and path-like
+identifiers also passed through project and inventory readers inconsistently.
+
+`ops.projects.load_project_metadata` now owns manifest reading and identity
+validation for both executable projects and workspace inventory. IDs and base
+variant selectors must be nonempty strings with the documented identifier
+alphabet. Malformed UTF-8/YAML and read failures become `ProjectError`; context
+lists the affected project as invalid, and explicit commands fail without
+printing parser snippets. A retained project's identity does not require its
+proposal files, so pruning proposals does not erase the inventory entry.
+
+Detailed project inspection also combined identity from one manifest read with
+description from another. A real file replacement between reads reproduced the
+mixed generation. It now derives both from one parsed manifest; a subsequent
+inspection reads the current file. This is a read contract, not transactional
+retargeting or a complete typed schema for job, source, signal, and proposal
+metadata. Those remain explicit project-domain follow-ups.
+
+Adversarial tests first reproduced 20 identity failures, three unhandled read
+errors, and one mixed-generation failure. The identity cases included two real
+builds escaping into temporary destinations. Successful rejection now leaves the
+entire fixture tree unchanged. Retained-project inventory and a real file edit
+between reads exercise the corresponding positive and freshness contracts.
+
+Verification for project manifest ownership: 113 focused tests passed, followed
+by 624 tests in default discovery, one opt-in remote skip, and the five existing
+PyMuPDF/SWIG warnings. The seven-step isolated journey passed with empty stderr
+for every step. Commands were `UV_OFFLINE=1 uv run pytest` and
+`UV_OFFLINE=1 uv run python scripts/verify_repo.py --json`; logs are
+`/tmp/cvw-project-manifest-full.log` and
+`/tmp/cvw-project-manifest-journey.json`. Live context retained ready source data,
+no issues, and `review_required` publication. Master and candidate hashes were
+unchanged, and the site tree remained clean on `main`.
+
 ### High for local artifact integrity — variant names escaped output destinations — fixed
 
 In an isolated real build, `output_name: ../outside-variant` wrote Markdown to
@@ -566,9 +605,17 @@ review item. No exploit against an external destination was attempted.
 Portability, preview presentation extraction, and publication freshness/review
 contracts, workspace inspection, workflow-family extraction, and CLI command
 ownership are complete.
-Next extend explicit configuration snapshots to publication preparation/sync,
-lifecycle mutations, and preview selection, and address project command
-orchestration. Follow with semantic document styles and further
+Project identity now has one read owner shared by inspection and execution.
+The next project boundary is a callable operation for guide/create/retarget,
+currently coordinated by the CLI. Characterize its validation, rollback, and
+proposal-plan writes before extracting it. Group manifest, creation/retarget,
+and guarded patch responsibilities beneath a project package as their seams are
+verified; avoid creating a general helper collection. A complete metadata model
+must keep inventory existence, executable proposals, and review readiness
+distinct instead of inferring all three from one successful load.
+
+Extend explicit configuration snapshots to publication preparation/sync,
+lifecycle mutations, and preview selection. Follow with semantic document styles and further
 owner-bounded decomposition, each behind its own behavior tests. Extend retention
 to standalone draft references and inspect historical untracked bundles before
 pruning the workspace. Keep the personal
