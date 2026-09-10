@@ -32,6 +32,7 @@ from cvworkbench.ops.sot_versions import (
     activate_version,
     create_version,
     diff_versions,
+    initialize_pack,
     list_versions,
 )
 
@@ -43,6 +44,37 @@ def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
     except (FileNotFoundError, ValueError, SotVersionError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+
+def sot_init(
+    source: Annotated[
+        Path, typer.Option("--source", help="Source directory or version pack to copy")
+    ],
+    destination: Annotated[
+        Path, typer.Option("--destination", help="Fresh destination for the new pack")
+    ],
+    name: Annotated[str, typer.Option("--name", help="Initial version name")] = "base",
+    plain: Annotated[bool, typer.Option("--plain", help="Use plain text output")] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Use JSON output for summaries")
+    ] = False,
+) -> None:
+    """Create a separate version pack from a chosen source; leave config unchanged."""
+    configure_output_mode(plain, json_output)
+    try:
+        result = initialize_pack(source=source, destination=destination, name=name)
+    except (SotPackError, SotVersionError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    print_summary(
+        "sot.init",
+        [
+            ("source", result.source),
+            ("root", result.root),
+            ("active", result.active),
+            ("version", result.version),
+        ],
+    )
 
 
 def sot_list(

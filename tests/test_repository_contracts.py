@@ -157,10 +157,14 @@ def test_docs_router_links_to_canonical_configuration_and_sample_sources() -> No
 def test_source_version_comparison_routes_one_workflow_owner() -> None:
     architecture = (ROOT / "docs/concepts/architecture.md").read_text()
     guide = (ROOT / "docs/howto/sot-versions.md").read_text()
-    assert "howto/sot-versions.md#comparison-contract" in architecture
-    assert "ops/sot_versions.py::diff_versions" in guide
-    assert "tests/ops/test_sot_versions.py" in guide
-    assert "## Prerequisite: an existing pack" in guide
+    assert "howto/sot-versions.md" in architecture
+    assert "ops/sot_versions/comparison.py::diff_versions" in guide
+    assert "tests/ops/sot_versions/test_comparison.py" in guide
+    assert "## Initialization contract" in guide
+    assert "tests/ops/sot_versions/test_initialization.py" in guide
+    for owner in ("initialization.py", "lifecycle.py", "comparison.py", "records.py"):
+        assert owner in architecture
+        assert (ROOT / "src/cvworkbench/ops/sot_versions" / owner).is_file()
 
 
 def test_selection_contract_routes_build_and_review_evidence() -> None:

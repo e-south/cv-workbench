@@ -56,6 +56,7 @@ from cvworkbench.cli.commands.setup import (
 from cvworkbench.cli.commands.source import (
     sot_activate,
     sot_diff,
+    sot_init,
     sot_list,
     sot_new,
     tags_lint,
@@ -234,6 +235,9 @@ clean_app.command("reviews")(clean_reviews)
 
 
 clean_app.command("projects")(clean_projects)
+
+
+sot_app.command("init")(sot_init)
 
 
 sot_app.command("list")(sot_list)

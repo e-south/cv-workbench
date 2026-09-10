@@ -76,10 +76,12 @@ meaning in section builders and paragraph composition in one shared owner.
 The [selection contract](../reference/selection-contract.md) keeps document
 selection in the build layer and explanation/checklist presentation in consumers.
 
-Source-version path resolution belongs to `inputs/sot_versions.py`; version
-lifecycle and comparison belong to `ops/sot_versions.py`. The
-[version workflow](../howto/sot-versions.md#comparison-contract) owns comparison
-semantics and the existing-pack prerequisite.
+Source-version path resolution belongs to `inputs/sot_versions.py`. The public
+`ops.sot_versions` API routes to `initialization.py` for captured-copy creation,
+`lifecycle.py` for existing-pack management, `comparison.py` for read-only diffs,
+and `records.py` for results and shared name constraints. Internal imports use
+those concrete owners. The [version workflow](../howto/sot-versions.md) owns
+initialization and comparison contracts.
 
 Preview uses `dev/preview_paths.py` to separate canonical input from served
 output and assign an independent directory to each invocation. Audited builds,
