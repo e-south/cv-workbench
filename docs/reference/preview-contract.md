@@ -17,6 +17,12 @@ interactive controller.
 Only loopback hosts are supported. `CVW_DEV_HOST` may be set to `localhost`,
 `127.0.0.1`, or `::1`; non-local bind addresses such as `0.0.0.0` are rejected.
 
+Every GET, HEAD, and POST request must name the local server and its port in
+`Host`. Browser requests must have the same `Origin`, and cross-site fetches
+are rejected before reading state, rendering, or stopping the server. Local CLI
+clients may omit browser-origin headers. The response disallows cross-origin
+framing and browser caching of private preview content.
+
 ## Session record
 
 `uv run cvw preview` writes a session record to:
@@ -73,6 +79,11 @@ Returns the same payload as `/api/state` on success; on failure returns
 `{"error": "<message>"}` with a `400` status.
 
 `POST /api/stop` stops the preview server and returns `{"status": "stopping"}`.
+
+API routes match exact paths; query strings are permitted. Render request bodies
+must use one valid `Content-Length`, contain at most 16,384 bytes, arrive in full,
+and decode as UTF-8 JSON. Chunked, malformed, oversized, and truncated bodies
+fail before rebuilding. Socket reads have a 10-second timeout.
 
 ## UI control selectors (stable)
 

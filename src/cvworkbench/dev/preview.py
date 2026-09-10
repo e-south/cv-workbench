@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import build_documents
@@ -31,6 +32,12 @@ from cvworkbench.config import (
     resolve_sot_path,
     resolve_themes_dir,
     resolve_variant_path,
+)
+from cvworkbench.dev.preview_http import (
+    REQUEST_TIMEOUT_SECONDS,
+    PreviewRequestError,
+    render_body_length,
+    validate_request_origin,
 )
 from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 from cvworkbench.inputs.validation import validate_sot
@@ -720,33 +727,73 @@ def _make_handler(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, directory=str(dist_dir), **kwargs)
 
+        def setup(self) -> None:
+            super().setup()
+            self.connection.settimeout(REQUEST_TIMEOUT_SECONDS)
+
+        def end_headers(self) -> None:
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Frame-Options", "SAMEORIGIN")
+            self.send_header("Referrer-Policy", "no-referrer")
+            super().end_headers()
+
+        def _accept_request(self) -> bool:
+            try:
+                validate_request_origin(self.headers, self.server.server_port)
+            except PreviewRequestError as exc:
+                self.send_error(exc.status, str(exc))
+                return False
+            return True
+
         def translate_path(self, path: str) -> str:
             self.directory = str(controller.state().dist_dir)
             return super().translate_path(path)
 
         def do_GET(self) -> None:
+            if not self._accept_request():
+                return
             client_activity.touch()
-            if self.path in {"/", "/preview"}:
+            path = urlsplit(self.path).path
+            if path in {"/", "/preview"}:
                 self._serve_preview_page()
                 return
-            if self.path.startswith("/api/state"):
+            if path == "/api/state":
                 self._send_json(controller.state_payload())
                 return
             self._serve_static()
 
+        def do_HEAD(self) -> None:
+            if self._accept_request():
+                super().do_HEAD()
+
         def do_POST(self) -> None:
+            if not self._accept_request():
+                return
             client_activity.touch()
-            if not self.path.startswith("/api/render"):
-                if self.path.startswith("/api/stop"):
+            path = urlsplit(self.path).path
+            if path != "/api/render":
+                if path == "/api/stop":
                     self._send_json({"status": "stopping"})
                     self._stop_server()
                     return
                 self.send_error(404)
                 return
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            body = self.rfile.read(length).decode("utf-8") if length else ""
             try:
+                length = render_body_length(self.headers)
+                raw_body = self.rfile.read(length) if length else b""
+                if len(raw_body) != length:
+                    raise PreviewRequestError("Preview request body is incomplete")
+                body = raw_body.decode("utf-8")
                 payload = _parse_render_payload(body)
+            except PreviewRequestError as exc:
+                self._send_json({"error": str(exc)}, status=exc.status)
+                return
+            except (UnicodeDecodeError, TimeoutError):
+                self._send_json(
+                    {"error": "Preview request body is incomplete or invalid UTF-8"}, status=400
+                )
+                return
             except PreviewError as exc:
                 self._send_json({"error": str(exc)}, status=400)
                 return

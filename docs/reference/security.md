@@ -28,6 +28,12 @@ navigation:
 - Site sync reparses the PDF and validates current variant policy and artifact
   hash before writing. The site receives a sanitized provenance manifest, not
   source paths, authored-source hashes, or private SoT hashes.
+- Direct API sync enforces the same mandatory policy as the CLI, including an
+  actual PDF rectangle-fingerprint check. Local visual review packets render
+  only the validated public bytes and remain outside the site handoff.
+- Preview requests validate local Host and same-origin browser headers, bound
+  request bodies and socket reads, and reject malformed requests before any
+  render or stop action. See [the preview contract](preview-contract.md).
 - Pre-commit includes gitleaks to catch secrets before commit.
 - `uv run cvw init` installs pre-commit hooks when a `.pre-commit-config.yaml`
   is present in the repo. Hook installation requires a writable `.git/hooks/`
