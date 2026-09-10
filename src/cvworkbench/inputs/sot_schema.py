@@ -77,7 +77,7 @@ class Project(StrictModel):
 
 
 class Projects(StrictModel):
-    projects: Annotated[list[Project], Field(min_length=1)]
+    projects: list[Project]
 
 
 class Skill(StrictModel):
@@ -182,7 +182,8 @@ class Author(StrictModel):
 class Publication(StrictModel):
     id: NonEmptyStr
     title: NonEmptyStr
-    authors: Annotated[list[Author], Field(min_length=1)]
+    authors: Annotated[list[Author], Field(min_length=1)] | None = None
+    status: Literal["published", "in_preparation"] = "published"
     venue: NonEmptyStr | None = None
     year: DateValue | None = None
     volume: NonEmptyStr | None = None
@@ -192,6 +193,12 @@ class Publication(StrictModel):
     url: NonEmptyStr | None = None
     notes: NonEmptyStr | None = None
     tags: NonEmptyStrList
+
+    @model_validator(mode="after")
+    def _require_published_authors(self) -> "Publication":
+        if self.status == "published" and not self.authors:
+            raise ValueError("published publications require authors")
+        return self
 
 
 class Publications(StrictModel):

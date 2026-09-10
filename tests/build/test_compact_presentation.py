@@ -117,7 +117,7 @@ def test_invalid_section_labels_fail_before_build(titles):
     [
         ({"end": 2019}, "2019"),
         ({"start": 2022, "end": 2022}, "2022"),
-        ({"start": 2020}, "2020 — Present"),
+        ({"start": 2020}, "Started 2020"),
     ],
 )
 def test_entry_dates_retain_completion_and_single_year(dates, expected):
@@ -134,7 +134,10 @@ def test_entry_dates_retain_completion_and_single_year(dates, expected):
         },
         variant,
     )
-    assert f"Biology | {expected}" in rendered
+    plain = subprocess.run(
+        ["pandoc", "-t", "plain"], input=rendered, text=True, capture_output=True, check=True
+    ).stdout
+    assert f"Biology | {expected}" in plain
     assert "2022 — 2022" not in rendered
 
 

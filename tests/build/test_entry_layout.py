@@ -73,7 +73,7 @@ def _entry_html(section, item, variant):
                 "presentation_type": "Talk",
                 "notes": "Invited presentation.",
             },
-            ["Example Conference | Talk | 2025", "Invited presentation."],
+            ["Talk - A useful talk | 2025", "Invited presentation."],
         ),
         (
             "honors",
@@ -93,7 +93,7 @@ def _entry_html(section, item, variant):
                 "start": 2024,
                 "summary": "Mentored three students.",
             },
-            ["2024 — Present", "Mentored three students."],
+            ["Mentor | 2024 — Present", "Mentored three students."],
         ),
         (
             "teaching",
@@ -105,7 +105,7 @@ def _entry_html(section, item, variant):
                 "evaluation": "4.8/5.0",
                 "summary": "Led seminars.",
             },
-            ["Instructor | Spring 2025 | Enrollment: 40 | Evaluation: 4.8/5.0", "Led seminars."],
+            ["Instructor | Enrollment: 40 | Evaluation: 4.8/5.0 | Spring 2025", "Led seminars."],
         ),
         (
             "references",

@@ -187,7 +187,7 @@ by separate narrative paragraphs. Nonempty metadata values are separated by
 retain field meaning, selection, heading levels, IDs, and tags. Themes control
 typography and paragraph spacing.
 
-Education keeps degree, location, and dates together, then gives advisors and
+Education keeps degree, location, and dates as distinct semantic spans, then gives advisors and
 thesis their own paragraphs. Teaching labels optional metrics as `Enrollment`
 and `Evaluation`. Publication notes, service descriptions, and other entry prose
 remain ordinary paragraphs, with supported inline Markdown formatting preserved.
@@ -198,8 +198,9 @@ lines as one paragraph in HTML, PDF, and DOCX.
 optional values, DOCX paragraph structure, PDF labels, and the edited-DOCX
 [review round trip](../reference/review-contract.md#markdown-comparison).
 
-An end-only entry date renders its completion year; equal start/end values render
-once. A start without an end retains `Present`. Publication titles with a URL
+Equal start/end values render once; ISO year-month values render as English month
+and year. Education labels a start-only date `Started`; an end date alone does
+not assert graduation. Other ongoing entries retain `Present`. Publication titles with a URL
 become literal-label HTTP(S) links using the same destination checks as profiles.
 
 Variants may set `section_titles`, for example `experience: Research Experience`
@@ -208,6 +209,35 @@ values must be nonempty single-line literal text. These labels change visible
 headings only; section order, IDs, tags, and selection remain unchanged. Catalogs
 and build manifests record the labels. Content selection belongs in variants;
 fonts, rules, alignment, and spacing belong in themes.
+
+### Aligned entry dates
+
+Set `metadata.cvw-aligned-entries: true` in a theme's common Pandoc defaults to
+place an entry's institution or organization and location on the left, with its
+date on the right. Role/degree and narrative stay on separate lines. Conference
+entries lead with the event, followed by presentation type and title. The opt-in
+filter uses `entry-detail`, `entry-location`, and `entry-date` spans emitted by
+the shared metadata helper; it does not parse display strings. Unknown metadata
+is left intact. IDs, links, and selected content survive the transformation.
+
+HTML themes style `.entry-heading > p`, `.entry-identity`, and `.entry-date`.
+Use a flex row with a minimum gap, and stack the date at narrow widths. PDF uses
+native TeX spacing with a minimum gap and keeps the heading with its next block.
+The DOCX theme must provide an `Entry Heading` paragraph style with a right tab
+stop at the text-area boundary and `keepNext`; no layout table is inserted.
+Keep OOXML namespace prefixes intact when editing a reference DOCX.
+
+This option takes precedence over `cvw-compact-entries` for semantic entries;
+unaligned legacy entries retain the existing compact behavior. Disable compact
+entries when publication titles and full author lists need separate paragraphs.
+The candidate's author span remains emphasized with either presentation option.
+The text export retains ordinary linear metadata. Validate actual PDF wrapping,
+DOCX tab/style structure, and HTML responsiveness after enabling the option.
+
+After editing packaged filters in a checkout, run
+`uv sync --reinstall-package cv-workbench` before native builds. Python's editable
+installation does not automatically refresh the wheel's copied filter resources;
+the build manifest records the filter hashes actually used.
 
 ## Build-time changes and provenance
 

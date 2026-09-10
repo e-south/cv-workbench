@@ -11,10 +11,11 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from cvworkbench.build.contacts import build_contact_line
-from cvworkbench.build.entry_layout import append_entry_text
+from cvworkbench.build.entry_layout import append_entry_text, entry_metadata
 from cvworkbench.build.links import http_link, literal_text
 from cvworkbench.build.selection import select_letter
 from cvworkbench.text import slugify, tag_classes
@@ -189,15 +190,20 @@ def _build_experience(
 
         title = _string(role.get("title"))
         company = _string(role.get("company"))
-        heading = " - ".join([part for part in [title, company] if part])
+        heading = " - ".join(
+            part
+            for part in (
+                f"[{title}]{{.entry-role}}" if title else "",
+                f"[{company}]{{.entry-organization}}" if company else "",
+            )
+            if part
+        )
         if heading:
             lines.append(f"### {heading}")
 
         dates = _format_dates(role)
         location = _string(role.get("location"))
-        if dates or location:
-            line = " | ".join([part for part in [location, dates] if part])
-            lines.append(line)
+        append_entry_text(lines, metadata=entry_metadata(location=location, dates=dates))
 
         bullets = role.get("bullets")
         if isinstance(bullets, list) and bullets:
@@ -325,6 +331,8 @@ def _build_education(
             lines.append(f"### {institution}")
         location = _string(item.get("location"))
         dates = _format_dates(item)
+        if item.get("start") and not item.get("end"):
+            dates = f"Started {_date_string(item['start'])}"
         advisors = item.get("advisors")
         advisors_text = ""
         if isinstance(advisors, list) and advisors:
@@ -332,7 +340,7 @@ def _build_education(
         thesis_title = _string(item.get("thesis_title"))
         append_entry_text(
             lines,
-            metadata=(heading, location, dates),
+            metadata=entry_metadata(heading, location=location, dates=dates),
             paragraphs=(
                 f"Advisors: {advisors_text}" if advisors_text else "",
                 f'Thesis: "{thesis_title}"' if thesis_title else "",
@@ -383,7 +391,15 @@ def _build_publications(
         authors_text = _format_authors(item.get("authors"))
         venue_line = _format_publication_venue(item)
         notes = _string(item.get("notes"))
-        append_entry_text(lines, metadata=(authors_text, venue_line), paragraphs=(notes,))
+        status = item.get("status", "published")
+        if status not in {"published", "in_preparation"}:
+            raise ValueError(f"Unsupported publication status: {status}")
+        status_text = "Manuscript in preparation" if status == "in_preparation" else ""
+        if status == "published" and "status" in item:
+            status_text = "Published"
+        append_entry_text(
+            lines, metadata=(authors_text, venue_line, status_text), paragraphs=(notes,)
+        )
 
         lines.append(":::")
         lines.append("")
@@ -413,17 +429,22 @@ def _build_conferences(
         div_attr = _format_div_attributes(f"conference-{entry_id}", ["section", *tag_list])
         lines.append(f"::: {div_attr}")
 
-        title = _string(item.get("title"))
-        if title:
-            lines.append(f"### {title}")
-
         event = _string(item.get("event"))
+        title = _string(item.get("title"))
+        if event or title:
+            lines.append(f"### {event or title}")
         year = _date_string(item.get("year"))
         presentation_type = _string(item.get("presentation_type"))
         location = _string(item.get("location"))
         notes = _string(item.get("notes"))
         append_entry_text(
-            lines, metadata=(event, presentation_type, location, year), paragraphs=(notes,)
+            lines,
+            metadata=entry_metadata(
+                " - ".join(part for part in (presentation_type, title if event else "") if part),
+                location=location,
+                dates=year,
+            ),
+            paragraphs=(notes,),
         )
 
         lines.append(":::")
@@ -461,7 +482,7 @@ def _build_honors(
         issuer = _string(item.get("issuer"))
         year = _date_string(item.get("year"))
         summary = _string(item.get("summary"))
-        append_entry_text(lines, metadata=(issuer, year), paragraphs=(summary,))
+        append_entry_text(lines, metadata=entry_metadata(issuer, dates=year), paragraphs=(summary,))
 
         lines.append(":::")
         lines.append("")
@@ -493,13 +514,17 @@ def _build_service(
 
         role = _string(item.get("role"))
         organization = _string(item.get("organization"))
-        heading = " - ".join([part for part in [role, organization] if part])
+        heading = organization or role
         if heading:
             lines.append(f"### {heading}")
 
         dates = _format_dates(item)
         summary = _string(item.get("summary"))
-        append_entry_text(lines, metadata=(dates,), paragraphs=(summary,))
+        append_entry_text(
+            lines,
+            metadata=entry_metadata(role if organization else "", dates=dates),
+            paragraphs=(summary,),
+        )
 
         lines.append(":::")
         lines.append("")
@@ -541,7 +566,9 @@ def _build_teaching(
         evaluation_text = f"Evaluation: {evaluation}" if evaluation else ""
         summary = _string(item.get("summary"))
         append_entry_text(
-            lines, metadata=(role, term, enrollment_text, evaluation_text), paragraphs=(summary,)
+            lines,
+            metadata=entry_metadata(role, enrollment_text, evaluation_text, dates=term),
+            paragraphs=(summary,),
         )
 
         lines.append(":::")
@@ -741,7 +768,25 @@ def _date_string(value: Any) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, str):
-        return value.strip()
+        text = value.strip()
+        match = re.fullmatch(r"(\d{4})-(0[1-9]|1[0-2])", text)
+        if match:
+            months = (
+                "Jan.",
+                "Feb.",
+                "Mar.",
+                "Apr.",
+                "May",
+                "June",
+                "July",
+                "Aug.",
+                "Sept.",
+                "Oct.",
+                "Nov.",
+                "Dec.",
+            )
+            return f"{months[int(match[2]) - 1]} {match[1]}"
+        return text
     return ""
 
 

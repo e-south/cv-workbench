@@ -184,6 +184,7 @@ def _build_publications(raw: Any) -> list[dict[str, Any]]:
             "summary": _text(publication.get("notes")),
             "doi": _text(publication.get("doi")),
             "authors": _build_authors(publication.get("authors")),
+            "status": publication.get("status", "published"),
             "tags": _text_list(publication.get("tags")),
         }
         items.append({key: value for key, value in entry.items() if value})

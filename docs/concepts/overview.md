@@ -91,6 +91,17 @@ rules like `domain`.
 Publication author roles are rendered via `build/filters/author_roles.lua` with
 default markers (co-first `*`, corresponding `†`, senior `‡`).
 
+Publication records support `status: published` and `status: in_preparation`.
+Omitted status means `published` for compatibility with existing source versions.
+Published records require a nonempty author list; an in-preparation manuscript
+may omit unknown authorship. Supplied author lists remain nonempty and validated.
+Unknown statuses fail validation. Markdown and JSON Resume exports retain the
+status; entry-level labels let one Publications section include both kinds.
+Publication status is an author-supplied fact, not inferred from tags or a project
+directory. `notes` can identify a working title without inventing bibliographic
+fields. Keep manuscripts in `publications.yaml`; `projects.yaml` accepts
+`projects: []` when no separate projects remain.
+
 ## Dependency management
 
 - Locked install (recommended): `uv sync --locked`

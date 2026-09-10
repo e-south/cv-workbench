@@ -1,5 +1,94 @@
 -- Optional presentation only: keep source IDs, links and all selected wording.
 -- Themes opt in with metadata.cvw-compact-entries: true.
+local function aligned_entry(div)
+  if not (div.classes:includes('section') or div.classes:includes('role')) then
+    return nil
+  end
+  local blocks = div.content
+  if #blocks < 2 or blocks[1].t ~= 'Header' or blocks[1].level ~= 3
+      or blocks[2].t ~= 'Para' then return nil end
+  local details, location, date, found = {}, nil, nil, false
+  for _, inline in ipairs(blocks[2].content) do
+    if inline.t == 'Span' and inline.classes:includes('entry-detail') then
+      table.insert(details, inline)
+      found = true
+    elseif inline.t == 'Span' and inline.classes:includes('entry-location') then
+      if location then return nil end
+      location, found = inline, true
+    elseif inline.t == 'Span' and inline.classes:includes('entry-date') then
+      if date then return nil end
+      date, found = inline, true
+    elseif inline.t ~= 'Space' and not (inline.t == 'Str' and inline.text == '|') then
+      -- Unknown content is not ours to restructure or discard.
+      return nil
+    end
+  end
+  if not found then return nil end
+  local heading_content = blocks[1].content
+  local organization, role = nil, nil
+  if div.classes:includes('role') then
+    for _, inline in ipairs(heading_content) do
+      if inline.t == 'Span' and inline.classes:includes('entry-organization') then
+        if organization then return nil end
+        organization = inline
+      elseif inline.t == 'Span' and inline.classes:includes('entry-role') then
+        if role then return nil end
+        role = inline
+      elseif inline.t ~= 'Space' and not (inline.t == 'Str' and inline.text == '-') then
+        return nil
+      end
+    end
+    if organization and role then
+      heading_content = {organization}
+      table.insert(details, 1, pandoc.Span({role}, pandoc.Attr('', {'entry-detail'})))
+    end
+  end
+  local identity = {pandoc.Span({pandoc.Strong(heading_content)}, blocks[1].attr)}
+  if location then
+    table.insert(identity, pandoc.Str(','))
+    table.insert(identity, pandoc.Space())
+    table.insert(identity, location)
+  end
+  local row = {pandoc.Span(identity, pandoc.Attr('', {'entry-identity'}))}
+  if date then
+    if FORMAT:match('latex') then
+      table.insert(row, pandoc.RawInline('latex', '\\quad\\hfill\\mbox{'))
+      table.insert(row, date)
+      table.insert(row, pandoc.RawInline('latex', '}'))
+    elseif FORMAT == 'docx' then
+      table.insert(row, pandoc.RawInline('openxml', '<w:r><w:tab/></w:r>'))
+      table.insert(row, date)
+    else
+      table.insert(row, pandoc.Space())
+      table.insert(row, date)
+    end
+  end
+  local heading = pandoc.Div({pandoc.Para(row)},
+    pandoc.Attr('', {'entry-heading'}, {['custom-style']='Entry Heading'}))
+  local result = {heading}
+  if FORMAT:match('latex') then
+    table.insert(result, pandoc.RawBlock('latex', '\\nopagebreak[4]'))
+  end
+  if #details > 0 then
+    local text = {}
+    for _, detail in ipairs(details) do
+      if #text > 0 then
+        table.insert(text, pandoc.Space())
+        table.insert(text, pandoc.Str('|'))
+        table.insert(text, pandoc.Space())
+      end
+      table.insert(text, detail)
+    end
+    table.insert(result, pandoc.Para(text))
+    if FORMAT:match('latex') then
+      table.insert(result, pandoc.RawBlock('latex', '\\nopagebreak[4]'))
+    end
+  end
+  for index = 3, #blocks do table.insert(result, blocks[index]) end
+  div.content = result
+  return div
+end
+
 local function compact_entry(div)
   if not (div.classes:includes('section') or div.classes:includes('role')) then
     return nil
@@ -65,9 +154,18 @@ local function contact_rows(blocks)
 end
 
 function Pandoc(doc)
+  if doc.meta['cvw-aligned-entries'] == true then
+    local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {Div = aligned_entry})
+    doc = pandoc.Pandoc(transformed.content, doc.meta)
+  end
   if doc.meta['cvw-compact-entries'] == true then
     local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {
       Div = compact_entry,
+    })
+    doc = pandoc.Pandoc(transformed.content, doc.meta)
+  end
+  if doc.meta['cvw-compact-entries'] == true or doc.meta['cvw-aligned-entries'] == true then
+    local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {
       Span = function(span)
         if span.classes:includes('author') and span.classes:includes('role-self') then
           span.content = {pandoc.Strong(span.content)}
