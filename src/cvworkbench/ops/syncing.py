@@ -22,7 +22,13 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from cvworkbench.build.paths import output_path
-from cvworkbench.config import resolve_publish_path, resolve_sot_path, resolve_variant_path
+from cvworkbench.config import (
+    ConfigSource,
+    read_config,
+    resolve_publish_path,
+    resolve_sot_path,
+    resolve_variant_path,
+)
 from cvworkbench.ops.publication.artifact import (
     PublicArtifact,
     read_public_artifact,
@@ -132,13 +138,14 @@ def load_site_sync(path: Path) -> SiteSyncConfig:
 
 def sync_site(
     *,
-    config_path: Path,
+    config_path: ConfigSource,
     site_config_path: Path,
     mode: str,
     publish_config_path: Path | None = None,
 ) -> SyncResult:
+    configuration = read_config(config_path)
     site = load_site_sync(site_config_path)
-    policy_path = publish_config_path or config_path.parent / "publish.yaml"
+    policy_path = publish_config_path or configuration.path.parent / "publish.yaml"
     try:
         publish = load_publish_config(policy_path)
     except PublishError as exc:
@@ -147,13 +154,13 @@ def sync_site(
         raise SyncError(
             f"Publish variant '{site.publish_variant}' is not allowed by publish config"
         )
-    variant_path = resolve_variant_path(site.publish_variant, config_path)
+    variant_path = resolve_variant_path(site.publish_variant, configuration)
     variant = load_variant(variant_path)
     try:
         validate_publish_policy(variant, publish)
     except ValueError as exc:
         raise SyncError(str(exc)) from exc
-    publish_dir = resolve_publish_path(config_path) / variant.id
+    publish_dir = resolve_publish_path(configuration) / variant.id
 
     source_pdf = output_path(publish_dir, variant, "pdf")
     if not source_pdf.exists():
@@ -165,12 +172,12 @@ def sync_site(
             artifact.content,
             variant=variant,
             publish=publish,
-            sot_path=resolve_sot_path(None, config_path),
+            sot_path=resolve_sot_path(None, configuration),
         )
     except (PublicPdfError, ValueError) as exc:
         raise SyncError(str(exc)) from exc
 
-    publication = inspect_publication(config_path, variant.id, publish_config_path=policy_path)
+    publication = inspect_publication(configuration, variant.id, publish_config_path=policy_path)
     if publication.state != "reviewed":
         raise SyncError(f"Publication is {publication.state}: {'; '.join(publication.reasons)}")
     if publication.pdf_sha256 != artifact.sha256:

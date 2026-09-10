@@ -24,10 +24,12 @@ from cvworkbench import storage as atomic
 from cvworkbench.cli import app
 from cvworkbench.ops.publication.packet import publication_review_files
 from cvworkbench.ops.publication.record import (
+    PreparationInputs,
     ReviewReceipt,
     hash_file,
     json_bytes,
     preparation_bytes,
+    stamp_file,
 )
 from cvworkbench.ops.syncing import SyncError, load_site_sync, sync_site
 from tests.ops.publication.test_pdf import _write_docx
@@ -209,17 +211,17 @@ def _write_workspace(
         for name, content in packet.items():
             (review_dir / name).write_bytes(content)
         preparation = preparation_bytes(
-            authored_source=authored,
-            source_pdf=exported,
-            policy_path=root / "publish.yaml",
-            variant_path=variants_dir / "base.yaml",
-            person_path=root / "local/sot/person.yaml",
+            inputs=PreparationInputs(
+                authored_source=stamp_file(authored),
+                exported_pdf=stamp_file(exported),
+                policy=stamp_file(root / "publish.yaml"),
+                variant_config=stamp_file(variants_dir / "base.yaml"),
+                person=stamp_file(root / "local/sot/person.yaml"),
+            ),
             variant="base",
             pdf_hash=artifact_hash,
             manifest_content=(publish_dir / "manifest.json").read_text(),
             review_files=packet,
-            authored_hash=hash_file(authored),
-            exported_hash=hash_file(exported),
         )
         (publish_dir / "preparation.json").write_bytes(preparation)
         receipt = ReviewReceipt(

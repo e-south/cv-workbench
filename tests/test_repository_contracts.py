@@ -270,6 +270,19 @@ def test_non_page_pdf_disclosure_has_one_decoder_and_routed_contract() -> None:
     assert "publication-contract.md#non-page-disclosure" in security
 
 
+def test_publication_input_lifetime_routes_capture_and_provenance_owners() -> None:
+    contract = (ROOT / "docs/reference/publication-contract.md").read_text()
+    assert "## Input lifetime" in contract
+    assert "inputs.py::capture_publication_inputs" in contract
+    assert "record.py::PreparationInputs" in contract
+    assert "tests/ops/publication/test_authority.py" in contract
+    for relative in (
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/publication/AGENTS.md",
+    ):
+        assert "publication-contract.md#input-lifetime" in (ROOT / relative).read_text()
+
+
 def test_entry_layout_and_review_normalization_have_routed_owners() -> None:
     styling = (ROOT / "docs/howto/styling.md").read_text()
     review = (ROOT / "docs/reference/review-contract.md").read_text()

@@ -332,8 +332,13 @@ file or directory. Source facts, active-version pointers, variant files, theme
 assets, publication policy, and site configuration have separate lifetimes.
 Their existing hashes/checks do not establish a global immutable input bundle.
 
-Other project command orchestration, publication preparation/sync, lifecycle
-mutations, and preview controller selection still include path-based resolution
+Publication preparation and sync now capture or reuse one workbench snapshot.
+Their CLI adapters share it across initial source/mode selection and operation
+execution. Publication-input capture, original-file freshness, and the limits
+of this guarantee belong to the [input-lifetime contract](publication-contract.md#input-lifetime).
+
+Other project command orchestration, lifecycle mutations, and preview controller
+selection still include path-based resolution
 outside the captured boundaries. Adopt explicit snapshots at those operation
 boundaries with their own behavior tests. Do not infer that accepting
 `ConfigSource` alone proves a whole caller uses one generation.

@@ -28,12 +28,24 @@ import pymupdf
 import yaml
 
 from cvworkbench.build.paths import output_path
-from cvworkbench.config import resolve_publish_path, resolve_reviews_path, resolve_variant_path
+from cvworkbench.config import (
+    ConfigSnapshot,
+    ConfigSource,
+    read_config,
+    resolve_publish_path,
+    resolve_reviews_path,
+    resolve_variant_path,
+)
+from cvworkbench.ops.publication.inputs import (
+    PublicationInputCopies,
+    PublicationInputError,
+    capture_publication_inputs,
+)
 from cvworkbench.ops.publication.manifest import publication_manifest_content
 from cvworkbench.ops.publication.object_text import PdfObjectTextError, pdf_object_text
 from cvworkbench.ops.publication.packet import PublicationReviewError, publication_review_files
 from cvworkbench.ops.publication.policy import PublishConfig, load_publish_config
-from cvworkbench.ops.publication.record import preparation_bytes
+from cvworkbench.ops.publication.record import PreparationInputChangedError, preparation_bytes
 from cvworkbench.storage import AtomicWriteError, replace_files_atomically
 from cvworkbench.variants import Variant, load_variant
 
@@ -97,27 +109,45 @@ def prepare_public_pdf(
     *,
     authored_source: Path,
     source_pdf: Path,
-    config_path: Path,
+    config_path: ConfigSource,
     variant_id: str,
     publish_config_path: Path,
     sot_path: Path,
 ) -> PublicPdfResult:
     """Sanitize an authored PDF without re-typesetting its public content."""
 
+    configuration = read_config(config_path)
     if not source_pdf.exists():
         raise PublicPdfError(f"Authored PDF not found: {source_pdf}")
+    try:
+        with capture_publication_inputs(
+            authored_source=authored_source,
+            source_pdf=source_pdf,
+            policy_path=publish_config_path,
+            variant_path=resolve_variant_path(variant_id, configuration),
+            person_path=sot_path / "person.yaml",
+        ) as inputs:
+            return _prepare_captured_public_pdf(inputs=inputs, configuration=configuration)
+    except (PublicationInputError, PreparationInputChangedError) as exc:
+        raise PublicPdfError(str(exc)) from exc
+
+
+def _prepare_captured_public_pdf(
+    *, inputs: PublicationInputCopies, configuration: ConfigSnapshot
+) -> PublicPdfResult:
+    authored_source = inputs.authored_source
+    source_pdf = inputs.exported_pdf
+    sot_path = inputs.person.parent
     source_match = _validate_authored_source(authored_source, source_pdf)
-    authored_sha256 = _hash_file(authored_source)
-    source_pdf_sha256 = _hash_file(source_pdf)
-    variant = load_variant(resolve_variant_path(variant_id, config_path))
-    publish = load_publish_config(publish_config_path)
+    variant = load_variant(inputs.variant_config)
+    publish = load_publish_config(inputs.policy)
     _validate_publish_variant(variant, publish)
     if "pdf" not in variant.outputs:
         raise PublicPdfError(f"Publish variant '{variant.id}' does not declare a PDF output")
 
-    output_pdf = output_path(resolve_publish_path(config_path) / variant.id, variant, "pdf")
+    output_pdf = output_path(resolve_publish_path(configuration) / variant.id, variant, "pdf")
     manifest_path = output_pdf.parent / "manifest.json"
-    if source_pdf.resolve() == output_pdf.resolve():
+    if Path(inputs.stamps.exported_pdf.path) == output_pdf.resolve():
         raise PublicPdfError("Authored source and public output must be different files")
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     person = _load_person(sot_path)
@@ -156,16 +186,16 @@ def prepare_public_pdf(
             )
             public_pdf_bytes = temporary_pdf.read_bytes()
             public_pdf_hash = hashlib.sha256(public_pdf_bytes).hexdigest()
-            review_dir = resolve_reviews_path(config_path) / "publication" / public_pdf_hash
+            review_dir = resolve_reviews_path(configuration) / "publication" / public_pdf_hash
             try:
                 review_files = publication_review_files(public_pdf_bytes)
             except PublicationReviewError as exc:
                 raise PublicPdfError(str(exc)) from exc
             manifest_content = publication_manifest_content(
                 authored_name=authored_source.name,
-                authored_sha256=authored_sha256,
+                authored_sha256=inputs.stamps.authored_source.sha256,
                 source_pdf_name=source_pdf.name,
-                source_pdf_sha256=source_pdf_sha256,
+                source_pdf_sha256=inputs.stamps.exported_pdf.sha256,
                 output_pdf_name=output_pdf.name,
                 output_pdf_sha256=public_pdf_hash,
                 variant=variant,
@@ -176,17 +206,11 @@ def prepare_public_pdf(
                 source_visual_fingerprint=source_visual_fingerprint,
             )
             record_content = preparation_bytes(
-                authored_source=authored_source,
-                source_pdf=source_pdf,
-                policy_path=publish_config_path,
-                variant_path=resolve_variant_path(variant_id, config_path),
-                person_path=sot_path / "person.yaml",
+                inputs=inputs.stamps,
                 variant=variant.id,
                 pdf_hash=public_pdf_hash,
                 manifest_content=manifest_content,
                 review_files=review_files,
-                authored_hash=authored_sha256,
-                exported_hash=source_pdf_sha256,
             )
             try:
                 replace_files_atomically(
@@ -913,11 +937,3 @@ def _temporary_pdf_path(output_pdf: Path) -> Path:
     )
     os.close(descriptor)
     return Path(value)
-
-
-def _hash_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8192), b""):
-            digest.update(chunk)
-    return digest.hexdigest()

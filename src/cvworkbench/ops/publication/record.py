@@ -28,6 +28,10 @@ from pydantic import (
 Digest = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 
 
+class PreparationInputChangedError(ValueError):
+    pass
+
+
 class FileStamp(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     path: str
@@ -51,6 +55,17 @@ class _VersionedRecord(BaseModel):
         if type(value) is not int or value != 1:
             raise ValueError("Publication record schema_version must be the integer 1")
         return value
+
+
+class PreparationInputs(BaseModel):
+    """Original identities and hashes of the input bytes used for preparation."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    authored_source: FileStamp
+    exported_pdf: FileStamp
+    policy: FileStamp
+    variant_config: FileStamp
+    person: FileStamp
 
 
 class PreparationRecord(_VersionedRecord):
@@ -101,30 +116,32 @@ def json_bytes(payload: dict) -> bytes:
 
 def preparation_bytes(
     *,
-    authored_source: Path,
-    source_pdf: Path,
-    policy_path: Path,
-    variant_path: Path,
-    person_path: Path,
+    inputs: PreparationInputs,
     variant: str,
     pdf_hash: str,
     manifest_content: str,
     review_files: dict[str, bytes],
-    authored_hash: str,
-    exported_hash: str,
 ) -> bytes:
-    source = stamp_file(authored_source)
-    export = stamp_file(source_pdf)
-    if source.sha256 != authored_hash or export.sha256 != exported_hash:
-        raise ValueError("Authored inputs changed during preparation; export and prepare again")
+    for name in PreparationInputs.model_fields:
+        captured = getattr(inputs, name)
+        try:
+            current = stamp_file(Path(captured.path))
+        except OSError as exc:
+            raise PreparationInputChangedError(
+                f"Publication inputs changed during preparation ({name}); prepare again"
+            ) from exc
+        if current != captured:
+            raise PreparationInputChangedError(
+                f"Publication inputs changed during preparation ({name}); prepare again"
+            )
     record = PreparationRecord(
         schema_version=1,
         variant=variant,
-        authored_source=source,
-        exported_pdf=export,
-        policy=stamp_file(policy_path),
-        variant_config=stamp_file(variant_path),
-        person=stamp_file(person_path),
+        authored_source=inputs.authored_source,
+        exported_pdf=inputs.exported_pdf,
+        policy=inputs.policy,
+        variant_config=inputs.variant_config,
+        person=inputs.person,
         pdf_sha256=pdf_hash,
         manifest_sha256=hashlib.sha256(manifest_content.encode()).hexdigest(),
         review_files={

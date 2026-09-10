@@ -18,6 +18,42 @@ without guessing from build output.
 The source correspondence check is a token-coverage check; it does not prove
 that an export was made after every edit or has identical wording and order.
 
+## Input lifetime
+
+Preparation and sync each capture one workbench configuration before resolving
+their settings. Both Python APIs accept a path or `ConfigSnapshot`; preparation
+and sync CLI selection passes that same snapshot into the operation. An edit or
+removal of `workbench.yaml` after capture does not redirect its output, review,
+or source settings. A later path-based invocation reads current settings.
+The [configuration contract](configuration-contract.md) owns snapshot semantics.
+
+`inputs.py::capture_publication_inputs` reads the authored DOCX, exported PDF,
+policy, variant, and person file into private temporary copies. Source
+correspondence, redaction, disclosure, and layout checks process those captured
+bytes. Per-role directories prevent equal filenames from colliding. The temporary
+directory has mode `0700` and input copies have mode `0600`; normal completion,
+errors, and cancellation remove this operation's copies.
+
+`record.py::PreparationInputs` records the original resolved file paths and
+hashes of those captured bytes. `preparation_bytes` verifies that all five
+original files still match before serializing provenance. Missing or changed
+inputs reject preparation before replacing the prepared PDF, manifest, private
+record, or packet. An unrelated exported PDF cannot inherit the correspondence
+result from an earlier source pair. Temporary paths never become source identities
+in preparation records or authored manifests.
+
+The configuration snapshot covers workbench settings. Input capture is per file,
+not a simultaneous snapshot of every source or a lock on other applications.
+Changes after the final freshness check can make a completed preparation stale;
+status/review/sync must still inspect current inputs. Capture and cleanup are not
+crash-durability guarantees. Sync retains its separate captured-PDF copy plan,
+policy validation, and exact-review gates; capturing workbench settings does not
+claim a single snapshot across every sync input.
+
+`tests/ops/publication/test_authority.py` exercises API/CLI configuration edits
+and removal, input changes during preparation, unchanged existing outputs on
+rejection, private-copy permissions, cancellation cleanup, and original provenance.
+
 ## Private preparation record
 
 Preparation atomically writes `preparation.json` beside the prepared PDF and
@@ -102,6 +138,7 @@ hidden-contact rejection, encoding/indirection cases, and output preservation.
 
 `ops/publication/` owns the lifecycle: `record.py` defines the private schemas,
 `state.py` inspects freshness and records review, `pdf.py` performs sanitization,
+`inputs.py` owns captured preparation copies,
 `object_text.py` decodes non-page strings, `packet.py` renders review evidence,
 `policy.py` loads disclosure policy, and
 `manifest.py` defines and serializes authored provenance, and `artifact.py`

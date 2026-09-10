@@ -38,9 +38,9 @@ publish**. More modules, tests, or audit findings are not completion criteria.
 | Generate a readable document | Concise working contact links; separate metadata and narrative paragraphs; stable generated CV pagination and first-page rendering | Review real document wording and appearance for the intended audience |
 | Edit through Word and retain source authority | A real supported bullet edit returns as a guarded patch; unchanged DOCX imports are no-ops; changed link destinations require review | Broader editing coverage remains limited to documented supported operations |
 | Preview without obscuring the document or changing source | Secondary settings use native disclosure; document visible at inspected narrow widths; keyboard controls and format switching verified; isolated preview outputs | Expanded settings/long warnings can require scrolling; no full assistive-technology conformance claim |
-| Apply an edit to the selected source version | Draft and project application share one selection owner, preserve explicit version pins, and report the concrete edited directory | Publication/configuration authority is a separate remaining trace; directory selection is not a global source snapshot |
+| Apply an edit to the selected source version | Draft and project application share one selection owner, preserve explicit version pins, and report the concrete edited directory | Directory selection is not a global source snapshot; expected-text/byte guards retain their documented concurrency limits |
 | Preserve work when a save fails | Proposal locking, expected-text/byte guards, staged rendering, and recoverable grouped writes | No crash-durability or universal concurrent-writer guarantee |
-| Publish a faithful, private-data-checked CV | Separate preparation, disclosure policy, source freshness, immutable artifact hashes, and exact-PDF review; hidden object text and unsafe bookmark actions checked | Current public candidate requires human review; site update remains on hold |
+| Publish a faithful, private-data-checked CV | Captured preparation inputs, consistent action settings, disclosure checks, source freshness, immutable artifact hashes, and exact-PDF review | Current public candidate requires human review; site update remains on hold |
 | Keep the workspace understandable | Separate sources, proposals, runs, previews, reviews, and publication artifacts with concrete owners and routed contracts | Preview and standalone-draft retention need a tested plan before any live cleanup |
 
 ## Document review evidence and limits
@@ -72,48 +72,59 @@ defines what publication checks inspect and their limits. They cover decoded
 PDF object strings and bookmark actions; opaque streams and general malware
 assessment remain outside that claim.
 
-## Current slice: reliable source selection
+## Consequential-action authority
 
-The application audit reproduced a wrong-directory write: draft application
-(both supported patch formats) and default project application could edit
-leftover root files while a build selected the active version. Explicit project
-overrides already selected correctly. The fix moves selection into application
-operations and makes command summaries report their returned concrete directory.
+Application could edit leftover root files while a build selected the active
+version. Draft and project application now share one selection owner and report
+the concrete edited directory. Incomplete packs and escaping active paths are
+errors; explicit versions remain pinned. The
+[application contract](../reference/patch-application.md#source-selection) owns
+selection and concurrency limits. The source-selection slice passed 1,123 tests
+and seven isolated CLI harness steps; its evidence remains in
+`/tmp/cvw-apply-authority-*.log`.
 
-A single existing input owner now rejects incomplete packs, invalid active
-text, non-directory versions, and active paths escaping the pack. An explicit
-version stays pinned. If `ACTIVE` changes after selection, the in-flight edit
-continues against the selected directory; the next invocation selects again.
-The [application contract](../reference/patch-application.md#source-selection)
-owns these semantics and their concurrency limits.
+Publication preparation and sync could combine different workbench settings
+within one command. Preparation also checked DOCX/PDF correspondence before
+capturing source hashes, and recorded policy/person/variant hashes after use.
+A reproduced export change could therefore inherit an earlier correspondence
+result. Configuration edits/removal produced eight failing API/CLI cases;
+changes to the five preparation inputs produced five more failures.
 
-Isolated regression evidence covers both CLI and Python operation paths,
-root-level leftovers, explicit overrides, invalid packs with unchanged files,
-and active-pointer changes. The initial wrong-directory tests failed in three
-paths; the invalid-pack tests then exposed ten failures before repair.
-The combined application/configuration regression passed 102 tests; the broader
-application, CLI, workspace, and documentation group passed 418. Final validation
-passed 1,123 tests with one existing opt-in integration skip and five upstream
-warnings, plus all seven isolated CLI harness steps, lint/format checks, and
-repository hooks. The live context remains ready with no reported issues.
-Canonical authored-source and prepared-public-PDF hashes are unchanged, and the
-website checkout remains clean.
+Preparation and sync now use one workbench snapshot. A dedicated input owner
+captures five files into private temporary copies for preparation; provenance
+records their original identities and captured-byte hashes. Changes to original
+inputs reject preparation before output replacement. Permissions and cleanup
+on success/cancellation were verified. The
+[input-lifetime contract](../reference/publication-contract.md#input-lifetime)
+owns these boundaries. It does not claim a simultaneous filesystem snapshot,
+writer locking, crash durability, or automatic human review.
 
-Evidence: `/tmp/cvw-apply-authority-red.log`,
-`/tmp/cvw-apply-authority-invalid-red.log`,
-`/tmp/cvw-apply-authority-targeted.log`, `/tmp/cvw-apply-authority-full.log`,
-`/tmp/cvw-apply-authority-journey.json`, and `/tmp/cvw-apply-authority-hooks.log`.
-These are local validation records, not public release or advisory evidence.
+A fresh CLI preparation from the real configured DOCX/PDF pair, with output
+restricted to a new temporary workspace, produced a public PDF byte-identical
+to the existing candidate. All original inputs and the live candidate were
+unchanged. The isolated result remains `review_required`, with no review receipt.
+Evidence is in `/tmp/cvw-publication-authority-real-journey.json`.
+
+The focused publication, sync, CLI, and documentation regression passed 168
+tests. Failure and passing evidence is retained in
+`/tmp/cvw-publication-authority-config-red.log`,
+`/tmp/cvw-publication-authority-input-red.log`, and
+`/tmp/cvw-publication-authority-targeted.log`. The final suite passed 1,139 tests
+with one existing opt-in integration skip and five upstream warnings. All seven
+isolated CLI harness steps, lint/format checks, and repository hooks passed.
+The live context remains ready with no reported issues, the same source selection,
+and publication state `review_required`. Full evidence is in
+`/tmp/cvw-publication-authority-full.log`,
+`/tmp/cvw-publication-authority-journey.json`, and
+`/tmp/cvw-publication-authority-hooks.log`. These are local checks, not remote
+advisory evidence.
 
 ## Bounded remaining effort
 
-1. **Finish consequential-action authority.** Trace publication preparation and
-   sync configuration/source selection. Fix only a reproduced wrong-source,
-   wrong-artifact, or disclosure risk. Preserve the existing explicit review gate.
-2. **Define maintenance without deleting work.** Produce a tested, reviewable
+1. **Define maintenance without deleting work.** Produce a tested, reviewable
    retention plan for preview outputs and standalone drafts that preserves
    referenced runs and reviews. No live pruning in this phase.
-3. **Reach the review decision.** Present the selected authored/public artifact
+2. **Reach the review decision.** Present the selected authored/public artifact
    and identify verified, pending-review, and deferred items. Keep the supported
    PDF-structure investigation explicit rather than treating headings as proof.
 

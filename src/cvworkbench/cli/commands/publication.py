@@ -22,6 +22,7 @@ from cvworkbench.build.rendering import RenderError
 from cvworkbench.cli.helpers import configure_output_mode
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.config import (
+    read_config,
     resolve_config_path,
     resolve_publication_variant,
     resolve_sot_path,
@@ -208,14 +209,15 @@ def prepare_public_pdf_command(
 
     configure_output_mode(plain, json_output)
     try:
-        resolved_config = resolve_config_path(config)
-        resolved_variant = variant or resolve_publication_variant(resolved_config)
-        resolved_sot = resolve_sot_path(sot_path, resolved_config)
+        configuration = read_config(config)
+        resolved_config = configuration.path
+        resolved_variant = variant or resolve_publication_variant(configuration)
+        resolved_sot = resolve_sot_path(sot_path, configuration)
         resolved_publish = publish_config or resolved_config.parent / "publish.yaml"
         result = prepare_authored_public_pdf(
             authored_source=authored_source.expanduser().resolve(),
             source_pdf=source_pdf.expanduser().resolve(),
-            config_path=resolved_config,
+            config_path=configuration,
             variant_id=resolved_variant,
             publish_config_path=resolved_publish,
             sot_path=resolved_sot,
@@ -265,16 +267,17 @@ def sync(
 ) -> None:
     configure_output_mode(plain, json_output)
     try:
-        resolved_config = resolve_config_path(config)
+        configuration = read_config(config)
+        resolved_config = configuration.path
         resolved_site = resolve_config_path(site_config)
-        selected_mode = mode or resolve_sync_mode(resolved_config)
+        selected_mode = mode or resolve_sync_mode(configuration)
         result = sync_site(
-            config_path=resolved_config,
+            config_path=configuration,
             site_config_path=resolved_site,
             mode=selected_mode,
             publish_config_path=resolved_config.parent / "publish.yaml",
         )
-    except (FileNotFoundError, SyncError, RenderError) as exc:
+    except (OSError, ValueError, SyncError, RenderError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _print_sync_summary(result)
