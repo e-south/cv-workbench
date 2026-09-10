@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cvworkbench.build.contacts import build_contact_line
 from cvworkbench.text import slugify, tag_classes
 from cvworkbench.variants import Variant
 
@@ -37,7 +38,7 @@ def _build_resume_markdown(
         lines.append(f"# {name}")
         lines.append("")
 
-    contact_line = _build_contact_line(person, variant.contact_fields)
+    contact_line = build_contact_line(person, variant.contact_fields)
     if contact_line:
         lines.append(contact_line)
         lines.append("")
@@ -83,7 +84,7 @@ def _build_cover_letter_markdown(
         lines.append(f"# {name}")
         lines.append("")
 
-    contact_line = _build_contact_line(person, variant.contact_fields)
+    contact_line = build_contact_line(person, variant.contact_fields)
     if contact_line:
         lines.append(contact_line)
         lines.append("")
@@ -152,42 +153,6 @@ def _find_letter(sot: dict[str, Any], letter_id: str) -> dict[str, Any]:
         if letter.get("id") == letter_id:
             return letter
     raise ValueError(f"Letter not found: {letter_id}")
-
-
-def _build_contact_line(person: dict[str, Any], contact_fields: list[str]) -> str:
-    parts: list[str] = []
-    label = person.get("label")
-    if "label" in contact_fields and isinstance(label, str) and label.strip():
-        parts.append(label.strip())
-
-    email = person.get("email")
-    if "email" in contact_fields and isinstance(email, str) and email.strip():
-        parts.append(email.strip())
-
-    phone = person.get("phone")
-    if "phone" in contact_fields and isinstance(phone, str) and phone.strip():
-        parts.append(phone.strip())
-
-    location = person.get("location")
-    if "location" in contact_fields and isinstance(location, dict):
-        city = location.get("city")
-        region = location.get("region")
-        country = location.get("country")
-        location_bits = [bit for bit in [city, region, country] if isinstance(bit, str)]
-        if location_bits:
-            parts.append(", ".join(location_bits))
-
-    links = person.get("links")
-    if "links" in contact_fields and isinstance(links, list):
-        for link in links:
-            if not isinstance(link, dict):
-                continue
-            label_text = link.get("label")
-            url = link.get("url")
-            if isinstance(label_text, str) and isinstance(url, str):
-                parts.append(f"{label_text}: {url}")
-
-    return " | ".join(parts)
 
 
 def _build_summary(

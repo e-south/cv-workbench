@@ -1596,6 +1596,59 @@ The completed slice protects the editing workflow. The
 [product readiness checkpoint](2026-09-10-product-readiness-checkpoint.md)
 connects it to document quality, source authority, and a finite next phase.
 
+### Medium — generated contact information lacked usable links — fixed across document formats
+
+A fresh build from copied configured facts produced zero PDF link annotations
+and zero DOCX hyperlink elements. The header displayed long profile URLs over
+two lines. This failed the document utility criterion: selected email/profile
+contacts should be directly usable and readable in the generated resume or
+cover letter. The authored public CV already had three working profile links
+and a balanced header; it was not the target of this formatter change.
+
+`build/contacts.py` now owns contact selection, literal labels, and explicit
+link destinations shared by both document types. The Markdown composer routes
+to that owner; themes retain styling ownership. Selected unsafe/non-web profile
+destinations, credentials, malformed bare email values, and URI whitespace fail
+in planning before writes, without echoing their values. Excluded contacts stay
+excluded. This is render preflight, not remote URL validation or a new public
+publication policy. The live [contact presentation contract](../howto/styling.md#contact-presentation)
+owns the supported behavior. The preview iframe also now has the accessible
+name `Document preview`, verified in the live browser.
+
+The initial 12 checks reproduced 11 failures before implementation; a further
+bare-email case reproduced a prefixed-mailto error before its fix. The focused
+suite passed 38 tests. The full suite passed 1,060 tests, with one existing
+opt-in integration skip and five upstream warnings, in 118.94 seconds. All seven
+CLI verification journeys passed with empty stderr, including review packaging
+and DOCX import. Evidence: `/tmp/cvw-contact-links-red.log`,
+`/tmp/cvw-contact-email-red.log`, `/tmp/cvw-contact-links-focused.log`,
+`/tmp/cvw-contact-links-full.log`, and `/tmp/cvw-contact-links-journey.json`.
+
+The real generated CV now has four PDF/DOCX contact links, four pages, and 45
+PDF bookmarks. Its body Markdown is byte-identical from the first section
+onward. All four rendered PDF pages were inspected. The preview DOM preserved
+four correct contact destinations at 961- and 500-pixel viewports, with no page
+or document overflow; Chrome DevTools reported no warnings or errors. The
+browser clamped the requested narrower window to 500 pixels, so this is not a
+claim about smaller mobile screens. The generated DOCX retains its 104
+paragraphs and heading-style counts. Neither PDF lane has a structure tree;
+the authored document's direct-formatting and heading-navigation gaps remain.
+
+The isolated workspace and its private evidence are identified by
+`/tmp/cvw-document-quality-workspace.json`. Browser evidence is beneath that
+workspace's `var/runs/preview/document-quality-review/`; PDF pages and OOXML
+measurements are under `evidence/`. The audit tabs and its preview server were
+closed; the preexisting authored-CV review tab/server were left available.
+Configured source-file hashes, the canonical DOCX hash, and the public PDF hash
+were unchanged. The private repository inventory retained all 8,316 entries
+with identical recorded metadata. Context remained ready, with no issues and
+publication `review_required`; the site worktree was clean. No remote check,
+site sync, or publication approval was performed.
+The slice handoff is **pass** for contact usability. The
+[product checkpoint](2026-09-10-product-readiness-checkpoint.md#document-quality-follow-up)
+records the next reader-facing issues: labeled teaching values, separated entry
+metadata/prose, and semantic authored-document styles.
+
 ## Verification and limits
 
 Baseline: 326 tests passed, one opt-in remote PR integration test skipped. The

@@ -229,3 +229,13 @@ def test_proposal_authoring_routes_its_owner_and_recovery_contract() -> None:
     assert "configuration-contract.md#build-bundle-recovery" in contract
     assert "tests/ops/test_project_patch_authoring.py" in contract
     assert "project-contract.md#proposal-authoring" in rules
+
+
+def test_contact_presentation_routes_one_owner_and_export_contract() -> None:
+    styling = (ROOT / "docs/howto/styling.md").read_text()
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    assert "## Contact presentation" in styling
+    assert "build/contacts.py" in styling
+    assert "tests/build/test_contacts.py" in styling
+    assert "publication-contract.md" in styling
+    assert "styling.md#contact-presentation" in architecture

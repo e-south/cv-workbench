@@ -57,6 +57,32 @@ Exact verification results for this slice belong to the linked audit. The
 canonical authored source and prepared public candidate are preserved. No site
 sync, push, publication approval, or advisory refresh is part of this checkpoint.
 
+## Document-quality follow-up
+
+A fresh four-format build from an isolated copy of the configured career facts
+exposed plain-text profile URLs with no contact links in PDF or DOCX. The shared
+[contact formatter](../howto/styling.md#contact-presentation) now emits concise,
+literal profile labels and an email link. The generated document has four working
+contact links, the same four pages and 45 bookmarks, and unchanged Markdown body
+text. The preview frame now has an accessible name. Browser checks at 961- and
+500-pixel viewports found no page/document horizontal overflow or console errors.
+These checks do not establish complete accessibility or smaller-phone support.
+
+Remaining reader-facing findings are specific: teaching entries present
+unlabeled enrollment/evaluation values, and education/service metadata can merge
+with prose because Markdown soft line breaks form one paragraph. Address those
+presentation semantics before broadening the low-level hardening scope. The
+authored DOCX still has 90 default/direct paragraphs and 31 list paragraphs;
+the authored public PDF has no bookmarks or structure tree. The generated DOCX
+has heading styles, but its PDF also lacks a structure tree. A tagged-document
+workflow remains separate acceptance work; adding clickable links does not
+resolve it.
+
+The contact slice passed 1,060 tests (one existing opt-in skip), the seven CLI
+verification journeys, and real resume/cover-letter link checks across HTML,
+PDF, and DOCX. The detailed audit retains the evidence paths and limits. No
+source facts, authored source, publication approval, or site files were changed.
+
 ## Bounded next phase
 
 1. **Document quality and workflow clarity.** Walk one realistic generated

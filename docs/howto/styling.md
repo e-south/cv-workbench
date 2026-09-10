@@ -102,6 +102,37 @@ variants. Keep variants focused on content selection.
 The default theme uses Pandoc's built-in templates (`template: default`). If you
 want full control, add a template file and point to it from `theme.yaml`.
 
+## Contact presentation
+
+Generated resumes and cover letters share `build/contacts.py` for their contact
+line. The variant's `contact_fields` selects which facts are shown; themes own
+their visual styling. Profile labels such as `GitHub` or `Research` become
+clickable text instead of displaying the full URL. Email remains visible as an
+address with a `mailto:` destination. Markdown, HTML, PDF, and DOCX preserve
+these links through Pandoc. Phone and location remain plain text.
+
+Keep a concise, meaningful `label` beside each `person.links[].url`. Contact
+labels and other contact text are literal text, with Markdown punctuation
+escaped so it cannot introduce formatting or additional links. Internal label
+whitespace is collapsed to keep the header in one paragraph.
+
+Selected profile destinations must be absolute HTTP(S) URLs without credentials,
+control characters, whitespace, or backslashes, with a hostname and valid port.
+Selected email values must be bare addresses, not `mailto:` strings with URI
+headers. URI punctuation is encoded where needed. These checks run during build
+planning, before artifact writes; errors identify the contact field or profile
+index without echoing its value. Excluded fields are neither emitted nor turned
+into link destinations. This is a rendering contract, not address-deliverability
+or remote-site verification. Source validation retains its existing schema.
+
+The authored-CV lane keeps its links in the Word source and follows the stricter
+[public PDF policy](../reference/publication-contract.md); generated contact
+links do not approve an artifact for publication.
+
+Verification: `tests/build/test_contacts.py` inspects actual HTML anchors, PDF
+annotations, and DOCX relationships for both document types, plus preflight
+failure, literal-label, and contact-selection behavior.
+
 
 ## Build-time changes and provenance
 
