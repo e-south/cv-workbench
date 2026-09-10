@@ -58,6 +58,7 @@ than maintaining executable copies beneath `docs/`.
 | --- | --- |
 | Read-only content and render planning | `build/planning.py` |
 | Selected contact labels and link destinations shared by resume and letter | `build/contacts.py` |
+| Record metadata rows and narrative paragraph boundaries | `build/entry_layout.py` |
 | Explicit render-input fingerprints and lifetime checks | `build/assets.py` |
 | Bundle membership and temporary artifact generation | `build/artifacts.py` |
 | Build lifetime and commit orchestration | `build/pipeline.py` |
@@ -69,6 +70,8 @@ defines staging, captured output preconditions, rollback, and concurrency limits
 Build code must not depend on operations merely to reuse file persistence.
 The [contact presentation contract](../howto/styling.md#contact-presentation)
 separates semantic links from theme styling and authored-CV publication policy.
+The [entry structure contract](../howto/styling.md#entry-structure) keeps field
+meaning in section builders and paragraph composition in one shared owner.
 
 Preview uses `dev/preview_paths.py` to separate canonical input from served
 output and assign an independent directory to each invocation. Audited builds,

@@ -128,8 +128,14 @@ Required artifact assertions:
   `proposals/patch.yaml` exist
 - `reviewpack`: `cv.docx`, `cv.pdf`, and `review.md` exist and resolve the same
   run id created by `build`
-- `import-docx`: `patch.diff` or `patch.yaml`, `draft.json`, `notes.md`, and
-  `imported.md` exist and resolve the same latest run id as `reviewpack`
+- `import-docx`: `patch.yaml`, `draft.json`, `notes.md`, and `imported.md` exist
+  and resolve the same run id as `reviewpack`. Because this journey imports an
+  unchanged review DOCX, `draft.json` must identify that patch and report
+  `ready_no_changes`; the patch must use `project-ops` with an empty operation
+  list. A review-only diff, nonempty patch, or incompatible format fails the
+  journey. The step evidence records the verified `apply_status`. Existence
+  checks alone cannot establish a useful editing round trip; real edited and
+  changed-link controls are covered by `tests/build/test_entry_layout.py`.
 
 ## Failure contract
 

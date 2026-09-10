@@ -51,6 +51,7 @@ def test_run_verify_writes_machine_readable_summary_on_success(tmp_path: Path) -
     assert persisted["status"] == "ok"
     assert persisted["steps"][-1]["id"] == "import-docx"
     assert persisted["steps"][-1]["artifacts"]["run_id"] == "2026-01-02T00-00-00Z"
+    assert persisted["steps"][-1]["artifacts"]["apply_status"] == "ready_no_changes"
 
 
 def test_run_verify_fails_fast_when_expected_artifact_is_missing(tmp_path: Path) -> None:
@@ -81,6 +82,32 @@ def test_run_verify_fails_preflight_when_required_binary_is_missing(
     assert summary["status"] == "failed"
     assert summary["steps"] == []
     assert summary["error"] == "Required binary not found: pandoc"
+
+
+@pytest.mark.parametrize("failure", ["review_only", "nonempty_patch", "wrong_format"])
+def test_unchanged_review_import_requires_a_verified_noop(tmp_path, failure):
+    def runner(step, workspace):
+        result = _success_runner(step, workspace)
+        if step.id == "import-docx":
+            payload = json.loads(result.stdout)["data"]
+            metadata = Path(payload["metadata"])
+            if failure == "review_only":
+                contents = json.loads(metadata.read_text())
+                contents["apply_status"] = "review_diff_only"
+                metadata.write_text(json.dumps(contents))
+            else:
+                patch = {"format": "project-ops", "operations": []}
+                if failure == "nonempty_patch":
+                    patch["operations"] = [{"op": "unexpected-edit"}]
+                else:
+                    patch["format"] = "unified-diff"
+                Path(payload["patch"]).write_text(yaml.safe_dump({"patch": patch}))
+        return result
+
+    summary = verify_module.run_verify(REPO_ROOT, tmp_path / "verify", runner=runner)
+    assert summary["status"] == "failed"
+    assert summary["steps"][-1]["id"] == "import-docx"
+    assert "unchanged DOCX" in summary["error"]
 
 
 def _success_runner(step: VerifyStep, workspace: VerifyWorkspace) -> CommandExecution:
@@ -251,9 +278,9 @@ def _emit_success(
         draft_dir = workspace.root / "var" / "drafts" / "import-2026-01-03T00-00-00Z"
         draft_dir.mkdir(parents=True, exist_ok=True)
         for path, content in {
-            draft_dir / "patch.diff": "--- canonical.md\n+++ imported.md\n",
+            draft_dir / "patch.yaml": "patch:\n  format: project-ops\n  operations: []\n",
             draft_dir
-            / "draft.json": '{"apply_status": "review_diff_only", "patch_path": "patch.diff"}\n',
+            / "draft.json": '{"apply_status": "ready_no_changes", "patch_path": "patch.yaml"}\n',
             draft_dir / "notes.md": "# Notes\n",
             draft_dir / "imported.md": "after\n",
         }.items():
@@ -265,7 +292,7 @@ def _emit_success(
                     "command": "import-docx",
                     "data": {
                         "draft_dir": str(draft_dir),
-                        "patch": str(draft_dir / "patch.diff"),
+                        "patch": str(draft_dir / "patch.yaml"),
                         "metadata": str(draft_dir / "draft.json"),
                         "notes": str(draft_dir / "notes.md"),
                         "imported_markdown": str(draft_dir / "imported.md"),

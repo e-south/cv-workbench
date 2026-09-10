@@ -22,6 +22,7 @@ import yaml
 from cvworkbench.build.selection import build_selection
 from cvworkbench.inputs.sot import load_sot
 from cvworkbench.ops.projects import ProjectError, ProjectPatch, compile_project_patch
+from cvworkbench.ops.review.markdown import normalize_markdown
 from cvworkbench.text import slugify
 from cvworkbench.variants import Variant
 
@@ -67,8 +68,8 @@ def build_import_patch(
     project_patch: ProjectPatch | None,
 ) -> tuple[str, str, str, list[str]]:
     supported = _build_supported_project_patch(
-        canonical_markdown=canonical_path.read_text(),
-        imported_markdown=imported_markdown,
+        canonical_markdown=normalize_markdown(canonical_path.read_text()),
+        imported_markdown=normalize_markdown(imported_markdown),
         sot_path=sot_path,
         variant=variant,
         project_patch=project_patch,

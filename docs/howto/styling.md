@@ -134,6 +134,26 @@ annotations, and DOCX relationships for both document types, plus preflight
 failure, literal-label, and contact-selection behavior.
 
 
+## Entry structure
+
+Education, publication, conference, honor, service, teaching, and reference
+entries use `build/entry_layout.py` to emit a compact metadata paragraph followed
+by separate narrative paragraphs. Nonempty metadata values are separated by
+` | `; missing values do not leave empty separators or labels. Section builders
+retain field meaning, selection, heading levels, IDs, and tags. Themes control
+typography and paragraph spacing.
+
+Education keeps degree, location, and dates together, then gives advisors and
+thesis their own paragraphs. Teaching labels optional metrics as `Enrollment`
+and `Evaluation`. Publication notes, service descriptions, and other entry prose
+remain ordinary paragraphs, with supported inline Markdown formatting preserved.
+Avoid joining these blocks with soft line breaks: Pandoc interprets adjacent
+lines as one paragraph in HTML, PDF, and DOCX.
+
+`tests/build/test_entry_layout.py` checks actual rendered paragraph boundaries,
+optional values, DOCX paragraph structure, PDF labels, and the edited-DOCX
+[review round trip](../reference/review-contract.md#markdown-comparison).
+
 ## Build-time changes and provenance
 
 Finish theme/style edits before starting a build. If a recorded asset changes

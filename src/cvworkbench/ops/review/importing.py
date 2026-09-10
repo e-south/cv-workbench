@@ -13,13 +13,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from cvworkbench.config import resolve_drafts_path
-from cvworkbench.ops.review import ReviewError
+from cvworkbench.ops.review import ReviewError, markdown
 from cvworkbench.ops.review.patches import build_import_patch
 from cvworkbench.ops.review.record import (
     SOURCE_RECORD_NAME,
@@ -79,13 +78,7 @@ def import_docx_review(
     if not canonical_path.exists():
         raise ReviewError(f"Canonical markdown not found: {canonical_path}")
 
-    imported_markdown = _convert_docx_to_markdown(docx_path)
-    drafts_root = resolve_drafts_path(config_path)
-    draft_dir = _create_import_draft_dir(drafts_root)
-
-    imported_path = draft_dir / "imported.md"
-    imported_path.write_text(imported_markdown)
-
+    imported_markdown = markdown.convert_docx_to_markdown(docx_path)
     patch_name, patch_text, apply_status, note_lines = build_import_patch(
         canonical_path=canonical_path,
         imported_markdown=imported_markdown,
@@ -93,6 +86,10 @@ def import_docx_review(
         variant=resolution.variant,
         project_patch=resolution.project_patch,
     )
+    drafts_root = resolve_drafts_path(config_path)
+    draft_dir = _create_import_draft_dir(drafts_root)
+    imported_path = draft_dir / "imported.md"
+    imported_path.write_text(imported_markdown)
     patch_path = draft_dir / patch_name
     patch_path.write_text(patch_text)
 
@@ -142,32 +139,6 @@ def import_docx_review(
         run_id=run_id,
         apply_status=apply_status,
     )
-
-
-def _convert_docx_to_markdown(docx_path: Path) -> str:
-    pandoc_path = _which("pandoc")
-    if pandoc_path is None:
-        raise ReviewError("pandoc is required to import DOCX")
-
-    result = subprocess.run(
-        [pandoc_path, "--to", "markdown", str(docx_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout or "").strip()
-        raise ReviewError(message or "Pandoc conversion failed")
-    return result.stdout.strip() + "\n"
-
-
-def _which(command: str) -> str | None:
-    result = subprocess.run(
-        ["/usr/bin/which", command], capture_output=True, text=True, check=False
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
 
 
 def _timestamp() -> str:

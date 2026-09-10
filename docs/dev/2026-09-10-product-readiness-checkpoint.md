@@ -68,28 +68,47 @@ text. The preview frame now has an accessible name. Browser checks at 961- and
 500-pixel viewports found no page/document horizontal overflow or console errors.
 These checks do not establish complete accessibility or smaller-phone support.
 
-Remaining reader-facing findings are specific: teaching entries present
-unlabeled enrollment/evaluation values, and education/service metadata can merge
-with prose because Markdown soft line breaks form one paragraph. Address those
-presentation semantics before broadening the low-level hardening scope. The
-authored DOCX still has 90 default/direct paragraphs and 31 list paragraphs;
-the authored public PDF has no bookmarks or structure tree. The generated DOCX
-has heading styles, but its PDF also lacks a structure tree. A tagged-document
-workflow remains separate acceptance work; adding clickable links does not
-resolve it.
+Entry formatting now labels teaching metrics and separates education, service,
+publication, conference, honor, and reference metadata from narrative paragraphs.
+A fresh generated CV retains four pages, 45 bookmarks, and four contact links;
+DOCX now contains 19 separate body-text paragraphs where prose had previously
+merged into metadata. Its first rendered PDF page remains byte-identical.
+
+The real edited-DOCX check uncovered a deeper workflow defect: equivalent
+heading/link syntax caused supported edits to fall back to review-only diffs.
+Shared Pandoc normalization now preserves a real bullet edit as a guarded patch,
+recognizes an unchanged document as a no-op, and still rejects changed link
+destinations from automatic application. The CLI harness now requires a no-op
+with zero operations when importing its unchanged review document; existence of
+an import draft no longer counts as proof of a successful editing round trip.
+
+Remaining document work concerns semantic authored-document styles and tagged
+PDF output. The authored DOCX still has 90 default/direct paragraphs and 31 list
+paragraphs; the authored public PDF has no bookmarks or structure tree. The
+generated DOCX has heading styles, but its PDF also lacks a structure tree.
+Browser inspection also shows that the stacked preview controls consume the
+first screen near the responsive breakpoint; a compact responsive-control pass
+would improve access to the document itself.
 
 The contact slice passed 1,060 tests (one existing opt-in skip), the seven CLI
 verification journeys, and real resume/cover-letter link checks across HTML,
 PDF, and DOCX. The detailed audit retains the evidence paths and limits. No
 source facts, authored source, publication approval, or site files were changed.
 
+The entry/review follow-up passed 1,078 tests (one existing opt-in skip) and
+three independent seven-step CLI runs. Each unchanged review import reported a
+verified no-op with zero operations; canonical Markdown, generated Markdown,
+and preview HTML matched across runs. Source facts and publication artifacts
+remained unchanged. This closes the observed rendering and DOCX round-trip gaps,
+while the remaining acceptance work below stays explicit.
+
 ## Bounded next phase
 
-1. **Document quality and workflow clarity.** Walk one realistic generated
-   document and the authored-CV review path from the documented entry points.
-   Review heading semantics, reading order, contact alignment, links, and page
-   breaks. Completion evidence is an inspectable output and a short list of
-   concrete issues; automated fidelity checks alone cannot approve appearance.
+1. **Document quality and workflow clarity.** The generated-document walk and
+   edited-DOCX round trip now have direct evidence. Finish the bounded remaining
+   work on authored-document heading semantics, PDF structure, and compact
+   preview controls. Retain an inspectable output and specific acceptance checks;
+   automated fidelity checks alone cannot approve appearance.
 2. **Authority at consequential actions.** Trace the selected source version
    and configuration through apply and publication commands. Change code only
    where a reproducible mismatch can target the wrong source or artifact. The

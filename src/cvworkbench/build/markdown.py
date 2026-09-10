@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from cvworkbench.build.contacts import build_contact_line
+from cvworkbench.build.entry_layout import append_entry_text
 from cvworkbench.text import slugify, tag_classes
 from cvworkbench.variants import Variant
 
@@ -331,22 +332,21 @@ def _build_education(
         heading = " - ".join([part for part in [study_type, area] if part])
         if institution:
             lines.append(f"### {institution}")
-        if heading:
-            lines.append(heading)
         location = _string(item.get("location"))
-        if location:
-            lines.append(location)
         dates = _format_dates(item)
-        if dates:
-            lines.append(dates)
         advisors = item.get("advisors")
+        advisors_text = ""
         if isinstance(advisors, list) and advisors:
             advisors_text = ", ".join(_string(advisor) for advisor in advisors if _string(advisor))
-            if advisors_text:
-                lines.append(f"Advisors: {advisors_text}")
         thesis_title = _string(item.get("thesis_title"))
-        if thesis_title:
-            lines.append(f'Thesis: "{thesis_title}"')
+        append_entry_text(
+            lines,
+            metadata=(heading, location, dates),
+            paragraphs=(
+                f"Advisors: {advisors_text}" if advisors_text else "",
+                f'Thesis: "{thesis_title}"' if thesis_title else "",
+            ),
+        )
         highlights = item.get("highlights")
         if isinstance(highlights, list) and highlights:
             lines.append("")
@@ -387,16 +387,9 @@ def _build_publications(
             lines.append(f"### {title}")
 
         authors_text = _format_authors(item.get("authors"))
-        if authors_text:
-            lines.append(authors_text)
-
         venue_line = _format_publication_venue(item)
-        if venue_line:
-            lines.append(venue_line)
-
         notes = _string(item.get("notes"))
-        if notes:
-            lines.append(notes)
+        append_entry_text(lines, metadata=(authors_text, venue_line), paragraphs=(notes,))
 
         lines.append(":::")
         lines.append("")
@@ -434,13 +427,10 @@ def _build_conferences(
         year = _date_string(item.get("year"))
         presentation_type = _string(item.get("presentation_type"))
         location = _string(item.get("location"))
-        line_bits = [bit for bit in [event, presentation_type, location, year] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
         notes = _string(item.get("notes"))
-        if notes:
-            lines.append(notes)
+        append_entry_text(
+            lines, metadata=(event, presentation_type, location, year), paragraphs=(notes,)
+        )
 
         lines.append(":::")
         lines.append("")
@@ -476,13 +466,8 @@ def _build_honors(
 
         issuer = _string(item.get("issuer"))
         year = _date_string(item.get("year"))
-        line_bits = [bit for bit in [issuer, year] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
         summary = _string(item.get("summary"))
-        if summary:
-            lines.append(summary)
+        append_entry_text(lines, metadata=(issuer, year), paragraphs=(summary,))
 
         lines.append(":::")
         lines.append("")
@@ -519,12 +504,8 @@ def _build_service(
             lines.append(f"### {heading}")
 
         dates = _format_dates(item)
-        if dates:
-            lines.append(dates)
-
         summary = _string(item.get("summary"))
-        if summary:
-            lines.append(summary)
+        append_entry_text(lines, metadata=(dates,), paragraphs=(summary,))
 
         lines.append(":::")
         lines.append("")
@@ -561,15 +542,13 @@ def _build_teaching(
         role = _string(item.get("role"))
         term = _string(item.get("term"))
         enrollment = item.get("enrollment")
-        enrollment_text = str(enrollment) if isinstance(enrollment, int) else ""
+        enrollment_text = f"Enrollment: {enrollment}" if isinstance(enrollment, int) else ""
         evaluation = _string(item.get("evaluation"))
-        line_bits = [bit for bit in [role, term, enrollment_text, evaluation] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
+        evaluation_text = f"Evaluation: {evaluation}" if evaluation else ""
         summary = _string(item.get("summary"))
-        if summary:
-            lines.append(summary)
+        append_entry_text(
+            lines, metadata=(role, term, enrollment_text, evaluation_text), paragraphs=(summary,)
+        )
 
         lines.append(":::")
         lines.append("")
@@ -605,19 +584,12 @@ def _build_references(
 
         title = _string(item.get("title"))
         organization = _string(item.get("organization"))
-        line_bits = [bit for bit in [title, organization] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
         email = _string(item.get("email"))
         relationship = _string(item.get("relationship"))
-        contact_bits = [bit for bit in [relationship, email] if bit]
-        if contact_bits:
-            lines.append(" | ".join(contact_bits))
-
         notes = _string(item.get("notes"))
-        if notes:
-            lines.append(notes)
+        append_entry_text(
+            lines, metadata=(title, organization, relationship, email), paragraphs=(notes,)
+        )
 
         lines.append(":::")
         lines.append("")

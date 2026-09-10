@@ -1649,6 +1649,97 @@ The slice handoff is **pass** for contact usability. The
 records the next reader-facing issues: labeled teaching values, separated entry
 metadata/prose, and semantic authored-document styles.
 
+### Medium — entry metadata ran into prose and teaching values lacked labels — fixed
+
+Rendered education, publication, conference, honor, service, teaching, and
+reference records treated adjacent metadata and prose lines as one paragraph.
+Teaching enrollment/evaluation values appeared without labels. This failed the
+reader-facing criterion that metadata can be distinguished from narrative and
+that numeric values identify their meaning. `build/entry_layout.py` now owns
+compact metadata rows and separate nonempty prose blocks; domain field meaning,
+selection, heading levels, and stable IDs stay in the section builders.
+Teaching uses explicit `Enrollment` and `Evaluation` labels. The live
+[entry structure contract](../howto/styling.md#entry-structure) owns these rules.
+
+After correcting the test fixture to preserve frozen variants and inspect
+Pandoc's actual section elements, ten expected rendering/label checks failed
+before production changes. HTML paragraph checks now cover seven entry types
+and optional teaching values. The real DOCX contains distinct narrative
+paragraphs, and the PDF shows the expected labels. A fresh build from copied
+configured facts retained four pages, 45 PDF bookmarks, and four contact links;
+the first rendered PDF page was byte-identical to the preceding reviewed build.
+The remaining pages and the HTML education/teaching entries were visually
+inspected. Preview had no horizontal overflow or console warnings/errors.
+
+### High for workflow utility — real DOCX edits could not become guarded patches — fixed for shared syntax normalization
+
+The real export/edit/import check found `review_diff_only` for a supported
+Experience bullet change and for an unchanged DOCX. Pandoc's default setext
+headings were not recognized by the review parser; equivalent link notation
+also differed from the canonical Markdown. This contradicted the documented
+supported-edit and verified-no-op outcomes despite the existing tests passing.
+The underlying failure existed independently of paragraph presentation.
+
+`ops/review/markdown.py` now owns conversion and shared Markdown normalization.
+Canonical and imported text use the same Pandoc writer before conservative
+comparison. Original fallback diff text, stable source targets, and expected
+old text remain intact. Actual DOCX checks now prove three outcomes: a real
+bullet edit gives one guarded operation and `ready`; no edits gives zero
+operations and `ready_no_changes`; a changed link destination remains
+`review_diff_only`. Normalization failures are checked before draft allocation;
+a controlled failure initially left a partial import and now preserves the
+complete draft inventory. Later import writes are not a group transaction.
+See the live [comparison contract](../reference/review-contract.md#markdown-comparison).
+
+The DOCX fixture edit preserves XML namespace declarations; the first test
+attempt used a serializer that changed them and was corrected before drawing
+conclusions about the importer. After that correction, the meaningful red
+round-trip checks failed twice, with the changed-link rejection already passing.
+The combined targeted rendering/review checks passed 41 tests. Evidence:
+`/tmp/cvw-entry-layout-red-confirmed.log`,
+`/tmp/cvw-entry-layout-roundtrip-red.log`,
+`/tmp/cvw-review-normalization-preflight-red.log`, and
+`/tmp/cvw-entry-layout-focused.log`.
+
+### Medium — verification accepted a failed editing round trip — fixed with semantic acceptance
+
+The seven-step harness previously accepted an unchanged imported document if
+its output files existed. Its own success fixture reported `review_diff_only`.
+The harness-engineering pass uses the autonomy-hardening lane with
+`architecture-invariants` (the unchanged import must be a no-op) and
+`knowledge-integrity` (the live verification contract must state that threshold).
+The intervention changes false acceptance, not command count or output styling.
+
+The import check now requires `draft.json` to report `ready_no_changes` and name
+its patch, with `project-ops` format and zero operations. The result records
+that verified status. Three controls—review-only status, nonempty operations,
+and wrong format—were falsely accepted before the change and are rejected now.
+The focused harness/docs/boundary suite passed 43 tests. The
+[verify contract](../reference/verify-contract.md#required-evidence) owns the
+acceptance rule; no new runtime policy or external-state authority was added.
+Evidence: `/tmp/cvw-review-harness-red.log` and
+`/tmp/cvw-review-harness-green.log`.
+
+Final verification passed 1,078 tests, one existing opt-in skip, and five upstream
+warnings in 136.64 seconds (`/tmp/cvw-entry-layout-full-final.log`). The final
+33 docs/context/import-boundary checks passed. Three independent seven-step CLI
+runs passed with empty stderr and `ready_no_changes`; canonical Markdown,
+generated Markdown, and preview HTML were byte-identical across those runs.
+Evidence: `/tmp/cvw-entry-layout-repeat-{1,2,3}.json`,
+`/tmp/cvw-entry-layout-repeat-comparison.json`, and
+`/tmp/cvw-entry-layout-contracts-final.log`. The harness skill audit passed.
+
+The private review workspace is identified in `/tmp/cvw-entry-layout-workspace.json`;
+PDF pages and structural measurements are under its `evidence/`, with browser
+screenshots/snapshots under `var/runs/preview/entry-layout-review/`. The audit
+preview server and tab were closed; the original authored-CV review remains
+available. Source-file hashes, the canonical DOCX hash, and the public PDF hash
+were unchanged; all 8,316 private repository entries retained their metadata.
+Context reports ready source, no issues, and publication `review_required`.
+The site worktree is clean. No push, site sync, publication approval, or remote
+advisory check occurred. The handoff decision is **pass** for entry structure,
+DOCX syntax normalization, and the strengthened no-op verification gate.
+
 ## Verification and limits
 
 Baseline: 326 tests passed, one opt-in remote PR integration test skipped. The

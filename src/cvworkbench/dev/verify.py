@@ -593,11 +593,30 @@ def _verify_import_docx(
         data.get("run_id") == expected_run_id,
         f"import-docx resolved unexpected run_id: {data.get('run_id')} != {expected_run_id}",
     )
+    try:
+        metadata = json.loads(metadata_path.read_text())
+        patch = yaml.safe_load(patch_path.read_text())
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise VerifyError("unchanged DOCX import metadata or patch could not be read") from exc
+    _require(
+        isinstance(metadata, dict)
+        and metadata.get("apply_status") == "ready_no_changes"
+        and metadata.get("patch_path") == patch_path.name,
+        "unchanged DOCX import must report ready_no_changes and identify its patch",
+    )
+    _require(
+        isinstance(patch, dict)
+        and isinstance(patch.get("patch"), dict)
+        and patch["patch"].get("format") == "project-ops"
+        and patch["patch"].get("operations") == [],
+        "unchanged DOCX import must contain a project-ops patch with zero operations",
+    )
     return {
         "draft_dir": str(draft_dir),
         "patch": str(patch_path),
         "metadata": str(metadata_path),
         "run_id": str(data["run_id"]),
+        "apply_status": "ready_no_changes",
     }
 
 

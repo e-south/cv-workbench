@@ -2,8 +2,9 @@
 
 - Start with `docs/reference/review-contract.md` for review/import semantics and
   `docs/reference/artifact-retention.md` for run dependencies.
-- `packs.py` owns review bundle creation; `importing.py` owns DOCX conversion and
-  import-draft writes; `patches.py` interprets edits without owning CLI or bundle
+- `packs.py` owns review bundle creation; `importing.py` owns import orchestration
+  and draft writes; `markdown.py` owns DOCX conversion and shared comparison syntax;
+  `patches.py` interprets edits without owning CLI or bundle
   writes; `targets.py` resolves run/project inputs; `catalog.py` inspects bundles.
 - `record.py` owns source identity and baseline hashes. A valid record pins its
   run for imports and for GC within the configured review store. Do not infer
@@ -16,3 +17,7 @@
   Never reinterpret an edited document against an implicit newer build.
 - Test review/import behavior through the operation or CLI with deterministic
   fixtures; use an actual DOCX conversion for end-to-end journeys.
+- Normalize canonical and imported Markdown through the same owner before
+  comparison. Preserve noneditable text and link destinations, stable source
+  guards, and the original fallback diff. Complete conversion/comparison before
+  allocating a draft; see `docs/reference/review-contract.md#markdown-comparison`.

@@ -239,3 +239,15 @@ def test_contact_presentation_routes_one_owner_and_export_contract() -> None:
     assert "tests/build/test_contacts.py" in styling
     assert "publication-contract.md" in styling
     assert "styling.md#contact-presentation" in architecture
+
+
+def test_entry_layout_and_review_normalization_have_routed_owners() -> None:
+    styling = (ROOT / "docs/howto/styling.md").read_text()
+    review = (ROOT / "docs/reference/review-contract.md").read_text()
+    rules = (ROOT / "src/cvworkbench/ops/review/AGENTS.md").read_text()
+    assert "build/entry_layout.py" in styling
+    assert "review-contract.md#markdown-comparison" in styling
+    assert "ops/review/markdown.py" in review
+    assert "tests/ops/review/test_conversion.py" in review
+    assert "tests/build/test_entry_layout.py" in review
+    assert "review-contract.md#markdown-comparison" in rules

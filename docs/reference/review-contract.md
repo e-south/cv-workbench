@@ -115,11 +115,38 @@ in `patch.yaml`. Formatting-only normalized edits report `ready_no_changes`.
 Unsupported edits produce `patch.diff` and `review_diff_only`; they are not
 silently applied to SoT. Follow the reported status before applying a draft.
 
+## Markdown comparison
+
+Review conversion and syntax normalization belong to `ops/review/markdown.py`.
+The canonical Markdown and imported DOCX text are normalized with the
+same local Pandoc Markdown writer before supported-edit comparison. ATX headings
+and unwrapped lines prevent writer defaults from changing the parser's section
+boundaries. The writer also normalizes equivalent link notation; visible labels
+and destinations remain part of the comparison. No source content is rewritten
+by normalization, and a fallback `patch.diff` retains the original canonical
+and imported text for inspection.
+
+The existing supported-edit rules still apply. A real reviewed experience
+bullet can produce `ready` with its stable target and expected old text; an
+unchanged document produces `ready_no_changes`. A changed contact-link
+destination remains `review_diff_only`. This is syntax normalization, not a
+general promise to reconstruct arbitrary Word edits or accept changed claims
+outside the supported fields.
+
+Conversion and comparison finish before an import draft directory is created.
+Pandoc/normalization failures leave the draft inventory unchanged. Later file
+writes retain their existing failure behavior; this is not a whole-import
+transaction guarantee. Pandoc is required for normalization as well as DOCX
+conversion. Actual-export and rejection checks live in
+`tests/build/test_entry_layout.py`; preflight-failure coverage lives in
+`tests/ops/review/test_conversion.py`.
+
 ## Python Ownership
 
 Under `cvworkbench.ops.review`, `packs.build_review_pack` owns bundles,
-`importing.import_docx_review` owns conversion/draft writes, `targets` resolves
-source runs, `patches` interprets edits, `record` owns provenance validation,
+`importing.import_docx_review` owns import orchestration/draft writes,
+`markdown` owns document conversion and shared comparison syntax, `targets`
+resolves source runs, `patches` interprets edits, `record` owns provenance validation,
 and `catalog` owns discovery and source health. `ReviewError` is the shared
 operation error. The CLI adapts these operations; patch interpretation does
 not depend on command parsing.
