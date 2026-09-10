@@ -54,6 +54,50 @@ def test_cli_help_lists_commands() -> None:
     assert "sot" in output
 
 
+def test_variant_gc_explains_record_only_reconciliation(tmp_path: Path) -> None:
+    from cvworkbench.ops.variant_lifecycle import register_variant
+
+    config = tmp_path / "config" / "workbench.yaml"
+    config.parent.mkdir()
+    config.write_text("variant_lifecycle:\n  ttl_days: 7\n")
+    variant = tmp_path / "var" / "drafts" / "gone" / "variant.yaml"
+    variant.parent.mkdir(parents=True)
+    variant.write_text("variant:\n  id: gone\n  outputs: [md]\n")
+    register_variant(
+        config_path=config,
+        variant_path=variant,
+        cleanup_path=variant.parent,
+        source="draft",
+        label=None,
+    )
+    registry = tmp_path / "var" / "variants" / "registry.json"
+    data = json.loads(registry.read_text())
+    data["entries"][0]["expires_at"] = "2020-01-01T00:00:00+00:00"
+    registry.write_text(json.dumps(data))
+    variant.unlink()
+    variant.parent.rmdir()
+    before = registry.read_bytes()
+
+    runner = CliRunner()
+    args = ["variant", "gc", "--config", str(config)]
+    result = runner.invoke(app, [*args, "--json"])
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    assert payload["reconciled"] == 1
+    assert payload["candidates"] == [
+        {
+            "variant_id": "gone",
+            "cleanup_path": str(variant.parent),
+            "action": "reconcile",
+            "reason": "expired",
+        }
+    ]
+    plain = runner.invoke(app, [*args, "--plain"])
+    assert plain.exit_code == 2
+    assert "reconcile" in plain.stdout and str(variant.parent) in plain.stdout
+    assert registry.read_bytes() == before
+
+
 def test_validate_succeeds_with_sample_sot() -> None:
     runner = CliRunner()
 

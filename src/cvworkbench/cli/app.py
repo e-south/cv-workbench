@@ -118,6 +118,7 @@ from cvworkbench.ops.sot_versions import (
 )
 from cvworkbench.ops.tailor import DraftPaths, TailorError, tailor_job
 from cvworkbench.ops.variant_lifecycle import (
+    VariantGcSummary,
     VariantLifecycleError,
     discard_variant,
     gc_variants,
@@ -2252,13 +2253,35 @@ def _print_variant_discard_summary(variant_path: Path, status: str) -> None:
     )
 
 
-def _print_variant_gc_summary(expired: int, kept_pruned: int, status: str) -> None:
+def _print_variant_gc_summary(summary: VariantGcSummary) -> None:
+    candidates = [
+        {**asdict(candidate), "cleanup_path": str(candidate.cleanup_path)}
+        for candidate in summary.candidates
+    ]
+    if get_output_mode() == OutputMode.JSON:
+        print(
+            json.dumps(
+                {"command": "variant.gc", **asdict(summary), "candidates": candidates},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
     print_summary(
         "variant.gc",
         [
-            ("expired", str(expired)),
-            ("kept_pruned", str(kept_pruned)),
-            ("status", status),
+            ("expired", str(summary.expired)),
+            ("kept_pruned", str(summary.kept_pruned)),
+            ("reconciled", str(summary.reconciled)),
+            ("status", summary.status),
+            (
+                "candidates",
+                "\n".join(
+                    f"{item.action} | {item.reason} | {item.variant_id} | {item.cleanup_path}"
+                    for item in summary.candidates
+                )
+                or "none",
+            ),
         ],
     )
 
@@ -4072,7 +4095,7 @@ def variant_gc(
     except (VariantLifecycleError, FileNotFoundError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    _print_variant_gc_summary(summary.expired, summary.kept_pruned, summary.status)
+    _print_variant_gc_summary(summary)
     if not yes and summary.status == "dry_run":
         raise typer.Exit(code=2)
 

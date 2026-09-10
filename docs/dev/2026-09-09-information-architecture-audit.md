@@ -192,7 +192,7 @@ with architecture tests. Resolve configuration once per operation into an
 immutable workspace context; repeated ad hoc reads should not select mixed
 configuration generations during one build.
 
-### Medium — artifact retention is not dependency-aware — open
+### Medium — artifact retention is not dependency-aware — partly fixed
 
 A read-only inventory found 25 expired proposal entries. `variant gc --json`
 failed because a recorded cleanup target was already missing. The run-GC preview
@@ -205,6 +205,16 @@ rules. [runs.py](../../src/cvworkbench/ops/runs.py) retains latest/explicit run 
 but does not derive retention from outstanding review references. Review packs
 should carry a durable source-run/hash record, and cleanup should explain which
 review, project, or publication protects an artifact before proposing removal.
+
+Implemented follow-up: variant GC now exposes an explicit remove/reconcile plan,
+validates every target before deletion, rejects shared-container cleanup, and
+does not re-prune kept sources. Missing targets become record-only reconciliation
+actions. The live dry run reports 25 expired entries: 24 existing bundles and
+one absent bundle. No live cleanup was applied. Regression tests reproduce both
+stale-record failure and partial deletion before a later invalid path; all now
+pass. The owning semantics are in the
+[variant lifecycle contract](../reference/variant-lifecycle.md#cleanup-plan).
+Run retention and durable review references remain open.
 
 ### Medium — documentation contained competing executable owners — fixed
 
@@ -273,8 +283,8 @@ uv run cvw runs gc --json
 uv build --offline --out-dir var/audit/package-check
 ```
 
-The variant-GC command currently reproduces the stale-record finding; it is not
-expected to be green. A wheel build alone is not the installed-package test.
+Variant GC now returns a reviewable dry-run plan; exit code 2 denotes pending
+actions. A wheel build alone is not the installed-package test.
 No remote publish, PR integration, dependency-advisory refresh, or external URL
 ingestion was performed under the repository's local-only policy. URL ingestion
 validates the initial address before delegating to a redirect-capable fetcher;

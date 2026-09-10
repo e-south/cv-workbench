@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -68,9 +68,19 @@ class VariantDiscardResult:
 
 
 @dataclass(frozen=True)
+class VariantGcCandidate:
+    variant_id: str
+    cleanup_path: Path
+    action: Literal["remove", "reconcile"]
+    reason: Literal["expired", "kept_source"]
+
+
+@dataclass(frozen=True)
 class VariantGcSummary:
     expired: int
     kept_pruned: int
+    reconciled: int
+    candidates: tuple[VariantGcCandidate, ...]
     status: str
 
 
@@ -103,7 +113,7 @@ def register_variant(
         raise VariantLifecycleError(f"Variant file not found: {variant_path}")
     if not cleanup_path.exists():
         raise VariantLifecycleError(f"Cleanup path not found: {cleanup_path}")
-    _require_var_path(cleanup_path, config_path)
+    _require_variant_cleanup(variant_path, cleanup_path, config_path)
 
     variant_id = _load_variant_id(variant_path)
     ttl_days = resolve_variant_ttl_days(config_path)
@@ -204,6 +214,9 @@ def discard_variant(
             raise VariantLifecycleError(f"Variant is already discarded: {variant_path}")
 
         cleanup_path = _path_from_registry(entry["cleanup_path"], config_path)
+        _require_variant_cleanup(
+            _path_from_registry(entry["variant_path"], config_path), cleanup_path, config_path
+        )
         if not cleanup_path.exists():
             raise VariantLifecycleError(f"Cleanup path not found: {cleanup_path}")
         if not confirm:
@@ -221,35 +234,52 @@ def gc_variants(*, config_path: Path, confirm: bool) -> VariantGcSummary:
         now = _now()
         expired = 0
         kept_pruned = 0
-        candidates: list[tuple[dict[str, Any], Path]] = []
+        candidates: list[VariantGcCandidate] = []
+        entries: list[dict[str, Any]] = []
         for entry in registry["entries"]:
             if entry["status"] not in {"ephemeral", "kept"}:
+                continue
+            if entry["status"] == "kept" and entry.get("source_pruned_at"):
                 continue
             expires_at = _parse_time(entry.get("expires_at"))
             if expires_at is None or expires_at > now:
                 continue
             cleanup_path = _path_from_registry(entry["cleanup_path"], config_path)
-            if not cleanup_path.exists():
-                raise VariantLifecycleError(f"Cleanup path not found: {cleanup_path}")
-            candidates.append((entry, cleanup_path))
-        for entry, cleanup_path in candidates:
+            _require_variant_cleanup(
+                _path_from_registry(entry["variant_path"], config_path), cleanup_path, config_path
+            )
+            if cleanup_path.exists() and not (cleanup_path.is_dir() or cleanup_path.is_file()):
+                raise VariantLifecycleError(f"Cleanup path is not removable: {cleanup_path}")
+            candidates.append(
+                VariantGcCandidate(
+                    variant_id=entry["variant_id"],
+                    cleanup_path=cleanup_path,
+                    action="remove" if cleanup_path.exists() else "reconcile",
+                    reason="kept_source" if entry["status"] == "kept" else "expired",
+                )
+            )
+            entries.append(entry)
+        for entry, candidate in zip(entries, candidates, strict=True):
             if entry["status"] == "kept":
                 kept_pruned += 1
             else:
                 expired += 1
             if confirm:
-                _remove_path(cleanup_path, config_path)
+                if candidate.action == "remove":
+                    _remove_path(candidate.cleanup_path, config_path)
                 if entry["status"] == "kept":
                     entry["source_pruned_at"] = now.isoformat()
                 else:
                     entry["status"] = "expired"
                     entry["expired_at"] = now.isoformat()
-        if confirm:
+        if confirm and candidates:
             _write_registry(config_path, registry)
         return VariantGcSummary(
             expired=expired,
             kept_pruned=kept_pruned,
-            status="cleaned" if confirm else "dry_run",
+            reconciled=sum(candidate.action == "reconcile" for candidate in candidates),
+            candidates=tuple(candidates),
+            status=("cleaned" if confirm else "dry_run") if candidates else "empty",
         )
 
 
@@ -432,10 +462,20 @@ def _remove_path(path: Path, config_path: Path) -> None:
 def _require_var_path(path: Path, config_path: Path) -> None:
     var_root = resolve_var_root(config_path).resolve()
     resolved = path.resolve()
+    if resolved == var_root:
+        raise VariantLifecycleError(f"Cleanup path must not be the var root: {resolved}")
     try:
         resolved.relative_to(var_root)
     except ValueError as exc:
         raise VariantLifecycleError(f"Cleanup path is outside var: {resolved}") from exc
+
+
+def _require_variant_cleanup(variant: Path, cleanup: Path, config_path: Path) -> None:
+    _require_var_path(cleanup, config_path)
+    if cleanup.resolve() not in {variant.resolve(), variant.resolve().parent}:
+        raise VariantLifecycleError(
+            f"Cleanup path must own the variant file or its immediate bundle: {cleanup}"
+        )
 
 
 def _path_for_registry(path: Path, config_path: Path) -> str:

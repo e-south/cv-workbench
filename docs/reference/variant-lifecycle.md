@@ -33,6 +33,10 @@ var/variants/registry.json
 Entries include the source (`draft` or `project`), the variant file path, and
 expiration metadata. The registry is local-only and gitignored.
 
+Cleanup owns the variant file itself or its immediate bundle directory. Shared
+containers such as `var/`, `var/drafts/`, and a project's parent directory are
+not cleanup targets for a nested proposal.
+
 ## Commands
 
 - `uv run cvw variant list`: show configured variants alongside pending lifecycle entries.
@@ -51,7 +55,33 @@ expiration metadata. The registry is local-only and gitignored.
   and delete its artifacts.
 - `uv run cvw variant discard --project <project-id> --yes`: discard a project proposal by
   project selector instead of a raw path.
-- `uv run cvw variant gc --yes`: remove expired draft/proposal artifacts.
+- `uv run cvw variant gc --json`: inspect expired entries without removing files
+  or updating registry records. Each candidate reports `variant_id`,
+  `cleanup_path`, `action`, and `reason`. A pending plan exits with code 2;
+  an empty plan exits with code 0.
+- `uv run cvw variant gc --yes`: apply the inspected lifecycle actions.
+
+## Cleanup Plan
+
+All eligible cleanup paths are validated before deletion starts. Paths outside
+the workspace's `var/` root, the root itself, and paths that do not own the
+registered variant bundle are rejected in both preview and apply modes.
+
+- `action=remove` deletes an existing expired bundle.
+- `action=reconcile` updates an expired record whose bundle is already absent;
+  it does not delete a replacement or inferred target.
+- `reason=expired` transitions an ephemeral entry to `expired`.
+- `reason=kept_source` records source pruning while preserving the promoted
+  variant and its `kept` status. Already-pruned sources are excluded from later
+  plans.
+
+`expired` and `kept_pruned` count planned lifecycle transitions in a dry run and
+completed transitions on success. `reconciled` counts the subset whose targets
+were already missing. A missing target remains visible in the inbox until an
+explicit apply updates its record. No private workspace cleanup runs implicitly.
+
+Filesystem failures during deletion still stop the operation; the preflight
+does not promise transactional rollback of deleted directories.
 
 Use `uv run cvw variant promote` only for legacy scripts; `uv run cvw variant keep` is the
 preferred path because it updates lifecycle state.
