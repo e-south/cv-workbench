@@ -82,22 +82,43 @@ retain their existing artifact/error behavior. Project builds use the
 temporary source preparation and complete build planning before allocating a
 persistent project run.
 
-`build/planning.py::plan_build` returns a read-only, request-local `BuildPlan`
-containing selected content, normalized formats, captured configuration, and
-resolved render choices. Private content is omitted from its representation.
+`build/planning.py::plan_build` performs no artifact writes and returns a
+request-local `BuildPlan` containing selected content, normalized formats,
+captured configuration, input fingerprints, and resolved render choices.
+Private content is omitted from its representation.
 `build/pipeline.py::execute_build` writes the plan's content and renders artifacts;
 `build_documents` composes the two. Full source-schema validation remains the
 responsibility of the CLI/preview or project operation before this lower-level
 pipeline. Planning performs source loading and content selection, not a separate
 schema-validation policy.
 
-A plan is not a durable job specification, publication approval, or immutable
-input bundle. Its source, variant, filter, and theme files must remain available
-and unchanged during execution. Manifest metadata still reads source and variant
-files during rendering; configuration is the explicit immutable snapshot. A
-project operation retains its prepared source before execution and updates the
-plan's source location without reparsing its selected content. Other concurrent
-file changes and post-preflight artifact recovery remain separate contracts.
+`inputs/sot.py::load_sot_snapshot` owns source parsing and fingerprints. Each
+required or present optional YAML file is read into bytes once, then parsed and
+hashed from that same content. File snippets are captured once per declared path;
+their text normalizes line endings and trims surrounding whitespace, while their
+hashes identify the original bytes. Inline snippet hashes identify the original
+parsed text encoded as UTF-8, including surrounding whitespace.
+`variants.py::load_variant_snapshot` likewise parses and hashes one captured
+variant definition. `load_sot` and `load_variant` return their ordinary parsed
+payloads through these same owners.
+
+The plan carries these fingerprints to `build/manifest.py`; manifest collection
+does not reopen source YAML, snippets, or the variant. Editing or removing those
+files after planning cannot alter the plan's content or recorded input hashes.
+Adding an optional source file after planning does not report it as consumed.
+The `sot_hashes`, `snippet_hashes`, and `variant_hash` fields retain their existing
+names and SHA-256 encodings. Resume and rendered-output hashes describe generated
+artifacts and are collected during execution.
+
+A plan is not a durable job specification, publication approval, or deeply
+immutable input bundle. Source snapshot hash mappings are read-only, but parsed
+source payloads and nested plan values remain ordinary Python containers; callers
+must not mutate them between planning and execution. Capture is per input, not an
+atomic filesystem snapshot across all files. Filter and theme assets must remain
+available and unchanged during rendering. A project operation retains its prepared
+source before execution and updates the plan's source location without reparsing
+its selected content. Render-asset capture and post-preflight artifact recovery
+remain separate contracts.
 
 Each build run and dist manifest records `configuration.sha256`, identifying
 the workbench config bytes used by that build. It remains the captured hash if
@@ -111,7 +132,8 @@ dots, underscores, or hyphens. Selectors such as `--variant` and promotion IDs
 follow this same contract. They select a file beneath `config/variants/`; an ID
 is not a path.
 
-`load_variant(path)` reads YAML and delegates to `parse_variant(raw)`. Project
+`load_variant(path)` uses `load_variant_snapshot(path)`, which reads YAML bytes
+once and delegates to `parse_variant(raw)`. Project
 creation and retargeting use that same parser to validate the exact parsed
 definition they will copy. This avoids a separate project-only schema and a
 second variant-file read between validation and serialization.

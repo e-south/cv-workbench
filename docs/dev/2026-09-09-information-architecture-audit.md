@@ -108,10 +108,10 @@ now leaves its entire workspace unchanged:
 `/tmp/cvw-project-build-preflight-fixed.json`.
 
 A build plan is request-local, not a durable input bundle or publication approval.
-Manifest metadata still reads source and variant files during rendering; those
-files and render assets have separate lifetimes from captured configuration.
-Post-preflight filesystem/render failures can retain incomplete artifacts. Input
-provenance and artifact recovery remain explicit follow-up boundaries.
+The subsequent input-provenance pass captures source and variant fingerprints
+with their consumed content. Render assets have a separate lifetime from captured
+configuration, and post-preflight filesystem/render failures can retain incomplete
+artifacts.
 
 Verification passed 855 tests with one opt-in remote skip and five existing
 PyMuPDF/SWIG warnings (`/tmp/cvw-project-build-full.log`). The 31 focused checks
@@ -122,6 +122,39 @@ checks passed. Source and public-candidate hashes remained unchanged; context
 reported a ready source, no issues, and publication still requiring review.
 The site remained clean. No network refresh, publication approval, sync, or push
 occurred in this pass.
+
+### Medium — build fingerprints could describe unconsumed inputs — fixed
+
+Build planning parsed source facts, snippets, and a variant before manifest
+collection reopened those files during rendering. Editing an input after planning
+produced a document from the captured content with a hash of later content.
+Deleting it caused a metadata error after output writes; adding an optional YAML
+file falsely listed it as consumed. Seven regressions reproduced these failures
+in isolated workspaces (`/tmp/cvw-build-provenance-red.log`). The failed criterion
+was that recorded input fingerprints identify the content actually used.
+
+Source and variant loaders now own parsing and fingerprinting of the same captured
+bytes. A build plan carries that evidence to manifest collection. Duplicate snippet
+paths share one captured read, file text retains newline/whitespace normalization,
+and inline hashes retain their original parsed-text encoding. Manifest field names
+remain stable. Removing the manifest's separate input parser eliminates competing
+interpretations of snippet definitions. The
+[build input lifetime contract](../reference/configuration-contract.md#build-and-render-boundaries)
+defines the per-input guarantee and its limits: nested Python payloads are mutable,
+capture is not atomic across all files, render assets are still path-based, and
+later rendering/filesystem failures can retain partial artifacts.
+
+Verification passed 868 tests with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings (`/tmp/cvw-build-provenance-full.log`). The 129 focused checks
+include mutations during parsing, optional-file changes, exact raw-byte hashes,
+inline text, repeated snippet paths, and content omission from snapshot repr.
+Evidence: `/tmp/cvw-build-provenance-focused.log`. All seven isolated CLI journey
+steps passed with empty stderr (`/tmp/cvw-build-provenance-journey.json`), and 13
+documentation/import-boundary tests passed. All pre-commit hooks, including the
+secret scan, passed (`/tmp/cvw-build-provenance-hooks.log`). The canonical master and public
+candidate hashes remained unchanged. Context reported ready source, no issues,
+and publication still requiring review. The site remained clean; no network
+refresh, publication approval, sync, or push occurred.
 
 ### High — suggested project commands could mutate a different copy — fixed
 
@@ -1256,7 +1289,7 @@ configuration capture for full inspection. Retained history remains inspectable
 when proposals expire or become invalid, and run packaging is independent of
 current source inputs. Project builds now share a callable operation and defer
 persistent run allocation until source/content/render preflight passes. Continue
-with input provenance, artifact recovery, and remaining apply/patch orchestration.
+with render-asset provenance, artifact recovery, and remaining apply/patch orchestration.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,

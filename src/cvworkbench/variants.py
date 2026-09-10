@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -74,8 +75,21 @@ DEFAULT_ORDER = [
 ]
 
 
+@dataclass(frozen=True)
+class VariantSnapshot:
+    variant: Variant
+    sha256: str
+
+
 def load_variant(path: Path) -> Variant:
-    return parse_variant(yaml.safe_load(path.read_text()))
+    return load_variant_snapshot(path).variant
+
+
+def load_variant_snapshot(path: Path) -> VariantSnapshot:
+    """Parse and fingerprint one captured variant definition."""
+    content = path.read_bytes()
+    variant = parse_variant(yaml.safe_load(content.decode("utf-8")))
+    return VariantSnapshot(variant, hashlib.sha256(content).hexdigest())
 
 
 def parse_variant(raw: object) -> Variant:

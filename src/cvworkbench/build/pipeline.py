@@ -134,8 +134,9 @@ def execute_build(
         manifest_executor = ThreadPoolExecutor(max_workers=1)
         manifest_metadata_future = manifest_executor.submit(
             collect_manifest_metadata,
-            variant_path=build_plan.variant_path,
-            sot_path=build_plan.sot_path,
+            sot_hashes=build_plan.sot_hashes,
+            snippet_hashes=build_plan.snippet_hashes,
+            variant_hash=build_plan.variant_hash,
             resume_path=resume_path,
             pdf_engine=build_plan.pdf_engine,
             repo_root=configuration.path.parent.parent,

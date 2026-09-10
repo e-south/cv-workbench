@@ -147,6 +147,9 @@ optional preview launch. The [guidance API](../reference/project-contract.md#gui
 defines result, error, configuration, and recovery semantics.
 
 `build/planning.py` resolves content and render choices without writing artifacts.
+`inputs/sot.py` and `variants.py` capture fingerprints alongside the content they
+parse. The plan carries those fingerprints to `build/manifest.py`, so manifest
+collection does not acquire a different generation of source or variant files.
 `build/pipeline.py` executes the resulting request-local plan; `build_documents`
 composes those phases for ordinary callers. `ops/projects/building.py` combines
 temporary source preparation, schema validation, and that same plan before

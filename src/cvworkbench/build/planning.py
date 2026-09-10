@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,7 @@ from cvworkbench.config import (
     resolve_themes_dir,
     resolve_variant_path,
 )
-from cvworkbench.inputs.sot import load_sot
+from cvworkbench.inputs.sot import load_sot_snapshot
 from cvworkbench.themes import (
     RenderPlan,
     Theme,
@@ -42,7 +43,7 @@ from cvworkbench.themes import (
     hash_theme,
     resolve_theme,
 )
-from cvworkbench.variants import Variant, load_variant
+from cvworkbench.variants import Variant, load_variant_snapshot
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,9 @@ class BuildPlan:
     sot_path: Path
     variant_path: Path
     variant: Variant
+    sot_hashes: Mapping[str, str]
+    snippet_hashes: Mapping[str, str]
+    variant_hash: str
     formats: list[str]
     markdown: str = field(repr=False)
     selection_payload: str = field(repr=False)
@@ -80,12 +84,14 @@ def plan_build(
     if variant_path is None:
         selected_id = variant_id or resolve_default_variant(configuration)
         variant_path = resolve_variant_path(selected_id, configuration)
-    variant = load_variant(variant_path)
+    variant_snapshot = load_variant_snapshot(variant_path)
+    variant = variant_snapshot.variant
     selected_formats = normalize_output_formats(formats if formats is not None else variant.outputs)
     if not selected_formats:
         raise ValueError("No output formats selected")
 
-    sot = load_sot(sot_path)
+    source = load_sot_snapshot(sot_path)
+    sot = source.data
     markdown = build_markdown(sot, variant)
     selection_payload = json.dumps(build_selection(sot, variant), indent=2, sort_keys=True) + "\n"
     resume_payload = build_resume(sot)
@@ -109,6 +115,9 @@ def plan_build(
         sot_path=sot_path,
         variant_path=variant_path,
         variant=variant,
+        sot_hashes=source.sot_hashes,
+        snippet_hashes=source.snippet_hashes,
+        variant_hash=variant_snapshot.sha256,
         formats=selected_formats,
         markdown=markdown,
         selection_payload=selection_payload,
