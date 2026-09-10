@@ -11,13 +11,45 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import ast
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_ACTION = re.compile(r"^\s*-?\s*uses:\s*[^@\s]+@([0-9a-f]{40})(?:\s+#.*)?$")
+
+
+def test_default_pytest_discovery_includes_every_test_bearing_file() -> None:
+    expected = set()
+    for path in (ROOT / "tests").rglob("test_*.py"):
+        nodes = ast.walk(ast.parse(path.read_text()))
+        if any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test_")
+            for node in nodes
+        ):
+            expected.add(path.relative_to(ROOT).as_posix())
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-o", "addopts="],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    collected = {
+        line.split("::", 1)[0]
+        for line in result.stdout.splitlines()
+        if line.startswith("tests/") and "::" in line
+    }
+    assert expected <= collected, (
+        f"Default pytest omitted test files: {sorted(expected - collected)}"
+    )
 
 
 def test_workflows_use_least_privilege_and_immutable_action_pins() -> None:

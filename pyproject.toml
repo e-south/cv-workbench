@@ -52,3 +52,4 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+norecursedirs = [".*", "__pycache__"]

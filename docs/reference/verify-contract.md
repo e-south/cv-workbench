@@ -9,6 +9,21 @@ navigation:
 
 # Verify Contract
 
+## Default test discovery
+
+`uv run pytest` must collect every test-bearing file under `tests/`, including
+the `tests/build/` domain. `pyproject.toml` explicitly defines recursion
+exclusions; package directories must not inherit pytest's generic `build`
+exclusion. A repository-contract regression compares an AST inventory of
+test-bearing files with actual default pytest collection and lists omissions.
+
+After changing test layout or runner configuration, check:
+
+```bash
+uv run pytest tests/test_repository_contracts.py -k discovery
+uv run pytest
+```
+
 `scripts/verify_repo.py` is the repo-local tracer-bullet harness for the
 package's canonical local journeys. It runs in an isolated temp workspace,
 targets `./sot.sample`, and fails fast when the toolchain or artifact contract
