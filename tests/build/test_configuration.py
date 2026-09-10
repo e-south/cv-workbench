@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from cvworkbench.build import pipeline
+from cvworkbench.build import pipeline, planning
 from cvworkbench.cli import app
 from cvworkbench.ops.scaffold import init_project
 from cvworkbench.themes import ThemeError
@@ -30,14 +30,14 @@ def test_build_uses_one_configuration_generation(tmp_path: Path, monkeypatch) ->
         "theme: default", "theme: absent-theme"
     )
     assert changed != initial
-    original_markdown = pipeline.build_markdown
+    original_markdown = planning.build_markdown
 
     def change_config_during_build(*args, **kwargs):
         markdown = original_markdown(*args, **kwargs)
         config.write_text(changed)
         return markdown
 
-    monkeypatch.setattr(pipeline, "build_markdown", change_config_during_build)
+    monkeypatch.setattr(planning, "build_markdown", change_config_during_build)
     result = pipeline.build_documents(
         sot_path=tmp_path / "sot.sample", config_path=config, variant_id=None, formats=["md"]
     )

@@ -107,6 +107,7 @@ projections and their distinct error and read-cost boundaries.
 | Project metadata, proposal inspection, and bounded saved-plan reads | `ops/projects/inspection.py` |
 | Stored job-file observations against recorded digests | `ops/projects/artifacts.py` |
 | Source copies for guarded project edits and owned failure cleanup | `ops/projects/preparation.py` |
+| Project build validation and retained-run orchestration | `ops/projects/building.py` |
 | Saved guidance input fingerprints and comparison | `ops/projects/provenance.py` |
 | Saved-guidance selection warnings and recommendation summaries | `workspace/projects/guidance.py` |
 | Content-review inventory and source health | `workspace/reviews.py` |
@@ -144,6 +145,15 @@ already moved into operations. Guided project creation is owned by
 `ops/projects/workflow.py::guide_project`; its adapter owns presentation and
 optional preview launch. The [guidance API](../reference/project-contract.md#guidance-api)
 defines result, error, configuration, and recovery semantics.
+
+`build/planning.py` resolves content and render choices without writing artifacts.
+`build/pipeline.py` executes the resulting request-local plan; `build_documents`
+composes those phases for ordinary callers. `ops/projects/building.py` combines
+temporary source preparation, schema validation, and that same plan before
+allocating a retained project run. Its CLI adapter delegates to `build_project`
+and presents the result. The [project build API](../reference/project-contract.md#project-build-api)
+and [build input lifetime](../reference/configuration-contract.md#build-and-render-boundaries)
+define the boundary; a plan is not a persistent input snapshot.
 
 ## Command adapters
 

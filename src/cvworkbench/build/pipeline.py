@@ -12,36 +12,24 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import copy
-import json
 import shutil
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from cvworkbench.build.formats import normalize_output_formats
 from cvworkbench.build.manifest import build_manifest, collect_manifest_metadata, write_manifest
-from cvworkbench.build.markdown import build_markdown
-from cvworkbench.build.paths import filters_dir, output_path
-from cvworkbench.build.rendering import RenderRequest, render_documents, resolve_filter_paths
-from cvworkbench.build.resume import build_resume, write_resume
-from cvworkbench.build.selection import build_selection
+from cvworkbench.build.paths import output_path
+from cvworkbench.build.planning import BuildPlan, plan_build
+from cvworkbench.build.rendering import RenderRequest, render_documents
+from cvworkbench.build.resume import write_resume
 from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.config import (
     ConfigSource,
-    read_config,
-    resolve_default_theme,
-    resolve_default_variant,
     resolve_dist_path,
-    resolve_pdf_engine,
     resolve_runs_path,
-    resolve_style_preset,
-    resolve_themes_dir,
-    resolve_variant_path,
 )
-from cvworkbench.inputs.sot import load_sot
-from cvworkbench.themes import ThemeError, build_render_plan, hash_theme, resolve_theme
-from cvworkbench.variants import Variant, load_variant
+from cvworkbench.variants import Variant
 
 
 @dataclass(frozen=True)
@@ -68,56 +56,45 @@ def build_documents(
     dist_dir: Path | None = None,
     write_audit_artifacts: bool = True,
 ) -> BuildResult:
-    configuration = read_config(config_path)
-    config_path = configuration.path
-    if variant_path_override is not None:
-        variant_path = variant_path_override
-        variant = load_variant(variant_path)
-        resolved_variant = variant.id
-    else:
-        resolved_variant = variant_id or resolve_default_variant(configuration)
-        variant_path = resolve_variant_path(resolved_variant, configuration)
-        variant = load_variant(variant_path)
-    selected_formats = formats if formats is not None else variant.outputs
-    selected_formats = normalize_output_formats(selected_formats)
-    if not selected_formats:
-        raise ValueError("No output formats selected")
+    build_plan = plan_build(
+        sot_path=sot_path,
+        config_path=config_path,
+        variant_id=variant_id,
+        formats=formats,
+        theme=theme,
+        style_preset=style_preset,
+        variant_path_override=variant_path_override,
+    )
+    return execute_build(
+        build_plan,
+        run_dir=run_dir,
+        dist_dir=dist_dir,
+        write_audit_artifacts=write_audit_artifacts,
+    )
 
-    sot = load_sot(sot_path)
-    markdown = build_markdown(sot, variant)
-    selection = build_selection(sot, variant)
-    selection_payload = json.dumps(selection, indent=2, sort_keys=True) + "\n"
 
-    filters_path = filters_dir()
-    resolved_filter_paths = resolve_filter_paths(filters_path)
-    pdf_engine = resolve_pdf_engine(configuration)
-    theme_id = theme or variant.render_theme or resolve_default_theme(configuration)
-    preset = style_preset or variant.render_style_preset or resolve_style_preset(configuration)
-    theme_root = resolve_themes_dir(configuration)
-    try:
-        theme_obj = resolve_theme(theme_root, theme_id)
-    except ThemeError as exc:
-        raise ValueError(str(exc)) from exc
-
-    render_plans = {
-        fmt: build_render_plan(
-            output_format=fmt,
-            theme=theme_obj,
-            style_preset=preset,
-            pdf_engine=pdf_engine,
-        )
-        for fmt in selected_formats
-    }
-
+def execute_build(
+    build_plan: BuildPlan,
+    *,
+    run_dir: Path | None = None,
+    dist_dir: Path | None = None,
+    write_audit_artifacts: bool = True,
+) -> BuildResult:
+    """Write and render a request-local plan while its source and render inputs remain available."""
+    configuration = build_plan.configuration
+    variant = build_plan.variant
+    selected_formats = build_plan.formats
+    theme_obj = build_plan.theme
+    preset = build_plan.style_preset
+    selection_payload = build_plan.selection_payload
     dist_dir = dist_dir or (resolve_dist_path(configuration) / variant.id)
     run_dir = _ensure_run_dir(resolve_runs_path(configuration), run_dir)
     canonical_path = run_dir / "canonical.md"
-    canonical_path.write_text(markdown)
+    canonical_path.write_text(build_plan.markdown)
     resume_path: Path | None = None
     if write_audit_artifacts:
-        resume_payload = build_resume(sot)
         resume_path = run_dir / "resume.json"
-        write_resume(resume_path, resume_payload)
+        write_resume(resume_path, build_plan.resume_payload)
         selection_path = run_dir / "selection.json"
         selection_path.write_text(selection_payload)
 
@@ -127,14 +104,13 @@ def build_documents(
 
     output_paths: dict[str, Path] = {}
     render_details: dict[str, dict[str, str | None | list[str]]] = {}
-    theme_hash = hash_theme(theme_obj) if write_audit_artifacts else None
     render_requests: list[RenderRequest] = []
     manifest_metadata_future: Future | None = None
     manifest_executor: ThreadPoolExecutor | None = None
 
     for fmt in selected_formats:
         output_file = output_path(dist_dir, variant, fmt)
-        plan = render_plans[fmt]
+        plan = build_plan.render_plans[fmt]
         if fmt == "html":
             plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
         render_requests.append(
@@ -142,9 +118,9 @@ def build_documents(
                 input_path=canonical_path,
                 output_path=output_file,
                 variant=variant,
-                filters_dir=filters_path,
+                filters_dir=build_plan.filters_path,
                 output_format=fmt,
-                pdf_engine=pdf_engine,
+                pdf_engine=build_plan.pdf_engine,
                 render_plan=plan,
             )
         )
@@ -158,11 +134,11 @@ def build_documents(
         manifest_executor = ThreadPoolExecutor(max_workers=1)
         manifest_metadata_future = manifest_executor.submit(
             collect_manifest_metadata,
-            variant_path=variant_path,
-            sot_path=sot_path,
+            variant_path=build_plan.variant_path,
+            sot_path=build_plan.sot_path,
             resume_path=resume_path,
-            pdf_engine=pdf_engine,
-            repo_root=config_path.parent.parent,
+            pdf_engine=build_plan.pdf_engine,
+            repo_root=configuration.path.parent.parent,
         )
         return manifest_metadata_future
 
@@ -190,7 +166,7 @@ def build_documents(
     try:
         render_documents(
             render_requests,
-            filter_paths=resolved_filter_paths,
+            filter_paths=build_plan.filter_paths,
             after_each_success=_record_render_success,
         )
         if write_audit_artifacts:
@@ -203,7 +179,7 @@ def build_documents(
                 configuration_sha256=configuration.sha256,
                 render={
                     "theme": theme_obj.id,
-                    "theme_hash": theme_hash,
+                    "theme_hash": build_plan.theme_hash,
                     "style_preset": preset,
                     "formats": render_details,
                 },

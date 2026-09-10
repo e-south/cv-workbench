@@ -29,6 +29,10 @@
   destination outside source/project trees; cleanup must verify directory
   ownership. Preview callers own temporary lifetimes rather than replacing an
   existing staging directory.
+- `building.py::build_project` owns project build orchestration. Validate prepared
+  source and construct the shared build plan before allocating a persistent run.
+  Keep render/content planning in `build/planning.py`, artifact execution in
+  `build/pipeline.py`, and terminal errors/output in the CLI adapter.
 - `guidance.py` interprets job evidence and ranks variants. It does not select
   terminal output modes or start preview servers. Catalog loading belongs to
   `cvworkbench.variants`; workspace code owns inventory presentation.

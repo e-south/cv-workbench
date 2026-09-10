@@ -77,8 +77,27 @@ format plans before the pipeline creates its run or output artifacts. Invalid
 theme/style/path configuration therefore cannot leave a partial build behind.
 The standalone render command validates its settings and format plans before
 creating its destination directory. Rendering/tool failures after preflight
-retain their existing artifact/error behavior. Project CLI setup may create its
-project-local source/run workspace before the build pipeline is entered.
+retain their existing artifact/error behavior. Project builds use the
+[project build operation](project-contract.md#project-build-api) to validate
+temporary source preparation and complete build planning before allocating a
+persistent project run.
+
+`build/planning.py::plan_build` returns a read-only, request-local `BuildPlan`
+containing selected content, normalized formats, captured configuration, and
+resolved render choices. Private content is omitted from its representation.
+`build/pipeline.py::execute_build` writes the plan's content and renders artifacts;
+`build_documents` composes the two. Full source-schema validation remains the
+responsibility of the CLI/preview or project operation before this lower-level
+pipeline. Planning performs source loading and content selection, not a separate
+schema-validation policy.
+
+A plan is not a durable job specification, publication approval, or immutable
+input bundle. Its source, variant, filter, and theme files must remain available
+and unchanged during execution. Manifest metadata still reads source and variant
+files during rendering; configuration is the explicit immutable snapshot. A
+project operation retains its prepared source before execution and updates the
+plan's source location without reparsing its selected content. Other concurrent
+file changes and post-preflight artifact recovery remain separate contracts.
 
 Each build run and dist manifest records `configuration.sha256`, identifying
 the workbench config bytes used by that build. It remains the captured hash if

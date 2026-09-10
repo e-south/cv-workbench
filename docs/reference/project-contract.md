@@ -218,6 +218,47 @@ freshness of the original source, source facts, variant catalog, saved guidance,
 or build output. Review readiness continues to describe the selected immutable
 run's available review inputs; it is independent of this job-artifact check.
 
+## Project build API
+
+```python
+from pathlib import Path
+from cvworkbench.ops.projects import build_project
+
+result = build_project(
+    "research",
+    config_path=Path("config/workbench.yaml"),
+    formats=["md", "pdf", "docx"],
+)
+```
+
+This operation owns `build --project`. It accepts the shared project selector,
+a configuration path or `ConfigSnapshot`, and optional `sot_path`, `theme`, and
+`style_preset` overrides. The proposal owns variant selection. The operation
+captures one configuration generation for project/source resolution, run
+placement, content selection, and render choices, and prints nothing.
+
+Guarded edits are prepared in a temporary source copy. Source schema validation,
+variant/content selection, format normalization, filter resolution, and render
+planning complete before a persistent project run is allocated. Preflight errors
+leave the workspace unchanged and release temporary preparation. An explicit
+source override selects that source instead of the manifest's active version.
+
+The returned `BuildResult` exposes `run_dir`, `dist_dir`, `canonical_path`, the
+selected variant, formats, theme, and preset. Both artifact destinations are the
+allocated `<runs-root>/projects/<id>/<run-id>/` directory. A nonempty patch's
+prepared source is retained in that run's `sot/`; an
+empty patch uses the selected source directly. The operation does not modify the
+source or project, publish output, or start a preview.
+
+`ProjectBuildError.errors` preserves individual source-validation diagnostics;
+the CLI prints each on stderr and exits with code 1 without partial JSON. Other
+selection, configuration, preparation, and renderer exceptions retain their
+domain types for Python callers and become CLI errors. Filesystem or renderer
+failures after successful preflight can leave an incomplete run for inspection;
+preflight is not rollback or a guarantee of external-tool success. Configuration
+capture does not freeze every source, variant, and theme file; see
+[build planning and input lifetime](configuration-contract.md#build-and-render-boundaries).
+
 ## Source preparation
 
 `cvworkbench.ops.projects.prepare_project_sot(project_dir=..., sot_path=...,
@@ -488,6 +529,7 @@ Internal modules import concrete owners rather than the public entrypoint.
 | Creation preflight, captured inputs, retargeting, registration, and discard | `creation.py` |
 | Guarded edit authoring, compilation, and application | `patches.py` |
 | Source preparation in a fresh owned directory and failure cleanup | `preparation.py` |
+| Project build preflight, source validation, retained-run orchestration | `building.py` |
 | Job evidence, variant ranking, and proposal plans | `guidance.py` |
 | Saved guidance input fingerprints and comparison | `provenance.py` |
 | Guided creation, preflight, result records, and recovery | `workflow.py` |

@@ -18,7 +18,7 @@ import typer
 
 from cvworkbench.build.formats import normalize_output_formats
 from cvworkbench.build.paths import filters_dir, output_path
-from cvworkbench.build.pipeline import BuildResult, build_documents, create_run_dir
+from cvworkbench.build.pipeline import BuildResult, build_documents
 from cvworkbench.build.rendering import (
     RenderError,
     RenderRequest,
@@ -34,21 +34,16 @@ from cvworkbench.config import (
     resolve_default_variant,
     resolve_dist_path,
     resolve_pdf_engine,
-    resolve_runs_path,
     resolve_sot_path,
     resolve_style_preset,
     resolve_themes_dir,
     resolve_variant_path,
 )
-from cvworkbench.inputs.sot_versions import (
-    SotVersionError,
-    resolve_active_sot_path,
-)
+from cvworkbench.inputs.sot_versions import SotVersionError
 from cvworkbench.ops.projects import (
+    ProjectBuildError,
     ProjectError,
-    load_project,
-    prepare_project_sot,
-    resolve_project_dir,
+    build_project,
 )
 from cvworkbench.themes import (
     ThemeError,
@@ -174,73 +169,39 @@ def build(
     configure_output_mode(plain, json_output)
     try:
         configuration = read_config(config)
-    except (FileNotFoundError, ValueError) as exc:
-        typer.echo(f"ERROR: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    project_spec = None
-    variant_path_override = None
-    run_dir = None
-    if project is not None:
-        try:
-            project_dir = resolve_project_dir(project, configuration)
-            project_spec = load_project(project_dir)
-        except ProjectError as exc:
-            typer.echo(f"ERROR: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
-        if variant:
-            typer.echo("ERROR: --variant cannot be combined with --project", err=True)
-            raise typer.Exit(code=2)
-        variant_path_override = project_spec.variant_path
-        try:
-            resolved = resolve_active_sot_path(project_spec.sot_path)
-        except SotVersionError as exc:
-            typer.echo(f"ERROR: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
-        if sot_path is not None:
-            try:
-                resolved = resolve_sot_path(sot_path, configuration)
-            except (FileNotFoundError, ValueError) as exc:
-                typer.echo(f"ERROR: {exc}", err=True)
-                raise typer.Exit(code=1) from exc
-        runs_root = resolve_runs_path(configuration) / "projects" / project_spec.project_id
-        runs_root.mkdir(parents=True, exist_ok=True)
-        run_dir = create_run_dir(runs_root)
-        try:
-            resolved = prepare_project_sot(
-                project_dir=project_spec.project_dir,
-                sot_path=resolved,
-                target_dir=run_dir / "sot",
+        parsed_formats = _parse_formats(formats)
+        if project is not None:
+            if variant:
+                typer.echo("ERROR: --variant cannot be combined with --project", err=True)
+                raise typer.Exit(code=2)
+            result = build_project(
+                project,
+                config_path=configuration,
+                sot_path=sot_path,
+                formats=parsed_formats,
+                theme=theme,
+                style_preset=style_preset,
             )
-        except ProjectError as exc:
-            typer.echo(f"ERROR: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
-    else:
-        try:
+        else:
             resolved = resolve_sot_path(sot_path, configuration)
-        except (FileNotFoundError, ValueError) as exc:
-            typer.echo(f"ERROR: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
-
-    errors = _validate_sot(resolved)
-    if errors:
-        for error in errors:
+            errors = _validate_sot(resolved)
+            if errors:
+                for error in errors:
+                    typer.echo(f"ERROR: {error}", err=True)
+                raise typer.Exit(code=1)
+            result = build_documents(
+                sot_path=resolved,
+                config_path=configuration,
+                variant_id=variant,
+                formats=parsed_formats,
+                theme=theme,
+                style_preset=style_preset,
+            )
+    except ProjectBuildError as exc:
+        for error in exc.errors:
             typer.echo(f"ERROR: {error}", err=True)
-        raise typer.Exit(code=1)
-
-    parsed_formats = _parse_formats(formats)
-    try:
-        result = build_documents(
-            sot_path=resolved,
-            config_path=configuration,
-            variant_id=variant,
-            formats=parsed_formats,
-            theme=theme,
-            style_preset=style_preset,
-            variant_path_override=variant_path_override,
-            run_dir=run_dir,
-            dist_dir=run_dir if project_spec is not None else None,
-        )
-    except (ValueError, RenderError, ThemeError) as exc:
+        raise typer.Exit(code=1) from exc
+    except (OSError, ValueError, ProjectError, SotVersionError, RenderError, ThemeError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _print_build_summary(result)

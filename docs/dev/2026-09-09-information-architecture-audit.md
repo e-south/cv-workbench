@@ -78,17 +78,50 @@ unchanged, context reported a ready source with no issues, and publication still
 required review. The site remained clean; no network refresh, publication
 approval, sync, or push occurred.
 
-### Medium — project build allocates a run before render preflight — open
+### Medium — project build allocated a run before render preflight — fixed
 
-The CLI still creates a project run before the build pipeline validates render
+The CLI created a project run before the build pipeline validated render
 settings. A real isolated `build --project research --format md --json` with a
 missing theme exited with the expected diagnostic but left a new run directory.
 The source was unchanged. Evidence: `/tmp/cvw-project-build-preflight-audit.json`.
-This fails the preflight-before-artifact-write criterion and can accumulate
-incomplete runs. The next operation extraction should share validated build
-inputs between the Python API and CLI, and defer persistent run allocation until
-source, proposal, formats, and render-plan checks have passed. Rendering failures
-after validated inputs need a separately defined artifact-recovery contract.
+This violated preflight-before-artifact-write and accumulated incomplete runs.
+
+`ops/projects/building.py::build_project` now owns the same callable workflow
+used by the CLI. It captures configuration once, prepares edits temporarily,
+validates source data, and constructs a shared build plan before run allocation.
+`build/planning.py` owns content/format/render choices; `build/pipeline.py` executes
+the plan without repeating those decisions. Nonempty edits retain their prepared
+source in the successful run, and project outputs remain run-local. Source and
+project input files remain unchanged. The
+[project build API](../reference/project-contract.md#project-build-api) is the
+operator-facing contract.
+
+Initial CLI regressions for theme, preset, formats, empty formats, and source
+validation reproduced persistent writes (`/tmp/cvw-project-build-red.log`). The
+tests also cover unsafe variant IDs, stale patch guards, missing letter selection,
+individual source diagnostics, and the Python API's retained source/output hashes.
+Configuration checks exercise settings edits/removal during preparation and an
+explicit captured snapshot. A real planner/executor check proves planning writes
+nothing, omits private content from its representation, and preserves captured
+settings when the config file disappears. Repeating the original fixture command
+now leaves its entire workspace unchanged:
+`/tmp/cvw-project-build-preflight-fixed.json`.
+
+A build plan is request-local, not a durable input bundle or publication approval.
+Manifest metadata still reads source and variant files during rendering; those
+files and render assets have separate lifetimes from captured configuration.
+Post-preflight filesystem/render failures can retain incomplete artifacts. Input
+provenance and artifact recovery remain explicit follow-up boundaries.
+
+Verification passed 855 tests with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings (`/tmp/cvw-project-build-full.log`). The 31 focused checks
+passed, as did all seven isolated CLI journey steps with empty stderr
+(`/tmp/cvw-project-build-final-focused.log` and
+`/tmp/cvw-project-build-journey.json`). Ruff and documentation/import-boundary
+checks passed. Source and public-candidate hashes remained unchanged; context
+reported a ready source, no issues, and publication still requiring review.
+The site remained clean. No network refresh, publication approval, sync, or push
+occurred in this pass.
 
 ### High — suggested project commands could mutate a different copy — fixed
 
@@ -1221,7 +1254,9 @@ changed, or unreadable artifacts independently of run review readiness. Shared
 project inspection now supplies CLI and preview observations with explicit
 configuration capture for full inspection. Retained history remains inspectable
 when proposals expire or become invalid, and run packaging is independent of
-current source inputs. Continue with remaining project command orchestration.
+current source inputs. Project builds now share a callable operation and defer
+persistent run allocation until source/content/render preflight passes. Continue
+with input provenance, artifact recovery, and remaining apply/patch orchestration.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,

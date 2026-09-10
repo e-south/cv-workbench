@@ -12,6 +12,8 @@ Module Author(s): Eric J. South
 from cvworkbench.ops.projects.artifacts import (
     inspect_project_artifacts as inspect_project_artifacts,
 )
+from cvworkbench.ops.projects.building import ProjectBuildError as ProjectBuildError
+from cvworkbench.ops.projects.building import build_project as build_project
 from cvworkbench.ops.projects.creation import create_project_from_file as create_project_from_file
 from cvworkbench.ops.projects.creation import create_project_from_url as create_project_from_url
 from cvworkbench.ops.projects.creation import discard_project_workspace as discard_project_workspace
