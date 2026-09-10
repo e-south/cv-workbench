@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,8 +24,12 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_sot_path, resolve_variant_path
 from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
-from cvworkbench.ops.publication.artifact import validate_public_artifact, validate_publish_policy
-from cvworkbench.ops.publication.pdf import PublicPdfError, validate_public_pdf
+from cvworkbench.ops.publication.artifact import (
+    PublicArtifact,
+    read_public_artifact,
+    validate_publish_policy,
+)
+from cvworkbench.ops.publication.pdf import PublicPdfError, validate_public_pdf_content
 from cvworkbench.ops.publication.policy import PublishConfig, PublishError, load_publish_config
 from cvworkbench.ops.publication.state import inspect_publication
 from cvworkbench.variants import load_variant
@@ -64,8 +68,15 @@ class SiteSyncConfig:
 
 
 @dataclass(frozen=True)
+class PdfCopy:
+    source: Path
+    destination: Path
+    content: bytes = field(repr=False)
+
+
+@dataclass(frozen=True)
 class SyncPlan:
-    copy_ops: list[tuple[Path, Path]]
+    copy_ops: tuple[PdfCopy, ...]
     frontmatter_path: Path
     frontmatter_content: str
     manifest_path: Path
@@ -149,9 +160,9 @@ def sync_site(
         raise SyncError(f"Missing PDF output: {source_pdf}")
     source_manifest = publish_dir / "manifest.json"
     try:
-        pdf_hash = validate_public_artifact(source_pdf, source_manifest, variant, publish)
-        validate_public_pdf(
-            source_pdf,
+        artifact = read_public_artifact(source_pdf, source_manifest, variant, publish)
+        validate_public_pdf_content(
+            artifact.content,
             variant=variant,
             publish=publish,
             sot_path=resolve_sot_path(None, config_path),
@@ -162,8 +173,10 @@ def sync_site(
     publication = inspect_publication(config_path, variant.id, publish_config_path=policy_path)
     if publication.state != "reviewed":
         raise SyncError(f"Publication is {publication.state}: {'; '.join(publication.reasons)}")
+    if publication.pdf_sha256 != artifact.sha256:
+        raise SyncError("Reviewed PDF does not match captured artifact; retry sync")
 
-    plan = _plan_sync(site, source_pdf, pdf_hash, publish)
+    plan = _plan_sync(site, artifact, publish)
     branch_name: str | None = None
     if mode == "local":
         if plan.has_changes():
@@ -184,8 +197,8 @@ def sync_site(
     _apply_plan(plan)
     _run_git(site.repo_path, ["add", str(plan.frontmatter_path)])
     _run_git(site.repo_path, ["add", str(plan.manifest_path)])
-    for _, dest in plan.copy_ops:
-        _run_git(site.repo_path, ["add", str(dest)])
+    for copy in plan.copy_ops:
+        _run_git(site.repo_path, ["add", str(copy.destination)])
 
     if _git_has_changes(site.repo_path):
         _run_git(site.repo_path, ["commit", "-m", "Update CV artifacts"])
@@ -211,24 +224,23 @@ def sync_site(
 
 def _plan_sync(
     site: SiteSyncConfig,
-    source_pdf: Path,
-    pdf_hash: str,
+    artifact: PublicArtifact,
     publish: PublishConfig,
 ) -> SyncPlan:
     dest_pdf = site.repo_path / site.cv_pdf_dir / site.cv_pdf_name
     dest_page = site.repo_path / site.cv_page
     manifest_path = site.repo_path / site.cv_manifest
 
-    copy_ops: list[tuple[Path, Path]] = []
-    if _content_changed(source_pdf, dest_pdf):
-        copy_ops.append((source_pdf, dest_pdf))
+    copy_ops: tuple[PdfCopy, ...] = ()
+    if not dest_pdf.exists() or _hash_file(dest_pdf) != artifact.sha256:
+        copy_ops = (PdfCopy(artifact.source, dest_pdf, artifact.content),)
 
     if not dest_page.exists():
         raise SyncError(f"Missing site page: {dest_page}")
 
     pdf_url = _pdf_url(site.cv_pdf_dir, site.cv_pdf_name)
     frontmatter_content = _update_frontmatter(dest_page, site.cv_page_frontmatter_key, pdf_url)
-    manifest_content = _public_manifest(site, pdf_hash, publish)
+    manifest_content = _public_manifest(site, artifact.sha256, publish)
     if manifest_path.exists() and manifest_path.read_text() == manifest_content:
         manifest_content = ""
 
@@ -243,9 +255,7 @@ def _plan_sync(
 
 
 def _apply_plan(plan: SyncPlan) -> None:
-    writes: list[tuple[Path, bytes]] = [
-        (destination, source.read_bytes()) for source, destination in plan.copy_ops
-    ]
+    writes: list[tuple[Path, bytes]] = [(copy.destination, copy.content) for copy in plan.copy_ops]
     if plan.frontmatter_content:
         writes.append((plan.frontmatter_path, plan.frontmatter_content.encode()))
     if plan.manifest_content:
@@ -275,12 +285,6 @@ def _public_manifest(
         for key, value in sorted(payload.items())
     ]
     return "{\n" + ",\n".join(fields) + "\n}\n"
-
-
-def _content_changed(source: Path, dest: Path) -> bool:
-    if not dest.exists():
-        return True
-    return _hash_file(source) != _hash_file(dest)
 
 
 def _hash_file(path: Path) -> str:

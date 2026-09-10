@@ -30,6 +30,7 @@ import yaml
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_reviews_path, resolve_variant_path
 from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
+from cvworkbench.ops.publication.manifest import publication_manifest_content
 from cvworkbench.ops.publication.packet import PublicationReviewError, publication_review_files
 from cvworkbench.ops.publication.policy import PublishConfig, load_publish_config
 from cvworkbench.ops.publication.record import preparation_bytes
@@ -159,7 +160,7 @@ def prepare_public_pdf(
                 review_files = publication_review_files(public_pdf_bytes)
             except PublicationReviewError as exc:
                 raise PublicPdfError(str(exc)) from exc
-            manifest_content = _publication_manifest_content(
+            manifest_content = publication_manifest_content(
                 authored_name=authored_source.name,
                 authored_sha256=authored_sha256,
                 source_pdf_name=source_pdf.name,
@@ -169,7 +170,8 @@ def prepare_public_pdf(
                 variant=variant,
                 publish=publish,
                 redaction_count=redaction_plan.count,
-                source_match=source_match,
+                pdf_token_coverage=source_match.pdf_token_coverage,
+                docx_token_coverage=source_match.docx_token_coverage,
                 source_visual_fingerprint=source_visual_fingerprint,
             )
             record_content = preparation_bytes(
@@ -221,11 +223,44 @@ def validate_public_pdf(
 
     person = _load_person(sot_path)
     document = _open_pdf(path)
+    _validate_public_document(
+        document, person=person, variant=variant, publish=publish, label=str(path)
+    )
+
+
+def validate_public_pdf_content(
+    content: bytes,
+    *,
+    variant: Variant,
+    publish: PublishConfig,
+    sot_path: Path,
+) -> None:
+    """Validate captured PDF bytes without reopening a mutable artifact path."""
+    person = _load_person(sot_path)
+    if not content.startswith(b"%PDF-"):
+        raise PublicPdfError("Public artifact is not a PDF")
+    try:
+        document = pymupdf.open(stream=content, filetype="pdf")
+    except (pymupdf.FileDataError, RuntimeError) as exc:
+        raise PublicPdfError("Invalid PDF artifact") from exc
+    _validate_public_document(
+        document, person=person, variant=variant, publish=publish, label="captured PDF"
+    )
+
+
+def _validate_public_document(
+    document: pymupdf.Document,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+    publish: PublishConfig,
+    label: str,
+) -> None:
     try:
         if document.needs_pass:
-            raise PublicPdfError(f"Public PDF must not be encrypted: {path}")
+            raise PublicPdfError(f"Public PDF must not be encrypted: {label}")
         if document.embfile_count():
-            raise PublicPdfError(f"Public PDF must not contain embedded files: {path}")
+            raise PublicPdfError(f"Public PDF must not contain embedded files: {label}")
         _validate_source_visual_contract(document, publish)
         _validate_pdf_links(document, person=person, variant=variant)
         text = "\n".join(page.get_text() for page in document)
@@ -860,51 +895,6 @@ def _temporary_pdf_path(output_pdf: Path) -> Path:
     )
     os.close(descriptor)
     return Path(value)
-
-
-def _publication_manifest_content(
-    *,
-    authored_name: str,
-    authored_sha256: str,
-    source_pdf_name: str,
-    source_pdf_sha256: str,
-    output_pdf_name: str,
-    output_pdf_sha256: str,
-    variant: Variant,
-    publish: PublishConfig,
-    redaction_count: int,
-    source_match: _SourceMatch,
-    source_visual_fingerprint: str,
-) -> str:
-    payload = {
-        "schema_version": 1,
-        "artifact_kind": "authored-pdf-publication",
-        "variant": {
-            "id": variant.id,
-            "exclude_tags": list(variant.exclude_tags),
-            "contact_fields": list(variant.contact_fields),
-            "order": list(variant.order),
-        },
-        "formats": ["pdf"],
-        "outputs": {"pdf": output_pdf_name},
-        "output_hashes": {"pdf": output_pdf_sha256},
-        "source": {
-            "authored_name": authored_name,
-            "authored_sha256": authored_sha256,
-            "exported_pdf_name": source_pdf_name,
-            "exported_pdf_sha256": source_pdf_sha256,
-            "pdf_token_coverage": round(source_match.pdf_token_coverage, 6),
-            "docx_token_coverage": round(source_match.docx_token_coverage, 6),
-            "visual_fingerprint_sha256": source_visual_fingerprint,
-        },
-        "transformation": {
-            "kind": "semantic-redaction",
-            "forbidden_contact_fields": list(publish.forbidden_contact_fields),
-            "forbidden_sections": list(publish.forbidden_sections),
-            "redaction_count": redaction_count,
-        },
-    }
-    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def _hash_file(path: Path) -> str:

@@ -58,6 +58,15 @@ writes a sanitized manifest containing the public path, artifact hash, variant,
 and disclosure policy. Source paths, SoT hashes, and private content never cross
 the site boundary.
 
+Sync captures PDF bytes once for manifest identity and disclosure validation.
+The current review receipt must identify that same captured PDF hash; a review
+for another publication generation stops sync. The immutable copy plan carries
+those validated bytes through destination comparison and atomic replacement.
+It never reopens the PDF source to perform the copy. Replacing the source after
+planning therefore cannot substitute unreviewed bytes or make the destination
+disagree with the sanitized manifest hash. This binds artifact content for the
+operation; it does not lock source files or configuration against other writers.
+
 All changed outputs are staged before replacement. If any replacement fails,
 sync restores every previously replaced artifact before returning an error, so
 the PDF, frontmatter, and manifest cannot remain at mixed generations.

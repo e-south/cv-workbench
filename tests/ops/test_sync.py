@@ -97,6 +97,10 @@ def _write_workspace(
     publish_dir = root / "var" / "publish" / "base"
     publish_dir.mkdir(parents=True, exist_ok=True)
     (publish_dir / "cv.pdf").write_bytes(pdf_bytes)
+    authored = root / "authored.docx"
+    exported = root / "exported.pdf"
+    _write_docx(authored, "Public artifact")
+    exported.write_bytes(pdf_bytes)
     pdf_hash = manifest_pdf_hash or hashlib.sha256(pdf_bytes).hexdigest()
     (publish_dir / "manifest.json").write_text(
         json.dumps(
@@ -113,9 +117,15 @@ def _write_workspace(
                 "outputs": {"pdf": "cv.pdf"},
                 "output_hashes": {"pdf": pdf_hash},
                 "source": {
+                    "authored_name": authored.name,
+                    "authored_sha256": hash_file(authored),
+                    "exported_pdf_name": exported.name,
+                    "exported_pdf_sha256": hash_file(exported),
+                    "pdf_token_coverage": 1.0,
+                    "docx_token_coverage": 1.0,
                     "visual_fingerprint_sha256": (
                         "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
-                    )
+                    ),
                 },
                 "transformation": {
                     "kind": "semantic-redaction",
@@ -192,10 +202,6 @@ def _write_workspace(
     )
     if pdf_bytes.startswith(b"%PDF-"):
         # Arrange a reviewed publication; malformed artifacts remain intentionally unprepared.
-        authored = root / "authored.docx"
-        exported = root / "exported.pdf"
-        _write_docx(authored, "Public artifact")
-        exported.write_bytes(pdf_bytes)
         packet = publication_review_files(pdf_bytes)
         artifact_hash = hashlib.sha256(pdf_bytes).hexdigest()
         review_dir = root / "var/reviews/publication" / artifact_hash
@@ -293,6 +299,66 @@ def test_sync_local_publishes_only_pdf_and_sanitized_manifest(tmp_path: Path) ->
     assert '"forbidden_contact_fields": ["phone"]' in manifest_text
     assert '"forbidden_sections": ["references"]' in manifest_text
     assert '"required_exclude_tags": ["private"]' in manifest_text
+
+
+def test_sync_copies_the_validated_pdf_when_source_changes_after_planning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cvworkbench.ops import syncing
+
+    site, config, site_config = _write_workspace(tmp_path)
+    source = tmp_path / "var/publish/base/cv.pdf"
+    original_plan = syncing._plan_sync
+    unreviewed = _pdf_bytes("Unreviewed contact 555.867.5309")
+
+    def change_source_after_planning(*args, **kwargs):
+        plan = original_plan(*args, **kwargs)
+        source.write_bytes(unreviewed)
+        return plan
+
+    monkeypatch.setattr(syncing, "_plan_sync", change_source_after_planning)
+    sync_site(config_path=config, site_config_path=site_config, mode="local")
+
+    assert source.read_bytes() == unreviewed
+    assert (site / "public/cv/cv.pdf").read_bytes() == PDF_BYTES
+    manifest = json.loads((site / "scripts/cv/public-cv-manifest.json").read_text())
+    assert manifest["pdf_sha256"] == hashlib.sha256(PDF_BYTES).hexdigest()
+
+
+def test_sync_rejects_a_review_for_a_different_publication_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cvworkbench.ops import syncing
+    from cvworkbench.ops.publication.pdf import prepare_public_pdf
+    from cvworkbench.ops.publication.state import record_publication_review
+
+    site, config, site_config = _write_workspace(tmp_path)
+    inspect = syncing.inspect_publication
+
+    def prepare_and_review_another_generation(*args, **kwargs):
+        authored = tmp_path / "authored.docx"
+        exported = tmp_path / "exported.pdf"
+        _write_docx(authored, "Public artifact revised")
+        exported.write_bytes(_pdf_bytes("Public artifact revised"))
+        prepare_public_pdf(
+            authored_source=authored,
+            source_pdf=exported,
+            config_path=config,
+            variant_id="base",
+            publish_config_path=tmp_path / "publish.yaml",
+            sot_path=tmp_path / "local/sot",
+        )
+        updated = inspect(*args, **kwargs)
+        assert updated.pdf_sha256 != hashlib.sha256(PDF_BYTES).hexdigest()
+        record_publication_review(config, "base", updated.pdf_sha256)
+        return inspect(*args, **kwargs)
+
+    monkeypatch.setattr(syncing, "inspect_publication", prepare_and_review_another_generation)
+    with pytest.raises(SyncError, match="Reviewed PDF does not match captured artifact"):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+
+    assert (site / "public/cv/cv.pdf").read_bytes() == b"old"
+    assert not (site / "scripts/cv/public-cv-manifest.json").exists()
 
 
 def test_sync_local_rolls_back_every_artifact_when_replace_fails(

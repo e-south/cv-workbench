@@ -48,6 +48,40 @@ Failed criterion: the [site contract](../reference/site-contract.md) requires
 source, policy, and artifact validation before every write. Negative-path tests
 cover policy omission, missing policy, and unapproved graphics.
 
+### High — sync could copy unreviewed bytes under an approved hash — fixed
+
+A deterministic filesystem interleaving replaced the source PDF after sync
+planning. `_apply_plan` reopened that path, copied a PDF containing a forbidden
+test contact, and wrote the earlier approved hash to the site manifest. Another
+test showed signature and hash validation accepting different reads of one
+changing source. A third used real preparation/review operations to demonstrate
+sync accepting a review for a different publication generation.
+
+`artifact.py` now captures one immutable PDF payload and validates its identity;
+the PDF disclosure validator accepts that payload directly. Sync compares its
+hash with the current reviewed publication and carries its bytes through the
+copy plan and atomic replacement. Negative tests prove generation mismatch
+causes no site writes, and source replacement after planning cannot change
+copied content. These tests use temporary sites and authored sources only.
+
+Failed criterion: the [site contract](../reference/site-contract.md) requires
+the published bytes, manifest hash, disclosure checks, and review to agree.
+Configuration reads remain a separate operation-snapshot improvement; this
+change does not claim a filesystem-wide transaction or lock.
+
+### Medium — authored provenance accepted malformed values — fixed
+
+The manifest validator accepted boolean/floating schema versions, negative
+redaction counts, malformed source hashes, path-valued source names, impossible
+coverage values, undeclared fields, and duplicate JSON keys. These weaknesses
+made a successful eligibility check weaker than the declared authored-source
+contract. They do not by themselves prove a public disclosure bypass.
+
+`ops/publication/manifest.py` owns a strict schema used by both preparation and
+artifact validation. Existing generated manifest structure is retained; no
+missing-field defaults or coercion repair malformed provenance. Adversarial
+tests exercise the previously accepted cases using real prepared artifacts.
+
 ### High — local preview accepted foreign browser requests — fixed
 
 [preview.py](../../src/cvworkbench/dev/preview.py) accepted foreign Host/Origin
@@ -348,6 +382,19 @@ confirmed equivalent bodies for 167 definitions after owner/name changes,
 excluding the intentional strict-error adapter change and recipe decomposition.
 Evidence: `/tmp/cvw-workspace-full.log`, `/tmp/cvw-workspace-journey.json`, and
 the before/after workspace named by `/tmp/cvw-workspace-contract-root.txt`.
+
+Publication handoff follow-up: 434 tests passed, including the installed-wheel
+journey, with one opt-in remote integration skip and the same five upstream
+warnings. The 92 targeted publication/sync/CLI checks passed. Red/green tests
+reproduced source replacement after planning, inconsistent signature/hash reads,
+and a real preparation/review generation change. Fifteen malformed-manifest
+cases that the earlier validator accepted now fail. Local evidence is under
+`/tmp/cvw-sync-*`, `/tmp/cvw-artifact-*`, and `/tmp/cvw-manifest-*`; the final full
+suite log is `/tmp/cvw-publication-boundary-full.log`. The live authored PDF
+remains `review_required`; only temporary sites were written during validation.
+The seven-step isolated journey passed with empty stderr; its summary is
+`/tmp/cvw-publication-boundary-journey.json`. Canonical master and public
+candidate hashes remained unchanged, and the personal-site checkout was clean.
 
 Useful verification commands:
 

@@ -11,16 +11,24 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import json
+import hashlib
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from cvworkbench.ops.publication.manifest import parse_publication_manifest
 from cvworkbench.ops.publication.policy import PublishConfig
-from cvworkbench.ops.publication.record import hash_file
 from cvworkbench.variants import Variant
 
 
 class PublicationArtifactError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class PublicArtifact:
+    source: Path
+    content: bytes = field(repr=False)
+    sha256: str
 
 
 def validate_publish_policy(variant: Variant, publish: PublishConfig) -> None:
@@ -49,29 +57,26 @@ def validate_public_artifact(
     variant: Variant,
     publish: PublishConfig,
 ) -> str:
-    if not source_pdf.read_bytes().startswith(b"%PDF-"):
+    return read_public_artifact(source_pdf, manifest_path, variant, publish).sha256
+
+
+def read_public_artifact(
+    source_pdf: Path,
+    manifest_path: Path,
+    variant: Variant,
+    publish: PublishConfig,
+) -> PublicArtifact:
+    """Capture PDF bytes and verify their identity against publication provenance."""
+    content = source_pdf.read_bytes()
+    if not content.startswith(b"%PDF-"):
         raise PublicationArtifactError(f"Public artifact is not a PDF: {source_pdf}")
     if not manifest_path.exists():
         raise PublicationArtifactError(f"Build manifest not found: {manifest_path}")
     try:
-        manifest = json.loads(manifest_path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        raise PublicationArtifactError(f"Build manifest is invalid: {manifest_path}") from exc
-    if not isinstance(manifest, dict):
-        raise PublicationArtifactError(f"Build manifest is invalid: {manifest_path}")
-    if manifest.get("schema_version") != 1:
-        raise PublicationArtifactError(
-            "Build manifest schema does not match authored publication contract"
-        )
-    if manifest.get("artifact_kind") != "authored-pdf-publication":
-        raise PublicationArtifactError("Build manifest is not an authored PDF publication")
-    if manifest.get("formats") != ["pdf"]:
-        raise PublicationArtifactError(
-            "Build manifest must declare only the PDF publication format"
-        )
-
-    manifest_variant = manifest.get("variant")
-    if not isinstance(manifest_variant, dict) or manifest_variant.get("id") != variant.id:
+        manifest = parse_publication_manifest(manifest_path.read_text())
+    except (OSError, ValueError) as exc:
+        raise PublicationArtifactError(f"Build manifest is invalid: {exc}") from exc
+    if manifest.variant.id != variant.id:
         raise PublicationArtifactError("Build manifest variant does not match publish variant")
     variant_contract = {
         "exclude_tags": variant.exclude_tags,
@@ -79,37 +84,24 @@ def validate_public_artifact(
         "order": variant.order,
     }
     for key, expected in variant_contract.items():
-        if manifest_variant.get(key) != expected:
+        if getattr(manifest.variant, key) != expected:
             raise PublicationArtifactError(f"Build manifest {key} does not match publish variant")
 
-    outputs = manifest.get("outputs")
-    if not isinstance(outputs, dict) or outputs.get("pdf") != source_pdf.name:
+    if manifest.outputs.pdf != source_pdf.name:
         raise PublicationArtifactError("Build manifest does not declare the PDF artifact")
-    output_hashes = manifest.get("output_hashes")
-    pdf_hash = hash_file(source_pdf)
-    if not isinstance(output_hashes, dict) or output_hashes.get("pdf") != pdf_hash:
+    pdf_hash = hashlib.sha256(content).hexdigest()
+    if manifest.output_hashes.pdf != pdf_hash:
         raise PublicationArtifactError("Build manifest PDF hash does not match the artifact")
-    source = manifest.get("source")
-    if not isinstance(source, dict):
-        raise PublicationArtifactError("Build manifest lacks authored source provenance")
-    transformation = manifest.get("transformation")
-    if not isinstance(transformation, dict) or transformation.get("kind") != "semantic-redaction":
-        raise PublicationArtifactError(
-            "Build manifest lacks the semantic-redaction provenance contract"
-        )
-    redaction_count = transformation.get("redaction_count")
-    if not isinstance(redaction_count, int) or isinstance(redaction_count, bool):
-        raise PublicationArtifactError("Build manifest redaction count is invalid")
-    if source.get("visual_fingerprint_sha256") != publish.approved_visual_fingerprint_sha256:
+    if manifest.source.visual_fingerprint_sha256 != publish.approved_visual_fingerprint_sha256:
         raise PublicationArtifactError(
             "Build manifest visual fingerprint does not match publish policy"
         )
-    if transformation.get("forbidden_contact_fields") != publish.forbidden_contact_fields:
+    if manifest.transformation.forbidden_contact_fields != publish.forbidden_contact_fields:
         raise PublicationArtifactError(
             "Build manifest contact policy does not match publish policy"
         )
-    if transformation.get("forbidden_sections") != publish.forbidden_sections:
+    if manifest.transformation.forbidden_sections != publish.forbidden_sections:
         raise PublicationArtifactError(
             "Build manifest section policy does not match publish policy"
         )
-    return pdf_hash
+    return PublicArtifact(source=source_pdf, content=content, sha256=pdf_hash)

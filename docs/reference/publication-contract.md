@@ -73,9 +73,35 @@ for the operator journey and [the site contract](site-contract.md) for writes.
 `ops/publication/` owns the lifecycle: `record.py` defines the private schemas,
 `state.py` inspects freshness and records review, `pdf.py` performs sanitization,
 `packet.py` renders review evidence, `policy.py` loads disclosure policy, and
-`artifact.py` validates manifest eligibility. Python consumers use these modules;
+`manifest.py` defines and serializes authored provenance, and `artifact.py`
+validates manifest eligibility. Python consumers use these modules;
 the former flat `ops/public_pdf.py`, `ops/publish.py`, and
 `ops/publication_review.py` paths have moved. CLI spellings for preparation and
 sync remain unchanged. `cli/publication.py` owns their adapters plus the
 `publication status` and `publication review` commands; `workspace/publication.py`
 owns the workflow description. Site writes remain in `ops/syncing.py`.
+
+## Authored provenance schema
+
+Preparation and artifact validation share `manifest.py::PublicationManifest`.
+The authored manifest requires an explicit integer `schema_version: 1`, the
+`authored-pdf-publication` kind, exactly one PDF output, the selected variant's
+selection fields, complete authored/exported source names and SHA-256 hashes,
+visual fingerprint, coverage measurements, and semantic-redaction policy/count.
+Source names are filenames, not paths. Coverage must be finite and within
+`[0, 1]`; redaction count must be a nonnegative integer. Unknown fields and
+duplicate JSON keys are rejected. Booleans cannot stand in for integers, and
+string-valued numbers are rejected. Schema errors report field locations
+without echoing the invalid values.
+
+This provenance is separate from the smaller sanitized site manifest defined
+by the [site contract](site-contract.md). The private preparation record owns
+source paths, freshness, and review dependencies. Valid provenance or a coverage
+score does not establish human review or prove exact source wording/order.
+
+`artifact.py::read_public_artifact` captures immutable PDF bytes and verifies
+their signature/hash against the manifest and variant/policy declarations.
+`pdf.py::validate_public_pdf_content` inspects those same bytes for forbidden
+content, unsafe links, encryption, attachments, and unapproved graphics. Sync
+requires both checks and binds the captured hash to the current reviewed
+publication before constructing its copy plan.
