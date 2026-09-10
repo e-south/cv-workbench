@@ -146,7 +146,7 @@ the file is edited during rendering; the manifest does not re-read the config.
 `build/assets.py::capture_render_assets` records the explicit file dependencies
 of a build plan. Its `RenderAssetContract` keeps immutable fingerprints and the
 ordered selected filter paths. The contract covers `theme.yaml`, every declared
-route's defaults/templates used by the composite theme hash, and styles selected
+route's defaults/templates and optional DOCX reference document used by the composite theme hash, and styles selected
 for the requested formats. `themes.py::theme_hash_paths` owns composite-hash
 membership and ordering; unselected routes remain part of that theme identity.
 

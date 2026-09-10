@@ -38,6 +38,7 @@ class Variant:
     render_theme: str | None
     render_style_preset: str | None
     contact_fields: list[str] = field(default_factory=lambda: list(CONTACT_FIELDS))
+    section_titles: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_variant_id(self.id)
@@ -133,7 +134,27 @@ def parse_variant(raw: object) -> Variant:
         render_theme=render_theme,
         render_style_preset=render_style,
         contact_fields=contact_fields,
+        section_titles=_section_titles(variant_data.get("section_titles")),
     )
+
+
+def _section_titles(value: object) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("Variant section_titles must be a mapping")
+    result = {}
+    for section, title in value.items():
+        if section not in DEFAULT_ORDER:
+            raise ValueError("Variant section_titles contains an unknown section")
+        if (
+            not isinstance(title, str)
+            or not title.strip()
+            or any(ord(char) < 32 or ord(char) == 127 for char in title)
+        ):
+            raise ValueError("Variant section_titles values must be nonempty single-line text")
+        result[section] = title.strip()
+    return result
 
 
 def _require_str(data: dict[str, object], key: str) -> str:
@@ -227,6 +248,7 @@ def load_variants_from_config(config_path: Path) -> list[dict[str, Any]]:
                 "render_theme": variant.render_theme,
                 "render_style_preset": variant.render_style_preset,
                 "max_bullets_per_role": variant.max_bullets_per_role,
+                "section_titles": dict(variant.section_titles),
                 "path": str(path),
             }
         )

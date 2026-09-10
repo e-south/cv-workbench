@@ -91,6 +91,7 @@ def build_manifest(
             "contact_fields": list(variant.contact_fields),
             "max_bullets_per_role": variant.max_bullets_per_role,
             "order": list(variant.order),
+            "section_titles": dict(variant.section_titles),
         },
         "formats": list(formats),
         "outputs": {fmt: output_paths[fmt].name for fmt in formats if fmt in output_paths},

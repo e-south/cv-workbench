@@ -21,6 +21,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Sequence
 
+from cvworkbench.build.docx import validate_docx
 from cvworkbench.themes import RenderPlan
 from cvworkbench.variants import Variant
 
@@ -120,6 +121,8 @@ def _render_document(
 
     if resolved_plan.template is not None:
         args.extend(["--template", str(resolved_plan.template)])
+    if resolved_plan.reference_doc is not None:
+        args.extend(["--reference-doc", str(resolved_plan.reference_doc)])
 
     for defaults_path in resolved_plan.defaults:
         args.extend(["--defaults", str(defaults_path)])
@@ -147,6 +150,11 @@ def _render_document(
 
     try:
         _run(args)
+        if output_format == "docx":
+            try:
+                validate_docx(output_path)
+            except ValueError as error:
+                raise RenderError(str(error)) from error
     finally:
         metadata_path.unlink(missing_ok=True)
 
@@ -226,6 +234,7 @@ def resolve_filter_paths(filters_dir: Path) -> tuple[Path, ...]:
             filters_dir / "select.lua",
             filters_dir / "author_roles.lua",
             filters_dir / "limits.lua",
+            filters_dir / "presentation.lua",
         )
         if path.exists()
     )

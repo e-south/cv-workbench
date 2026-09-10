@@ -42,7 +42,7 @@ class RenderAssetContract:
         if tuple(path.resolve() for path in filter_paths) != self.filter_paths:
             raise RenderAssetError("Render asset filter selection changed; create a new build plan")
         for fmt, plan in render_plans.items():
-            paths = [*plan.defaults, plan.template, plan.style_path]
+            paths = [*plan.defaults, plan.template, plan.style_path, plan.reference_doc]
             for path in paths:
                 if path is not None and path.resolve() not in self.file_hashes:
                     raise RenderAssetError(f"Render asset was not recorded during planning: {path}")

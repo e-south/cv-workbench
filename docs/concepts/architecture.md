@@ -60,6 +60,8 @@ than maintaining executable copies beneath `docs/`.
 | Read-only content and render planning | `build/planning.py` |
 | Shared letter selection and document-specific filter evidence | `build/selection.py` |
 | Selected contact labels and link destinations shared by resume and letter | `build/contacts.py` |
+| Literal link labels and validated HTTP(S) destinations | `build/links.py` |
+| Generated DOCX package and XML integrity | `build/docx.py` |
 | Record metadata rows and narrative paragraph boundaries | `build/entry_layout.py` |
 | Explicit render-input fingerprints and lifetime checks | `build/assets.py` |
 | Bundle membership and temporary artifact generation | `build/artifacts.py` |

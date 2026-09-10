@@ -97,6 +97,50 @@ HTML, presets are attached via `--css`.
 Presets are the preferred way to tweak presentation without creating new
 variants. Keep variants focused on content selection.
 
+### DOCX styles
+
+A DOCX route may declare `reference_doc: reference.docx` in `theme.yaml`.
+The file must exist inside that theme directory; absolute paths, escapes through
+symlinks, and declarations on other format routes fail during planning. Use a
+neutral reference document containing styles and page settings, without personal
+content. Pandoc applies it during rendering, so changes belong in the theme
+rather than in generated DOCX archives. Its bytes join the theme fingerprint and
+the build's render-asset checks. `tests/build/test_docx_reference.py` verifies
+actual DOCX styles and rejects changed assets before output writes.
+
+Rendered DOCX packages must contain core document parts and well-formed XML
+before replacing an existing artifact. A successful Pandoc exit alone is
+insufficient: malformed styles or relationship XML fail the render and preserve
+the prior output. This checks package structure, not desktop pagination or every
+Office schema rule. When editing reference XML, preserve conventional namespace
+prefixes; older Pandoc versions can mishandle renamed prefixes when adding styles.
+
+### Optional compact presentation
+
+Set these Boolean values under `metadata` in a theme's Pandoc defaults:
+
+```yaml
+metadata:
+  cvw-compact-entries: true
+  cvw-contact-rows: true
+```
+
+The bundled `presentation.lua` filter is otherwise a no-op. Compact entries join
+an entry's third-level heading and first metadata paragraph, making the heading
+bold while retaining its identifier and attributes. Simple education highlights
+join that paragraph with semicolons; other narrative paragraphs remain separate.
+Self-author names become bold without losing their spans or link targets.
+
+Contact rows split the first contact paragraph after its second link, when at
+least three links exist. Select email followed by the primary website for a
+balanced first row. All text and links are retained, with later profiles on the
+second row. HTML themes style `.contact-block`; DOCX reference documents may
+define a `Contact` paragraph style. PDF rows are centered. This presentation does
+not add icons, text boxes, or document headers.
+
+Verification: `tests/build/test_compact_presentation.py` checks unchanged default
+structure, preserved identifiers/attributes, links, wording, and contact rows.
+
 ## Template guidance
 
 The default theme uses Pandoc's built-in templates (`template: default`). If you
@@ -153,6 +197,17 @@ lines as one paragraph in HTML, PDF, and DOCX.
 `tests/build/test_entry_layout.py` checks actual rendered paragraph boundaries,
 optional values, DOCX paragraph structure, PDF labels, and the edited-DOCX
 [review round trip](../reference/review-contract.md#markdown-comparison).
+
+An end-only entry date renders its completion year; equal start/end values render
+once. A start without an end retains `Present`. Publication titles with a URL
+become literal-label HTTP(S) links using the same destination checks as profiles.
+
+Variants may set `section_titles`, for example `experience: Research Experience`
+or `skills: Technical Skills`. Keys must name existing semantic sections and
+values must be nonempty single-line literal text. These labels change visible
+headings only; section order, IDs, tags, and selection remain unchanged. Catalogs
+and build manifests record the labels. Content selection belongs in variants;
+fonts, rules, alignment, and spacing belong in themes.
 
 ## Build-time changes and provenance
 

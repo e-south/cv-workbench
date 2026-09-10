@@ -15,6 +15,7 @@ from typing import Any
 
 from cvworkbench.build.contacts import build_contact_line
 from cvworkbench.build.entry_layout import append_entry_text
+from cvworkbench.build.links import http_link, literal_text
 from cvworkbench.build.selection import select_letter
 from cvworkbench.text import slugify, tag_classes
 from cvworkbench.variants import Variant
@@ -63,7 +64,11 @@ def _build_resume_markdown(
         builder = section_builders.get(section)
         if builder is None:
             continue
+        start = len(lines)
         builder(lines, sot, variant, snippets)
+        if section in variant.section_titles and len(lines) > start:
+            title = literal_text(variant.section_titles[section])
+            lines[start] = f"## {title}"
 
     content = "\n".join(lines).strip()
     if not content.endswith("\n"):
@@ -370,6 +375,9 @@ def _build_publications(
 
         title = _string(item.get("title"))
         if title:
+            url = _string(item.get("url"))
+            if url:
+                title = http_link(title, url, field="Publication URL")
             lines.append(f"### {title}")
 
         authors_text = _format_authors(item.get("authors"))
@@ -715,10 +723,12 @@ def _format_dates(item: dict[str, Any]) -> str:
     start = _date_string(item.get("start"))
     end = _date_string(item.get("end"))
     if start and end:
+        if start == end:
+            return start
         return f"{start} — {end}"
     if start:
         return f"{start} — Present"
-    return ""
+    return end
 
 
 def _string(value: Any) -> str:

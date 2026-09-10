@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
-_MARKDOWN_PUNCTUATION = frozenset("\\`*_{}[]<>!|#$~^&")
+from cvworkbench.build.links import has_uri_whitespace, http_link, literal_text
 
 
 def build_contact_line(person: dict[str, Any], contact_fields: list[str]) -> str:
@@ -38,15 +38,13 @@ def build_contact_line(person: dict[str, Any], contact_fields: list[str]) -> str
             if isinstance(label_text, str) and isinstance(url, str):
                 if not label_text.strip():
                     raise ValueError(f"Contact profile {index} requires a visible label")
-                parts.append(_link(label_text, _profile_destination(url.strip(), index)))
+                parts.append(http_link(label_text, url.strip(), field=f"Contact profile {index}"))
 
     return " | ".join(parts)
 
 
 def _literal(value: str) -> str:
-    return "".join(
-        f"\\{char}" if char in _MARKDOWN_PUNCTUATION else char for char in " ".join(value.split())
-    )
+    return literal_text(value)
 
 
 def _link(label: str, destination: str) -> str:
@@ -54,7 +52,7 @@ def _link(label: str, destination: str) -> str:
 
 
 def _has_uri_whitespace(value: str) -> bool:
-    return any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)
+    return has_uri_whitespace(value)
 
 
 def _email_destination(address: str) -> str:
@@ -70,23 +68,3 @@ def _email_destination(address: str) -> str:
     ):
         raise ValueError("Contact email requires a bare address without URI headers or whitespace")
     return "mailto:" + quote(address, safe="@.-_~")
-
-
-def _profile_destination(url: str, index: int) -> str:
-    message = f"Contact profile {index} requires an absolute HTTP(S) URL without credentials or whitespace"
-    try:
-        parsed = urlsplit(url)
-        valid = (
-            parsed.scheme.lower() in {"http", "https"}
-            and bool(parsed.hostname)
-            and parsed.username is None
-            and parsed.password is None
-            and not _has_uri_whitespace(url)
-            and "\\" not in url
-        )
-        _ = parsed.port
-    except ValueError as exc:
-        raise ValueError(message) from exc
-    if not valid:
-        raise ValueError(message)
-    return quote(url, safe=":/?#[]@!$&'()*+,;=%-._~")

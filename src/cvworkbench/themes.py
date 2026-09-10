@@ -31,6 +31,7 @@ class ThemeRoute:
     template: Path | None
     pdf_engine: str | None
     defaults: list[Path]
+    reference_doc: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,7 @@ class RenderPlan:
     theme_id: str | None
     theme_hash: str | None
     style_hash: str | None
+    reference_doc: Path | None = None
 
 
 _FORMAT_ROUTES = {
@@ -154,6 +156,7 @@ def build_render_plan(
         theme_id=theme.id,
         theme_hash=hash_theme(theme),
         style_hash=style_hash,
+        reference_doc=route.reference_doc,
     )
 
 
@@ -172,6 +175,8 @@ def theme_hash_paths(theme: Theme) -> list[Path]:
         paths.extend(route.defaults)
         if route.template is not None:
             paths.append(route.template)
+        if route.reference_doc is not None:
+            paths.append(route.reference_doc)
     return paths
 
 
@@ -208,6 +213,20 @@ def load_theme(theme_dir: Path) -> Theme:
         template_path = _resolve_template(theme_dir, template_value)
         defaults = _resolve_defaults(theme_dir, name, data)
         pdf_engine = _optional_str(data.get("pdf_engine"))
+        reference_doc = None
+        if "reference_doc" in data:
+            value = data["reference_doc"]
+            if name != "docx" or to_value != "docx":
+                raise ThemeError("reference_doc is supported only by the docx route")
+            if not isinstance(value, str) or not value.strip():
+                raise ThemeError("Theme reference_doc must be a nonempty relative file path")
+            reference_doc = (theme_dir / value).resolve()
+            if (
+                Path(value).is_absolute()
+                or not reference_doc.is_relative_to(theme_dir.resolve())
+                or not reference_doc.is_file()
+            ):
+                raise ThemeError("Theme reference_doc must name a regular file within the theme")
 
         routes[name] = ThemeRoute(
             name=name,
@@ -215,6 +234,7 @@ def load_theme(theme_dir: Path) -> Theme:
             template=template_path,
             pdf_engine=pdf_engine,
             defaults=defaults,
+            reference_doc=reference_doc,
         )
 
     return Theme(
