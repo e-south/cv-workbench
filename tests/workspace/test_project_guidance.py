@@ -150,3 +150,51 @@ def test_saved_guidance_accepts_internal_symlink(tmp_path):
     assert "proposal_plan_error" not in shown
     assert "proposal_plan_error" not in preview
     assert shown["proposal_plan"]["summary"] == preview["recommendation_summary"]
+
+
+@pytest.mark.parametrize("artifact", ["extracted_text", "signals"])
+@pytest.mark.parametrize("state", ["changed", "missing", "unreadable"])
+def test_inspection_and_preview_warn_about_changed_job_context(tmp_path, artifact, state):
+    config, project = _guided_project(tmp_path)
+    path = project.extracted_path if artifact == "extracted_text" else project.signals_path
+    plan = project.job_dir / "proposal-plan.json"
+    saved_plan = plan.read_bytes()
+    if state == "changed":
+        path.write_text("changed-private-fixture-marker\n")
+    elif state == "missing":
+        path.unlink()
+    else:
+        path.unlink()
+        path.mkdir()
+
+    shown = _show(config, project.project_dir)
+    preview = _load_project_context(project.project_dir)
+
+    assert shown["job_artifacts"][artifact]["state"] == state
+    assert shown["job_artifact_status"] == "need review"
+    assert state in shown["job_artifact_warning"]
+    assert "changed-private-fixture-marker" not in json.dumps(shown)
+    assert preview["job_artifact_warning"] == shown["job_artifact_warning"]
+    assert preview["job_artifact_status"] == "need review"
+    assert "project_context_error" not in preview
+    assert plan.read_bytes() == saved_plan
+    plain = CliRunner().invoke(
+        app, ["project", "show", str(project.project_dir), "--config", str(config), "--plain"]
+    )
+    assert plain.exit_code == 0, plain.output
+    assert "job_artifact_warning" in plain.stdout
+
+
+def test_matching_job_artifacts_remain_distinct_from_run_review_readiness(tmp_path):
+    config, project = _guided_project(tmp_path)
+
+    shown = _show(config, project.project_dir)
+    preview = _load_project_context(project.project_dir)
+
+    assert shown["job_artifact_status"] == "match saved record"
+    assert all(item["state"] == "matches_record" for item in shown["job_artifacts"].values())
+    assert "job_artifact_warning" not in shown
+    assert preview["job_artifact_status"] == "match saved record"
+    assert "job_artifact_warning" not in preview
+    assert shown["review"]["review_ready"] is False
+    assert shown["review"]["status"] == "build_required"

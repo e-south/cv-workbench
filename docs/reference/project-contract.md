@@ -149,6 +149,42 @@ items carry these diagnostics, and full/compact context includes
 `metadata_error_count` when they exist. This count concerns displayed metadata,
 not complete project validation or review readiness.
 
+### Artifact inspection
+
+`cvworkbench.ops.projects.inspect_project_artifacts(project_dir)` compares the
+stored extracted text and signals file with their recorded SHA-256 values.
+It returns two `ProjectArtifactCheck` records without requiring retained
+proposal files or opening the original job source. Each record includes its
+name, path, recorded/observed digests, state, and optional read diagnostic:
+
+| State | Meaning |
+| --- | --- |
+| `matches_record` | The observed file bytes match the manifest's recorded digest. |
+| `changed` | The observed bytes differ from the recorded digest. |
+| `missing` | The stored artifact cannot be found. |
+| `unreadable` | The artifact is not a regular file, cannot be read, or fails the ownership recheck. |
+
+Manifest errors still raise `ProjectError`. Artifact failures are observations,
+not reasons to hide otherwise inspectable project details. `load_project_details`
+includes these records in `artifact_checks`, using its already parsed manifest
+metadata. Inventory remains lightweight and does not hash job artifacts.
+Checks stream file bytes and recheck project ownership before reading. They do
+not isolate concurrent changes after resolution or guarantee a filesystem snapshot.
+
+`project show --json` includes `job_artifacts`, a shared `job_artifact_status`,
+and `job_artifact_warning` when files need review. Plain/rich output and preview
+show the same summary and warning. Preview caches the checks from its last
+successful rebuild; status polling does not hash the files again. Job-file edits
+alone are not watched, so rebuild to refresh those observations.
+
+These comparisons concern the current manifest's records, not authenticated
+provenance or an immutable record of the saved plan's inputs. Editing both a
+file and its recorded digest can yield a match. Optional raw captures have no
+recorded digest and are not checked here. Matching job files do not establish
+freshness of the original source, source facts, variant catalog, saved guidance,
+or build output. Review readiness continues to describe the selected immutable
+run's available review inputs; it is independent of this job-artifact check.
+
 ## Creation preflight
 
 File and URL creation validate their local inputs before creating directories.
@@ -382,6 +418,7 @@ Internal modules import concrete owners rather than the public entrypoint.
 | Artifact, summary, typed metadata records, patch vocabulary, timestamps | `records.py` |
 | Project identity validation, selectors, and proposal identities | `identity.py` |
 | Manifest reading, typed metadata validation, and executable prerequisites | `manifest.py` |
+| Stored job-file observations against recorded digests | `artifacts.py` |
 | Descriptive/proposal inspection and bounded saved-plan reads | `inspection.py` |
 | Creation preflight, captured inputs, retargeting, registration, and discard | `creation.py` |
 | Guarded edit authoring, compilation, and application | `patches.py` |
@@ -400,6 +437,8 @@ delegates project identity validation to `identity.py`.
 `load_project_summary` adapts that read into the partial inventory contract;
 `load_project` adds executable-project prerequisites, and `load_project_details`
 adds typed descriptive and proposal information from the same manifest generation.
+Artifact observation is callable independently through `inspect_project_artifacts`;
+the same owner supplies `ProjectDetails.artifact_checks`.
 `load_project_plan` reads optional saved guidance from those details, returning
 the plan or a diagnostic while leaving the rest of inspection available.
 

@@ -35,6 +35,65 @@ source of truth.
 
 ## Findings and disposition
 
+### Medium — inspection did not report changed or missing stored job context — fixed for recorded artifact observations
+
+Project creation recorded extracted-text and signals digests, but inspection
+never compared those records with the current files. Saved guidance could
+remain visible without any warning after a stored job artifact changed,
+disappeared, or became unreadable. Matching selected variant IDs did not catch
+this condition. This was a gap in observable state rather than a reason to
+conflate inventory, guidance, and immutable-run review readiness.
+
+`ops.projects.artifacts` now owns streaming comparisons of the two recorded
+job artifacts. Its public `inspect_project_artifacts` API works without retained
+proposals. `load_project_details` includes the same observations using its
+already parsed manifest. Each observation reports `matches_record`, `changed`,
+`missing`, or `unreadable`, with recorded/observed digests and safe read errors.
+It rechecks path ownership and rejects nonregular files before opening them.
+CLI and preview share status/warning presentation through the workspace owner.
+The preview labels observations as belonging to the last build and caches them
+for status polling. Rebuild refreshes them; job-file changes alone are not watched.
+
+The recommendation text also now asks operators to review missing job signals
+and add only supported experience, rather than prescribing that every missing
+signal be patched into the source facts.
+
+Evidence: `/tmp/cvw-project-artifact-checks-red.log` (11 missing API/state cases),
+`/tmp/cvw-project-freshness-presentation-red.log` (seven missing presentation
+cases), and `/tmp/cvw-project-freshness-focused-green.log` (126 passing checks).
+Adversarial checks cover directories, a named pipe, denied reads, and a path
+replaced with an outside symlink after metadata capture. The latter performs
+no outside read; inspection uses one manifest read for detailed state.
+
+Final verification: 741 tests passed, one opt-in remote test skipped, and the
+five existing PyMuPDF/SWIG warnings remained. The seven-step isolated journey
+and a separate real project build to Markdown/PDF/DOCX passed. Inspection of
+that build independently reported changed job context and available run review
+inputs. Live inspection found all 50 recorded job files across 25 projects
+matched their current records, including projects with legacy proposal formats.
+Evidence: `/tmp/cvw-project-freshness-full.log`,
+`/tmp/cvw-project-freshness-journey.json`,
+`/tmp/cvw-project-freshness-built-show.json`, and
+`/tmp/cvw-project-freshness-observations.json`.
+
+Local Chrome DevTools inspection confirmed the warning and supported-experience
+guidance as rendered text, with no horizontal overflow or console warnings/errors.
+The fixture/evidence location is recorded in
+`/tmp/cvw-project-freshness-preview-fixture.json`. Snapshot, screenshot, and
+console evidence remain in its isolated `var/runs/preview/freshness-audit/`.
+Restoring the fixture's original job bytes and clicking Rebuild changed the
+status to match and cleared the warning; `restored.snapshot.md` records that
+state. The audit tab and server were closed. Ruff, formatting, and pre-commit
+checks passed. Final context remained ready with no issues and publication
+`review_required`; the master, candidate PDF, and personal site were unchanged.
+No publication approval, site sync, or push occurred.
+
+These checks compare bytes with the current manifest. They do not authenticate
+the record, bind a saved plan to immutable input hashes, validate the optional raw
+capture, prove freshness of external job/source/catalog data, or isolate reads
+from subsequent filesystem changes. Those remain explicit provenance/lifetime
+follow-ups; matching files are not publication approval.
+
 ### High for local confidentiality — project guidance followed paths outside its owner — fixed for stable paths
 
 Detailed inspection accepted absolute/traversing artifact locators and symlinks
@@ -891,10 +950,11 @@ and captures its job text and variant definition. Retargeting now reads one
 validated manifest generation, checks for observed intervening edits, and
 exposes changed saved-guidance selections. Typed descriptive metadata now has a
 single parser, inventory preserves partial/invalid descriptions, and saved-plan
-reads enforce project ownership. Continue with remaining project command
-orchestration and explicit artifact-presence/freshness checks where an operation
-requires them. Keep inventory existence, executable proposals, recorded metadata,
-current artifact validity, and review readiness distinct.
+reads enforce project ownership. Stored job-file comparisons now expose missing,
+changed, or unreadable artifacts independently of run review readiness. Continue
+with input provenance for saved guidance and remaining project command
+orchestration. Keep inventory existence, executable proposals, recorded metadata,
+current artifact observations, and review readiness distinct.
 
 Extend explicit configuration snapshots to publication preparation/sync,
 lifecycle mutations, and preview selection. Follow with semantic document styles and further

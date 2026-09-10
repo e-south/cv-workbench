@@ -45,6 +45,7 @@ from cvworkbench.ops.projects import (
 )
 from cvworkbench.variants import load_variant
 from cvworkbench.workspace.project_guidance import (
+    project_artifact_context,
     proposal_plan_selection_warning,
 )
 from cvworkbench.workspace.projects import (
@@ -285,6 +286,7 @@ def project_show(
         },
         "review": review,
         "commands": commands,
+        **project_artifact_context(details.artifact_checks, include_details=True),
     }
     if proposal_plan is not None:
         summary["proposal_plan"] = proposal_plan

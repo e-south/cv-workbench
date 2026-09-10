@@ -13,6 +13,9 @@
   presentation code or treat recorded digests as proof of current contents.
 - Read optional saved guidance through `load_project_plan`; consumers must not
   independently derive and open its path or bypass project ownership checks.
+- Use `artifacts.py` for observations of stored job files against recorded hashes.
+  Keep those observations separate from inventory, source/plan freshness, and
+  run review readiness; do not reread the manifest inside detailed inspection.
 - Validate inputs before artifact writes. Project creation, retargeting, patch
   application, and proposal registration need explicit failure and recovery
   behavior; moving code does not establish transaction safety.

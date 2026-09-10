@@ -247,7 +247,7 @@ def build_proposal_plan(
     if keyword_overlap["missing"]:
         steps.insert(
             1,
-            "Patch missing job signals into SoT-backed bullets or project summaries before review export.",
+            "Review missing job signals against your experience; add only supported details.",
         )
 
     return {

@@ -54,6 +54,7 @@ from cvworkbench.ops.projects import (
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
 from cvworkbench.workspace.project_guidance import (
+    project_artifact_context,
     proposal_plan_selection_warning,
 )
 
@@ -150,6 +151,7 @@ def _load_project_context(project_dir: Path) -> dict[str, Any]:
         "patch_status": patch_status,
         "patch_operations": list(details.patch_operations),
         "render_warning": patch_warning,
+        **project_artifact_context(details.artifact_checks),
     }
     if proposal_plan is not None:
         payload["recommended_variant"] = proposal_plan.get("selected_variant")

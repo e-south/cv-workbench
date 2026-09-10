@@ -129,6 +129,11 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "Format validation does not verify current file" in contract
     assert "`load_project_plan(details)`" in contract
     assert "before reading\nits contents" in contract
+    assert "### Artifact inspection" in contract
+    assert "cvworkbench.ops.projects.inspect_project_artifacts(project_dir)" in contract
+    assert "`ProjectArtifactCheck`" in contract
+    assert "`job_artifact_warning`" in contract
+    assert "Inventory remains lightweight" in contract
 
 
 def test_docs_make_bounded_editing_scope_explicit() -> None:

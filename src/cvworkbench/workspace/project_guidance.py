@@ -13,7 +13,40 @@ from __future__ import annotations
 
 from typing import Any
 
+from cvworkbench.ops.projects import ProjectArtifactCheck
 from cvworkbench.variants import validate_variant_id
+
+
+def project_artifact_context(
+    checks: tuple[ProjectArtifactCheck, ...], *, include_details: bool = False
+) -> dict[str, Any]:
+    problems = [check for check in checks if check.state != "matches_record"]
+    context: dict[str, Any] = {
+        "job_artifact_status": "not checked"
+        if not checks
+        else "need review"
+        if problems
+        else "match saved record"
+    }
+    if problems:
+        labels = {"extracted_text": "extracted text", "signals": "signals"}
+        states = ", ".join(f"{labels[check.name]} ({check.state})" for check in problems)
+        context["job_artifact_warning"] = (
+            f"Stored job context needs review: {states}. "
+            "Review the source job description before relying on saved guidance."
+        )
+    if include_details:
+        context["job_artifacts"] = {
+            check.name: {
+                "path": str(check.path),
+                "state": check.state,
+                "recorded_sha256": check.recorded_sha256,
+                "observed_sha256": check.observed_sha256,
+                "error": check.error,
+            }
+            for check in checks
+        }
+    return context
 
 
 def proposal_plan_selection_warning(

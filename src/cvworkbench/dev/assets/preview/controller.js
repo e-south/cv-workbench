@@ -344,6 +344,7 @@ function renderProjectGuidance(data) {
   }
   const lines = [
     ['document: ', context.proposal_document_type || 'n/a', ' | patch: ', context.patch_status || 'n/a'],
+    ['job files at last build: ', context.job_artifact_status || 'not checked', '', ''],
     [
       'recommended: ',
       context.recommended_variant || 'none',
@@ -380,6 +381,7 @@ function renderProjectGuidance(data) {
   if (context.render_warning) warnings.push(context.render_warning);
   if (context.proposal_plan_error) warnings.push(context.proposal_plan_error);
   if (context.proposal_plan_warning) warnings.push(context.proposal_plan_warning);
+  if (context.job_artifact_warning) warnings.push(context.job_artifact_warning);
   warnings.forEach((message) => {
     const line = document.createElement('div');
     line.textContent = message;

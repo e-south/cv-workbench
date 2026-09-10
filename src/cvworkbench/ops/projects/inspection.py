@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.ops.projects.artifacts import _inspect_project_artifacts
 from cvworkbench.ops.projects.manifest import (
     _project_metadata,
     _project_relative_path,
@@ -92,6 +93,7 @@ def load_project_details(project_dir: Path) -> ProjectDetails:
         patch_is_empty=patch_is_empty,
         patch_line_count=patch_line_count,
         patch_operations=patch_operations,
+        artifact_checks=_inspect_project_artifacts(project_dir, metadata),
     )
 
 

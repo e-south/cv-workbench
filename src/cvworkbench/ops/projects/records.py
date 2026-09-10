@@ -82,6 +82,19 @@ class ProjectMetadata:
     signals: ProjectArtifactMetadata
 
 
+ProjectArtifactState = Literal["matches_record", "changed", "missing", "unreadable"]
+
+
+@dataclass(frozen=True)
+class ProjectArtifactCheck:
+    name: Literal["extracted_text", "signals"]
+    path: Path
+    state: ProjectArtifactState
+    recorded_sha256: str
+    observed_sha256: str | None
+    error: str | None = None
+
+
 @dataclass(frozen=True)
 class ProjectDetails:
     spec: ProjectSpec
@@ -98,6 +111,7 @@ class ProjectDetails:
     patch_is_empty: bool
     patch_line_count: int
     patch_operations: tuple[str, ...]
+    artifact_checks: tuple[ProjectArtifactCheck, ...] = ()
 
 
 @dataclass(frozen=True)

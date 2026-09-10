@@ -153,6 +153,7 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         ("patch_status", summary["patch"]["status"]),
         ("patch_ops", ",".join(summary["patch"]["operations"]) or "none"),
         ("job_source", summary["job"]["source"]),
+        ("job_files", summary["job_artifact_status"]),
         ("next_step", summary["commands"]["preview"]),
         ("build_step", summary["commands"]["build"]),
         ("review_status", summary["review"]["status"]),
@@ -170,6 +171,8 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         rows.append(("proposal_plan_error", summary["proposal_plan_error"]))
     if "proposal_plan_warning" in summary:
         rows.append(("proposal_plan_warning", summary["proposal_plan_warning"]))
+    if "job_artifact_warning" in summary:
+        rows.append(("job_artifact_warning", summary["job_artifact_warning"]))
     print_summary("project.show", rows)
 
 

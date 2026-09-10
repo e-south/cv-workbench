@@ -65,6 +65,11 @@ instead of following `ACTIVE`.
   guidance or a changed/unverifiable recorded selection; see the
   [saved-guidance contract](project-contract.md#saved-guidance). Both appear in
   the existing project warning area as text.
+  `job_artifact_status` and optional `job_artifact_warning` report stored job-file
+  observations from the last successful rebuild. The sidebar labels this timing;
+  polling reuses the result, and job-file edits alone do not trigger a rebuild.
+  Use Rebuild to refresh. See [artifact inspection](project-contract.md#artifact-inspection)
+  for the comparison scope and limits.
 - `outputs` (format -> filename)
 
 `POST /api/render` rebuilds with optional overrides:
