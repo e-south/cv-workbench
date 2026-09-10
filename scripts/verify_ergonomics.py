@@ -25,6 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 ITERATIONS = 3
 RUN_ID_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z")
+PREVIEW_ID_PATTERN = re.compile(r"(/runs/preview/(?:variants|projects)/[^/\s]+/)[0-9a-f]{32}(?=/)")
 ISO_DATETIME_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\+\d{2}:\d{2}|Z)"
 )
@@ -106,6 +107,7 @@ def _normalize_text(text: str, workspace: Path) -> str:
     for alias in sorted(aliases, key=len, reverse=True):
         normalized = normalized.replace(alias, "<workspace>")
     normalized = RUN_ID_PATTERN.sub("<run-id>", normalized)
+    normalized = PREVIEW_ID_PATTERN.sub(r"\1<preview-id>", normalized)
     return ISO_DATETIME_PATTERN.sub("<iso-datetime>", normalized)
 
 
@@ -692,10 +694,12 @@ def main() -> int:
                 placeholders=[],
                 message="review.import notes step",
             )
-            review_diff_stop = review_recipe["stop_conditions"][2]
             _require(
-                "review_diff_only" in review_diff_stop
-                and "author a real SoT patch manually" in review_diff_stop,
+                any(
+                    "review_diff_only" in condition
+                    and "author a real SoT patch manually" in condition
+                    for condition in review_recipe["stop_conditions"]
+                ),
                 "review.import recipe must make review_diff_only handling explicit",
             )
             _require(
@@ -874,8 +878,12 @@ def main() -> int:
                 not any(line.startswith("preview_url:") for line in preview_lines),
                 "preview --once must not report preview_url",
             )
+            preview_output = Path(_summary_value(preview_step.stdout, "preview_file")).resolve()
             _require(
-                (workspace / "var" / "dist" / "base" / "cv.html").exists(),
+                preview_output.is_file()
+                and preview_output.is_relative_to(
+                    (workspace / "var/runs/preview/variants/base").resolve()
+                ),
                 "HTML preview output missing",
             )
 
@@ -1004,8 +1012,14 @@ def main() -> int:
                 ],
             )
             steps.append(project_preview_step)
+            project_preview_output = Path(
+                _summary_value(project_preview_step.stdout, "preview_file")
+            ).resolve()
             _require(
-                (workspace / "var" / "dist" / "base" / "cv.html").exists(),
+                project_preview_output.is_file()
+                and project_preview_output.is_relative_to(
+                    (workspace / "var/runs/preview/projects" / project_id).resolve()
+                ),
                 "Project preview --once must produce HTML output",
             )
 
@@ -1082,13 +1096,25 @@ def main() -> int:
                 "import-docx must resolve the latest project-scoped run for the project",
             )
 
+            # Signals include creation/retrieval timestamps and a workspace path.
+            # Compare their normalized content, then normalize only that exact
+            # artifact's reported digest. Semantic changes and mismatched digests
+            # remain visible; do not erase arbitrary hashes from CLI output.
+            signal_bytes = (
+                workspace / "var/projects" / project_id / "job/signals.json"
+            ).read_bytes()
+            signal_digest = hashlib.sha256(signal_bytes).hexdigest()
+            signal_content_digest = _normalized_sha256(signal_bytes.decode("utf-8"), workspace)
             signatures = {
                 step.name: {
-                    "stdout_sha256": _normalized_sha256(step.stdout, workspace),
+                    "stdout_sha256": _normalized_sha256(
+                        step.stdout.replace(signal_digest, signal_content_digest), workspace
+                    ),
                     "stderr_sha256": _normalized_sha256(step.stderr, workspace),
                 }
                 for step in steps
             }
+            signatures["signals_content"] = {"sha256": signal_content_digest}
             if baseline_signatures is None:
                 baseline_signatures = signatures
             else:

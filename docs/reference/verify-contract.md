@@ -88,6 +88,15 @@ There is no fallback to `local/sot`, browser automation, or the checked-out
 
 ## Canonical journeys
 
+The broader CI ergonomics smoke check (`scripts/verify_ergonomics.py`) repeats
+operator journeys three times. It follows each reported `preview_file` and checks
+the variant/project preview boundary. Repeatability normalization removes
+workspace paths, timestamps, and preview invocation IDs. For the timestamped
+signals artifact, it compares normalized file content and substitutes only that
+artifact's exact reported digest; semantic content and unrelated checksum
+differences remain failures. Recipe stop conditions are checked by their meaning
+rather than their list position.
+
 The harness runs these commands in order against the isolated workspace config:
 
 1. `cvw doctor`
