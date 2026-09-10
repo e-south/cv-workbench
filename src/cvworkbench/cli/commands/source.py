@@ -20,10 +20,11 @@ import typer
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.config import (
-    resolve_sot_path,
+    resolve_sot_reference,
 )
 from cvworkbench.inputs.sot_versions import (
     SotVersionError,
+    read_active_version,
     resolve_versioned_root,
 )
 from cvworkbench.inputs.tags import extract_tags, lint_tags, tag_counts
@@ -39,7 +40,7 @@ from cvworkbench.ops.sot_versions import (
 
 def _resolve_sot_root(sot_path: Path | None, config: Path) -> Path:
     try:
-        resolved = resolve_sot_path(sot_path, config)
+        resolved = resolve_sot_reference(sot_path, config)
         return resolve_versioned_root(resolved)
     except (FileNotFoundError, ValueError, SotVersionError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -114,6 +115,22 @@ def sot_list(
     except (SotPackError, SotVersionError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    if get_output_mode() == OutputMode.JSON:
+        typer.echo(
+            json.dumps(
+                {
+                    "command": "sot.list",
+                    "data": {
+                        "root": str(state.root),
+                        "active": state.active,
+                        "versions": state.versions,
+                    },
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
     print_summary(
         "sot.list",
         [
@@ -168,8 +185,7 @@ def sot_new(
     configure_output_mode(plain, json_output)
     root = _resolve_sot_root(sot_path, config)
     try:
-        state = list_versions(root)
-        base = from_version or state.active
+        base = from_version if from_version is not None else read_active_version(root)
         target = create_version(root, name, base)
     except (SotPackError, SotVersionError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)

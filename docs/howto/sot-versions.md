@@ -57,6 +57,11 @@ for project defaults, invalid-pack errors, and in-flight selection behavior.
 uv run cvw sot list --sot-path ./local/source-versions
 ```
 
+With `--json`, `sot.list` returns `data.root`, `data.active`, and a `data.versions`
+array. Each version name is preserved as one string, including names containing
+commas. Plain/default output keeps the human-readable joined list. Automation
+should consume the array rather than splitting terminal text.
+
 ## Create a new version
 
 ```bash
@@ -64,12 +69,36 @@ uv run cvw sot new experiment --from base --sot-path ./local/source-versions
 ```
 
 If `--from` is omitted, the active version is used as the base.
+An explicit `--from` selects that version independently of `ACTIVE`.
 
 ## Activate a version
 
 ```bash
 uv run cvw sot activate experiment --sot-path ./local/source-versions
 ```
+
+## Repair a selection
+
+An empty, malformed, missing, or stale `ACTIVE` record does not prevent an
+explicitly named activation:
+
+```bash
+uv run cvw sot activate base --sot-path ./local/source-versions
+```
+
+Choose an existing version name. Activation replaces the damaged regular record
+or creates a missing record with mode `0600`; it preserves source contents and
+configuration. Named comparisons and `sot new --from <version>` also work while
+selection is damaged. Building from the pack, applying to its active source, and cloning
+without `--from` continue to require a valid selection.
+
+The pack must already contain an actual `versions` directory. A flat source is
+not converted by activation. Linked selection files and linked version-container
+directories are rejected. Repair those filesystem entries explicitly before
+continuing; operations do not follow them to foreign targets.
+
+The [configuration contract](../reference/configuration-contract.md#source-references-and-active-selection)
+distinguishes the chosen source location from its selected active version.
 
 ## Diff versions
 
@@ -132,7 +161,8 @@ It preserves an in-progress source without requiring full schema validation;
 source timestamps are not copied. Validate/build the selected source separately.
 
 Activation requires an existing version directory inside the pack and a regular
-`ACTIVE` file. It captures the prior selection bytes and uses expected-content
+or absent `ACTIVE` file. It captures prior selection bytes (or absence) and uses
+expected-content
 checks before and after staging. An observed competing selection edit is
 preserved and reported as an error. Cloning and activation use the shared
 [file recovery contract](../reference/configuration-contract.md#build-bundle-recovery):
@@ -147,6 +177,9 @@ provide simultaneous visibility of a copied tree, or establish crash durability.
 Wait for a successful command result before using its output.
 `tests/ops/sot_versions/test_lifecycle.py` covers API/CLI boundaries, partial-write
 recovery, permissions, empty directories, and observed concurrent changes.
+`tests/cli/test_sot.py` exercises explicit/configured pack recovery while document
+consumers still reject damaged selections and cloning without an explicit base
+remains strict.
 
 ## Comparison contract
 

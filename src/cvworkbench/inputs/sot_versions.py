@@ -19,7 +19,9 @@ class SotVersionError(RuntimeError):
 
 
 def is_versioned_root(path: Path) -> bool:
-    return (path / "versions").is_dir() and (path / "ACTIVE").exists()
+    """Identify a version container independently of its selection record."""
+    versions = path / "versions"
+    return not versions.is_symlink() and versions.is_dir()
 
 
 def resolve_active_sot_path(path: Path) -> Path:

@@ -301,3 +301,41 @@ def test_activation_preserves_a_selection_changed_during_staging(
     assert changed
     assert active.read_bytes() == b"Concurrent selection\n"
     assert sorted(p.name for p in root.iterdir()) == ["ACTIVE", "versions"]
+
+
+def test_version_listing_rejects_a_linked_versions_directory(tmp_path: Path) -> None:
+    root = tmp_path / "pack"
+    root.mkdir()
+    (root / "ACTIVE").write_text("base\n")
+    external = tmp_path / "external"
+    (external / "base").mkdir(parents=True)
+    (root / "versions").symlink_to(external, target_is_directory=True)
+    with pytest.raises(SotVersionError):
+        list_versions(root)
+
+
+@pytest.mark.parametrize("interruption", [OSError, KeyboardInterrupt])
+def test_missing_selection_repair_recovers_after_a_failed_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interruption: type[BaseException]
+) -> None:
+    root = _pack(tmp_path)
+    active = root / "ACTIVE"
+    active.unlink()
+    original_replace = os.replace
+    interrupted = False
+
+    def fail_replacement(source, destination):
+        nonlocal interrupted
+        result = original_replace(source, destination)
+        if Path(destination) == active and not interrupted:
+            interrupted = True
+            raise interruption("Injected repair interruption")
+        return result
+
+    monkeypatch.setattr(os, "replace", fail_replacement)
+    expected = KeyboardInterrupt if interruption is KeyboardInterrupt else SotPackError
+    with pytest.raises(expected):
+        activate_version(root, "base")
+    assert interrupted
+    assert not active.exists()
+    assert [path.name for path in root.iterdir()] == ["versions"]

@@ -30,14 +30,13 @@ from cvworkbench.config import (
     resolve_config_path,
     resolve_default_theme,
     resolve_default_variant,
-    resolve_sot_path,
+    resolve_sot_reference,
     resolve_style_preset,
     resolve_variant_path,
 )
 from cvworkbench.inputs.sot_versions import (
     SotVersionError,
     resolve_active_sot_path,
-    resolve_versioned_root,
 )
 from cvworkbench.ops.projects import (
     ProjectError,
@@ -276,11 +275,15 @@ def dev_serve(
                 raise typer.Exit(code=2)
             resolved_variant_obj = load_variant(project_spec.variant_path)
             resolved_variant = resolved_variant_obj.id
-            resolved = resolve_active_sot_path(project_spec.sot_path)
-            if sot_path is not None:
-                resolved = resolve_sot_path(sot_path, config_path)
+            source_reference = (
+                project_spec.sot_path
+                if sot_path is None
+                else resolve_sot_reference(sot_path, config_path)
+            )
+            resolved = resolve_active_sot_path(source_reference)
         else:
-            resolved = resolve_sot_path(sot_path, config_path)
+            source_reference = resolve_sot_reference(sot_path, config_path)
+            resolved = resolve_active_sot_path(source_reference)
             resolved_variant = variant or resolve_default_variant(config_path)
             variant_path = resolve_variant_path(resolved_variant, config_path)
             resolved_variant_obj = load_variant(variant_path)
@@ -296,13 +299,7 @@ def dev_serve(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    if sot_path is not None:
-        sot_base = resolved
-    else:
-        try:
-            sot_base = resolve_versioned_root(resolved)
-        except SotVersionError:
-            sot_base = resolved
+    sot_base = resolved if sot_path is not None else source_reference
 
     one_shot = once or os.environ.get("CVW_DEV_ONCE") == "1"
     session_id = uuid.uuid4().hex

@@ -9,6 +9,9 @@
   Initialization and cloning share regular-file capture through `copying.py`.
   Clone into a fresh destination and preserve `ACTIVE`; activation uses captured
   selection bytes with the shared writer's expected-content checks and recovery.
+- Pack location and active selection are separate: explicit named operations can
+  use an existing version container with a damaged/missing selection. Activation
+  may create a missing `ACTIVE` with mode `0600`; source consumers remain strict.
 - Initialization requires an explicit source and fresh destination, preserves
   the input/configuration, and validates captured bytes before destination writes.
   Reuse `storage.replace_files_atomically` for recoverable creation; do not add

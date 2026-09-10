@@ -142,11 +142,17 @@ def resolve_config_path(config_path: ConfigSource) -> Path:
 
 
 def resolve_sot_path(sot_path: Path | None, config_path: ConfigSource) -> Path:
+    reference = resolve_sot_reference(sot_path, config_path)
+    try:
+        return resolve_active_sot_path(reference)
+    except SotVersionError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def resolve_sot_reference(sot_path: Path | None, config_path: ConfigSource) -> Path:
+    """Resolve the chosen source location without dereferencing its ACTIVE record."""
     if sot_path is not None:
-        try:
-            return resolve_active_sot_path(sot_path)
-        except SotVersionError as exc:
-            raise ValueError(str(exc)) from exc
+        return sot_path.resolve()
 
     configuration = read_config(config_path)
     config_path = configuration.path
@@ -161,11 +167,7 @@ def resolve_sot_path(sot_path: Path | None, config_path: ConfigSource) -> Path:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Config field paths.sot must be a non-empty string")
 
-    resolved = _resolve_from_config(config_path, value)
-    try:
-        return resolve_active_sot_path(resolved)
-    except SotVersionError as exc:
-        raise ValueError(str(exc)) from exc
+    return _resolve_from_config(config_path, value)
 
 
 def resolve_dist_path(config_path: ConfigSource) -> Path:

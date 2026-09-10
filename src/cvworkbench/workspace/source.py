@@ -93,7 +93,7 @@ def build_versions_info(resolved_sot: Path) -> tuple[dict[str, Any] | None, str,
         return None, "", None
     try:
         version_state = list_versions(version_root)
-    except SotPackError as exc:
+    except (SotPackError, SotVersionError) as exc:
         return None, "", str(exc)
     versions_info = {
         "root": str(version_state.root),

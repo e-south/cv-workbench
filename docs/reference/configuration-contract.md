@@ -65,6 +65,24 @@ YAML, a non-mapping document, recursive values, and invalid requested settings
 raise `ValueError`. Encoding/YAML errors identify the config file without
 echoing its contents.
 
+## Source references and active selection
+
+`resolve_sot_reference(sot_path, configuration)` returns the absolute location
+selected by an explicit path or `paths.sot`, without reading `ACTIVE`. It accepts
+the same `ConfigSource` snapshot/path contract as other resolvers. An explicit
+path takes precedence; configured relative paths remain relative to the config
+file. The reference can name a flat source, a version pack, or a pinned version.
+
+`resolve_sot_path` then applies input-owned active selection to that reference.
+For a pack reference, missing, malformed, linked, or stale selection records
+remain errors. A pinned version retains its concrete directory even when pack
+selection is damaged. Preview preserves the chosen configured/project reference
+instead of inferring a pack root from a pin. Version-management adapters use the
+reference plus the structural pack resolver so explicitly named operations can
+inspect or repair a damaged selection without first consuming it. See the
+[version workflow](../howto/sot-versions.md#repair-a-selection) for recovery and
+the [application contract](patch-application.md#source-selection) for edit targets.
+
 ## Build and render boundaries
 
 The `build` and `render` CLI adapters capture one workbench snapshot before

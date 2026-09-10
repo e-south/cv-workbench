@@ -59,12 +59,16 @@ def activate_version(root: Path, name: str) -> None:
     _validate_version_name(name)
     resolve_version_directory(root, name)
     active_path = root / "ACTIVE"
-    if active_path.is_symlink() or not active_path.is_file():
-        raise SotPackError(f"Active SoT selection must be a regular file: {active_path}")
+    if active_path.is_symlink() or (active_path.exists() and not active_path.is_file()):
+        raise SotPackError(f"Active SoT selection must be a regular file or absent: {active_path}")
     try:
-        previous = active_path.read_bytes()
+        try:
+            previous = active_path.read_bytes()
+        except FileNotFoundError:
+            previous = None
         replace_files_atomically(
             [(active_path, f"{name}\n".encode("utf-8"))],
+            file_modes={active_path: 0o600} if previous is None else None,
             expected_contents={active_path: previous},
         )
     except (OSError, AtomicWriteError) as exc:

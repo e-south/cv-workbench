@@ -45,36 +45,33 @@ path. More modules, tests, or audit findings are not completion criteria.
 
 ## What the current work buys
 
-`sot init` closes a concrete workflow gap: a flat source can now become an
-independent version experiment without manual directory construction or changes
-to the original source/configuration. A real CLI journey created the pack,
-cloned a version, revised a paragraph, compared and activated it, then built and
-explained the revised letter. The source and initial version remained unchanged.
+Version experiments now support creation, comparison, guarded cloning, and
+activation through the CLI/API. Named operations can repair a damaged or missing
+selection while builds from the pack continue to require a valid selection.
+A configured version pin remains authoritative in preview; non-strict context
+reports damaged pack metadata without losing the valid pinned source.
 
-The existing `ops.sot_versions` API routes to separate initialization, lifecycle,
-comparison, copying, and result owners. Input-owned name constraints, selection
-records, and directory containment are shared by readers and operations. Schema
-validation and recoverable writes retain their existing owners. This keeps
-policy changes out of CLI adapters and avoids parallel storage implementations.
+The audit reproduced repair commands blocked by the selection they needed to
+repair, preview silently switching a configured pin to another version, context
+aborting on pack metadata errors, and JSON inventory flattening version names
+into ambiguous text. Configuration now resolves source references separately
+from input-owned active selection. Preview retains the reference, inspection
+reports domain errors, and inventory JSON preserves an array of names.
 
-The lifecycle audit reproduced invalid activation targets, linked selection
-reads/writes crossing the pack boundary, partial selections after write failure,
-and partial clones after copy failure. Shared input checks and recoverable writes
-now protect these boundaries. Twenty-three lifecycle cases cover malformed
-records, unsafe sources, destination conflicts, permissions, observed concurrent
-edits, and injected I/O failure/cancellation. The shared source-capture extraction
-passed the same 51 checks before and after its move.
+The existing source-version API keeps separate initialization, lifecycle,
+comparison, copying, and result owners. Readers share name/selection/containment
+checks; copy and mutation paths reuse shared capture and storage recovery.
+Prior linked-file and partial-write regressions remain covered. The current
+12-step CLI journey rejected an unselected build, compared and cloned explicit
+versions, inspected and previewed a pin, restored selection, then built and
+explained the recovered document. Original source/base bytes and configuration
+were preserved by the commands. Source locking and crash durability remain
+outside these guarantees.
 
-A real CLI journey cloned an experiment, rejected an invalid activation while
-retaining the prior selection, compared the revised paragraph, then activated,
-built, and explained the letter. Source, base, and configuration stayed unchanged.
-This establishes the intended editing path and bounded recovery behavior; it
-does not establish source locking or crash durability.
-
-The final code suite passed **1,240 tests**, with one existing opt-in integration
+The final code suite passed **1,259 tests**, with one existing opt-in integration
 skip and five upstream warnings. The seven-step isolated CLI harness also passed.
-Evidence: `/tmp/cvw-lifecycle-full.log`,
-`/tmp/cvw-lifecycle-harness.json`, and `/tmp/cvw-lifecycle-journey.json` (the latter
+Evidence: `/tmp/cvw-pack-routing-full.log`,
+`/tmp/cvw-pack-routing-harness.json`, and `/tmp/cvw-pack-routing-journey.json` (the latter
 locates the real journey workspace and logs). Earlier retained evidence includes
 `/tmp/cvw-cover-letter-journey.json`, `/tmp/cvw-draft-retention-import-journey.json`,
 and `/tmp/cvw-publication-authority-real-journey.json`. These are local session
@@ -83,7 +80,7 @@ artifacts; live contracts above remain the durable behavior authority.
 Before/after inventories confirm unchanged regular-file paths and bytes under
 `local/` and `var/`, along with unchanged canonical master and public PDF hashes.
 Context reports a ready source with no issues and publication still requiring
-review. `/tmp/cvw-lifecycle-invariants.json` records those checks. The website
+review. `/tmp/cvw-pack-routing-invariants.json` records those checks. The website
 working tree remains clean; no source promotion, site sync, or push occurred.
 
 ## Current public artifact review

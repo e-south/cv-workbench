@@ -14,9 +14,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from cvworkbench.ops.sot_versions import create_version, initialize_pack
 
 
 def _preview_output(result) -> Path:
@@ -28,6 +30,34 @@ def _preview_output(result) -> Path:
     ]
     assert len(values) == 1, result.stdout
     return Path(values[0])
+
+
+@pytest.mark.usefixtures("sample_workspace")
+@pytest.mark.parametrize("selection", ["other", "missing"])
+def test_preview_keeps_a_configured_version_pin(tmp_path: Path, selection: str) -> None:
+    pack = initialize_pack(source=Path("sot.sample"), destination=tmp_path / "pack")
+    pinned = create_version(pack.root, "pinned", "base")
+    letters = pinned / "letters.yaml"
+    data = yaml.safe_load(letters.read_text())
+    data["letters"][0]["sections"][0]["text"] = "This paragraph belongs to the pinned version."
+    letters.write_text(yaml.safe_dump(data, sort_keys=False))
+    if selection == "missing":
+        (pack.root / "ACTIVE").unlink()
+    config = Path("config/workbench.yaml")
+    settings = yaml.safe_load(config.read_text())
+    settings["paths"]["sot"] = str(pinned)
+    config.write_text(yaml.safe_dump(settings, sort_keys=False))
+    before = {p.relative_to(pack.root): p.read_bytes() for p in pack.root.rglob("*") if p.is_file()}
+    configured = config.read_bytes()
+
+    result = CliRunner().invoke(app, ["preview", "--once", "--variant", "cover-letter", "--plain"])
+
+    assert result.exit_code == 0, result.output
+    assert "This paragraph belongs to the pinned version." in _preview_output(result).read_text()
+    assert config.read_bytes() == configured
+    assert {
+        p.relative_to(pack.root): p.read_bytes() for p in pack.root.rglob("*") if p.is_file()
+    } == before
 
 
 @pytest.mark.usefixtures("sample_workspace")

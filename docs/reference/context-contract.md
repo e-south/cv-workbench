@@ -66,6 +66,11 @@ corresponding section. With `strict=True`, the first such problem raises
 mode. CLI adapters translate these errors into their terminal message and exit
 code; Python callers handle the exception themselves.
 
+A pinned source can remain `ready` while its pack's selection metadata is
+damaged. Non-strict inspection reports that metadata problem in `issues` and
+continues inspecting the pinned source; strict inspection raises `ValueError`.
+Source readiness and pack metadata health are separate observations.
+
 One inspection uses one immutable workbench configuration snapshot. Source
 selection, configured artifact locations, default variant, retention settings,
 and publication inventory share that snapshot. The API also accepts an explicit

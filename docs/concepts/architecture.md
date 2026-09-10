@@ -76,6 +76,10 @@ meaning in section builders and paragraph composition in one shared owner.
 The [selection contract](../reference/selection-contract.md) keeps document
 selection in the build layer and explanation/checklist presentation in consumers.
 
+Configuration resolves the chosen source reference before input-owned active
+selection; version-management adapters retain the reference so explicit actions
+can repair a damaged selection. See the
+[source-resolution contract](../reference/configuration-contract.md#source-references-and-active-selection).
 Source-version path resolution belongs to `inputs/sot_versions.py`. The public
 `ops.sot_versions` API routes to `initialization.py` for captured-copy creation,
 `lifecycle.py` for existing-pack management, `comparison.py` for read-only diffs,
