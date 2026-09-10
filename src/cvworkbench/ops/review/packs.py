@@ -134,14 +134,17 @@ def _build_review_checklist(selection_path: Path) -> str:
     for item in items:
         if not isinstance(item, dict):
             continue
-        if item.get("type") != "bullet":
+        if item.get("type") == "bullet":
+            owner_id = item.get("role_id") or ""
+        elif item.get("type") == "section" and item.get("section") == "letters":
+            owner_id = item.get("letter_id") or ""
+        else:
             continue
         if item.get("included") is not True:
             continue
-        bullet_id = item.get("id", "")
+        item_id = item.get("id", "")
         text = item.get("text") or ""
-        role_id = item.get("role_id") or ""
-        label = f"{bullet_id} ({role_id})".strip()
+        label = f"{item_id} ({owner_id})".strip()
         if text:
             lines.append(f"- [ ] {label}: {text}")
         else:

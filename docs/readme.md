@@ -48,6 +48,7 @@ task instead of browsing the whole docs tree.
 | Compare themes, presets, and export styling | [howto/styling.md](howto/styling.md) | [reference/preview-contract.md](reference/preview-contract.md) |
 | Prepare and sync the faithful authored CV | [howto/publish-site.md](howto/publish-site.md) | [reference/site-contract.md](reference/site-contract.md) |
 | Work with versioned SoT directories or packs | [howto/sot-versions.md](howto/sot-versions.md) | [reference/context-contract.md](reference/context-contract.md) |
+| Build and revise a cover letter, or explain its selected paragraphs | [howto/quickstart.md#cover-letter-workflow](howto/quickstart.md#cover-letter-workflow) | [reference/selection-contract.md](reference/selection-contract.md) |
 
 ### Project Tailoring And Review
 
@@ -77,6 +78,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [concepts/architecture.md](concepts/architecture.md): repo boundaries and design constraints
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
 - [reference/configuration-contract.md](reference/configuration-contract.md): settings lifetime, explicit snapshots, resolution, and build preflight
+- [reference/selection-contract.md](reference/selection-contract.md): document-specific tag decisions, explanations, and review checklist inputs
 - [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, session semantics, and UI control hooks
 - [reference/verify-contract.md](reference/verify-contract.md): test isolation and repo-local CLI journey verification
 - [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, guarded patch application, and proposal visibility rules

@@ -57,6 +57,7 @@ than maintaining executable copies beneath `docs/`.
 | Responsibility | Owner beneath `src/cvworkbench/` |
 | --- | --- |
 | Read-only content and render planning | `build/planning.py` |
+| Shared letter selection and document-specific filter evidence | `build/selection.py` |
 | Selected contact labels and link destinations shared by resume and letter | `build/contacts.py` |
 | Record metadata rows and narrative paragraph boundaries | `build/entry_layout.py` |
 | Explicit render-input fingerprints and lifetime checks | `build/assets.py` |
@@ -72,6 +73,8 @@ The [contact presentation contract](../howto/styling.md#contact-presentation)
 separates semantic links from theme styling and authored-CV publication policy.
 The [entry structure contract](../howto/styling.md#entry-structure) keeps field
 meaning in section builders and paragraph composition in one shared owner.
+The [selection contract](../reference/selection-contract.md) keeps document
+selection in the build layer and explanation/checklist presentation in consumers.
 
 Preview uses `dev/preview_paths.py` to separate canonical input from served
 output and assign an independent directory to each invocation. Audited builds,

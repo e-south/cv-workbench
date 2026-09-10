@@ -15,6 +15,7 @@ from typing import Any
 
 from cvworkbench.build.contacts import build_contact_line
 from cvworkbench.build.entry_layout import append_entry_text
+from cvworkbench.build.selection import select_letter
 from cvworkbench.text import slugify, tag_classes
 from cvworkbench.variants import Variant
 
@@ -75,8 +76,7 @@ def _build_cover_letter_markdown(
     variant: Variant,
     snippets: list[dict[str, Any]],
 ) -> str:
-    if not variant.letter_id:
-        raise ValueError("Cover letter variants must define letter_id")
+    letters = select_letter(sot, variant.letter_id)
 
     lines: list[str] = []
     person = sot.get("person", {})
@@ -90,7 +90,6 @@ def _build_cover_letter_markdown(
         lines.append(contact_line)
         lines.append("")
 
-    letters = _find_letter(sot, variant.letter_id)
     title = _string(letters.get("title"))
     if title:
         lines.append(f"## {title}")
@@ -141,19 +140,6 @@ def _build_cover_letter_markdown(
     if not content.endswith("\n"):
         content += "\n"
     return content
-
-
-def _find_letter(sot: dict[str, Any], letter_id: str) -> dict[str, Any]:
-    letters_data = sot.get("letters", {})
-    letters = letters_data.get("letters")
-    if not isinstance(letters, list):
-        raise ValueError("letters.letters must be a list")
-    for letter in letters:
-        if not isinstance(letter, dict):
-            continue
-        if letter.get("id") == letter_id:
-            return letter
-    raise ValueError(f"Letter not found: {letter_id}")
 
 
 def _build_summary(

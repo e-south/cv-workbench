@@ -154,6 +154,19 @@ def test_docs_router_links_to_canonical_configuration_and_sample_sources() -> No
     assert "local/sot/" not in links
 
 
+def test_selection_contract_routes_build_and_review_evidence() -> None:
+    for relative in (
+        "docs/readme.md",
+        "docs/concepts/architecture.md",
+        "docs/reference/review-contract.md",
+    ):
+        assert "selection-contract.md" in (ROOT / relative).read_text()
+    contract = (ROOT / "docs/reference/selection-contract.md").read_text()
+    assert "build/selection.py::select_letter" in contract
+    assert "tests/build/test_selection.py" in contract
+    assert "quickstart.md#cover-letter-workflow" in contract
+
+
 def test_build_recovery_contract_routes_to_distinct_owners() -> None:
     architecture = (ROOT / "docs/concepts/architecture.md").read_text()
     contract = (ROOT / "docs/reference/configuration-contract.md").read_text()

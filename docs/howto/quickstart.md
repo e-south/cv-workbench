@@ -140,6 +140,32 @@ uv run cvw build --plain --sot-path ./sot.sample --variant base --format md
 uv run cvw build --json --sot-path ./sot.sample --variant base --format md
 ```
 
+### Cover-letter workflow
+
+The starter `cover-letter` variant selects `default-cover-letter` from
+`letters.yaml`. Its paragraphs have stable section IDs, text, and tags. Set
+`variant.letter_id` to choose another authored letter; include/exclude tags
+select its paragraphs.
+
+```bash
+uv run cvw build --sot-path ./sot.sample --variant cover-letter --format md,pdf,docx
+uv run cvw explain --variant cover-letter --type section --id opening
+uv run cvw reviewpack --variant cover-letter --json
+```
+
+For personal content, use your configured private source in place of
+`./sot.sample`. To revise a letter, edit its text in that source's `letters.yaml`
+and rebuild. When exploring an alternative, first create or select an explicit
+[source version](sot-versions.md); generated DOCX/PDF outputs are review artifacts.
+The review packet keeps the original run and lists selected letter paragraphs.
+Use [selection evidence](../reference/selection-contract.md) to explain filtering
+or inspect a retained run after another build.
+
+Reviewing edits in Word remains supported as a comparison workflow. Letter
+imports report `review_diff_only`; apply accepted wording manually to
+`letters.yaml` and rebuild. Executable import patches currently cover the
+documented resume surfaces only. See [import outputs](../reference/review-contract.md#import-outputs).
+
 ## 7) Follow-up: prepare your authored CV for publication
 
 The generated sample build is a rendering demonstration. For a faithful public

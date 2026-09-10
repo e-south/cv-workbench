@@ -22,14 +22,52 @@ def build_selection(sot: dict[str, Any], variant: Variant) -> dict[str, Any]:
     exclude_set = set(variant.exclude_tags)
     items: list[dict[str, Any]] = []
 
+    if variant.document_type == "cover-letter":
+        letter = select_letter(sot, variant.letter_id)
+        for section in letter.get("sections", []):
+            tags = _tag_classes(section.get("tags"))
+            included, reasons = _evaluate_tags(tags, include_set, exclude_set)
+            items.append(
+                {
+                    "id": slugify(section.get("id", "")),
+                    "type": "section",
+                    "section": "letters",
+                    "letter_id": variant.letter_id,
+                    "text": section.get("text"),
+                    "label": section.get("heading"),
+                    "tags": sorted(tags),
+                    "included": included,
+                    "reasons": reasons,
+                }
+            )
+        return {
+            "variant": variant.id,
+            "document_type": variant.document_type,
+            "letter_id": variant.letter_id,
+            "max_bullets_per_role": variant.max_bullets_per_role,
+            "items": items,
+        }
+
     _append_bullets(items, sot, include_set, exclude_set, variant.max_bullets_per_role)
     _append_section_items(items, sot, include_set, exclude_set)
-
     return {
         "variant": variant.id,
         "max_bullets_per_role": variant.max_bullets_per_role,
         "items": items,
     }
+
+
+def select_letter(sot: dict[str, Any], letter_id: str | None) -> dict[str, Any]:
+    """Resolve the letter authority shared by rendering and selection evidence."""
+    if not letter_id:
+        raise ValueError("Cover letter variants must define letter_id")
+    letters = sot.get("letters", {}).get("letters")
+    if not isinstance(letters, list):
+        raise ValueError("letters.letters must be a list")
+    for letter in letters:
+        if isinstance(letter, dict) and letter.get("id") == letter_id:
+            return letter
+    raise ValueError(f"Letter not found: {letter_id}")
 
 
 def _append_bullets(

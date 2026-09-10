@@ -51,6 +51,8 @@ def _print_explain_summary(item: dict[str, Any]) -> None:
         rows.append(("label", str(item.get("label"))))
     if "role_id" in item:
         rows.append(("role_id", str(item.get("role_id"))))
+    if "letter_id" in item:
+        rows.append(("letter_id", str(item.get("letter_id"))))
     if "section" in item:
         rows.append(("section", str(item.get("section"))))
     print_summary("explain", rows)

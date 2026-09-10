@@ -32,6 +32,9 @@ the relationship inspectable without guessing a directory layout.
 By default, variant bundles live at `var/reviews/<variant>/` and project bundles
 at `var/reviews/projects/<project>/`, beneath the configured reviews root.
 Output filenames follow the selected run's manifest; they need not be `cv.*`.
+Checklists include selected resume bullets or cover-letter sections from the
+retained run's [selection evidence](selection-contract.md), without reselecting
+from current source files.
 
 Packaging reads the selected run's artifacts without requiring current source,
 configured variant definitions, or live proposal files. An explicit `--project`

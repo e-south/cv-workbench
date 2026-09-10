@@ -36,6 +36,7 @@ publish**. More modules, tests, or audit findings are not completion criteria.
 | Journey | Verified support | Remaining acceptance |
 | --- | --- | --- |
 | Generate a readable document | Concise working contact links; separate metadata and narrative paragraphs; stable generated CV pagination and first-page rendering | Review real document wording and appearance for the intended audience |
+| Explain and review a cover letter | Selection records the chosen letter's paragraphs; explain reports tag decisions; review checklists include selected paragraphs; manual revision/rebuild preserves prior run evidence | DOCX letter edits remain review-only comparisons; accepted wording is edited manually in the source |
 | Edit through Word and retain source authority | A real supported bullet edit returns as a guarded patch; unchanged DOCX imports are no-ops; changed link destinations require review | Broader editing coverage remains limited to documented supported operations |
 | Preview without obscuring the document or changing source | Secondary settings use native disclosure; document visible at inspected narrow widths; keyboard controls and format switching verified; isolated preview outputs | Expanded settings/long warnings can require scrolling; no full assistive-technology conformance claim |
 | Apply an edit to the selected source version | Draft and project application share one selection owner, preserve explicit version pins, and report the concrete edited directory | Directory selection is not a global source snapshot; expected-text/byte guards retain their documented concurrency limits |
@@ -79,8 +80,9 @@ assessment remain outside that claim.
 | Apply to the selected source version | The document being reviewed and the source being edited refer to the same selected directory | [Source selection](../reference/patch-application.md#source-selection) |
 | Capture preparation inputs and action settings | Validation and provenance describe the bytes actually processed; changed originals reject preparation before replacement | [Input lifetime](../reference/publication-contract.md#input-lifetime) |
 | Retain import baselines independently of recency | Building a newer document cannot silently remove an outstanding edit's comparison source | [Draft dependencies](../reference/artifact-retention.md#import-draft-dependencies) |
+| Explain the actual cover letter and review its paragraphs | Selection and checklists describe the document being revised, with clear inclusion/exclusion reasons | [Selection evidence](../reference/selection-contract.md) |
 
-The latest code baseline passed 1,165 tests with one existing opt-in integration
+The latest code baseline passed 1,173 tests with one existing opt-in integration
 skip and five upstream warnings, plus the seven-step isolated CLI harness and
 repository hooks. A real import/new-build/retention journey kept its baseline
 solely through its draft dependency. A separate preparation from real authored
@@ -89,6 +91,16 @@ workspace. Evidence: `/tmp/cvw-draft-retention-full.log`,
 `/tmp/cvw-draft-retention-import-journey.json`, and
 `/tmp/cvw-publication-authority-real-journey.json`. Contract-specific concurrency
 and recovery limits remain explicit; local checks are not remote advisory evidence.
+
+The cover-letter pass reproduced a real build with 13 resume selection items,
+no letter sections, and a failed `explain --id opening`. Six initial regressions
+and one checklist regression now pass. A real sample build/explain/review/import/
+manual-source-revision/rebuild journey preserves the original run's paragraph
+text and reports revised text in the new run. The selection fix preserves
+Markdown/HTML bytes, DOCX document XML, and PDF text/pixels. Full-suite and harness
+evidence is in `/tmp/cvw-cover-letter-full.log` and
+`/tmp/cvw-cover-letter-harness.json`; `/tmp/cvw-cover-letter-journey.json` locates
+the isolated workspace and its `journey-result.json`. No live source was edited.
 
 ## Current public artifact review
 
