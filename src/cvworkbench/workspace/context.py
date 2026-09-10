@@ -32,6 +32,7 @@ from cvworkbench.ops.variant_lifecycle import (
     VariantLifecycleError,
     list_variant_inbox,
 )
+from cvworkbench.variants import load_variants_from_config
 from cvworkbench.workspace.commands import command_prefix
 from cvworkbench.workspace.projects import build_projects_context
 from cvworkbench.workspace.publication import inspect_workspace_publication, publication_recipe
@@ -47,7 +48,6 @@ from cvworkbench.workspace.source import (
 from cvworkbench.workspace.variants import (
     inbox_entry_payload,
     inbox_summary_line,
-    load_variants_from_config,
     variants_summary_line,
 )
 from cvworkbench.workspace.workflows.catalog import build_context_recipes

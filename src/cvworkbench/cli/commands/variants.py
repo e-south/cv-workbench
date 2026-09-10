@@ -38,11 +38,11 @@ from cvworkbench.ops.variant_lifecycle import (
     list_variant_inbox,
 )
 from cvworkbench.ops.variant_promote import PromoteError, promote_variant
+from cvworkbench.variants import load_variants_from_config
 from cvworkbench.workspace.commands import recipe_command, shell_command
 from cvworkbench.workspace.variants import (
     inbox_entry_payload,
     inbox_summary_line,
-    load_variants_from_config,
     variants_summary_line,
 )
 

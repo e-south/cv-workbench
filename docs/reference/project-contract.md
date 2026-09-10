@@ -206,6 +206,26 @@ formats fail fast instead of being interpreted heuristically.
 
 ## Python Ownership
 
+`cvworkbench.ops.projects` is the public operation surface. Implementations live
+under that package, and its entrypoint explicitly exports the callable APIs.
+Internal modules import concrete owners rather than the public entrypoint.
+
+| Responsibility | Owner beneath `ops/projects/` |
+| --- | --- |
+| Artifact records, patch vocabulary, record timestamps | `records.py` |
+| Project selectors and proposal identities | `identity.py` |
+| Manifest identity and executable-project prerequisites | `manifest.py` |
+| Detailed metadata and proposal visibility | `inspection.py` |
+| Creation, retargeting, registration, and discard | `creation.py` |
+| Guarded edit authoring, compilation, and application | `patches.py` |
+| Job evidence, variant ranking, and proposal plans | `guidance.py` |
+
+Catalog loading is shared through `cvworkbench.variants.load_variants_from_config`.
+Workspace modules own inventory and optional-plan presentation. Project
+operations do not import workspace, CLI, or preview presentation. The CLI still
+coordinates the guide workflow and optional preview launch; that orchestration
+is a separate API extraction boundary.
+
 `cvworkbench.ops.projects.load_project_metadata` owns manifest reading and
 identity validation. Workspace inventory consumes that reader;
 `load_project` adds executable-project prerequisites, and `load_project_details`

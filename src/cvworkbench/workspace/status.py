@@ -20,6 +20,7 @@ from cvworkbench.config import (
     resolve_variant_ttl_days,
 )
 from cvworkbench.ops.variant_lifecycle import list_variant_inbox
+from cvworkbench.variants import load_variants_from_config
 from cvworkbench.workspace.projects import build_projects_context
 from cvworkbench.workspace.publication import inspect_workspace_publication
 from cvworkbench.workspace.reviews import build_reviews_context
@@ -28,7 +29,6 @@ from cvworkbench.workspace.source import build_sot_details, build_versions_info,
 from cvworkbench.workspace.variants import (
     inbox_entry_payload,
     inbox_summary_line,
-    load_variants_from_config,
     variants_summary_line,
 )
 

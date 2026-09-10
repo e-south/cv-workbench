@@ -96,7 +96,8 @@ defines the callable API and its error semantics.
 | Configured variants and proposal inbox | `workspace/variants.py` |
 | Build history and review readiness | `workspace/runs.py` |
 | Project inventory and available project commands | `workspace/projects.py` |
-| Job evidence, variant recommendations, and proposal planning | `workspace/project_guidance.py` |
+| Job evidence, variant recommendations, and proposal planning | `ops/projects/guidance.py` |
+| Optional project-plan inspection and recommendation summaries | `workspace/project_guidance.py` |
 | Content-review inventory and source health | `workspace/reviews.py` |
 | Authored publication state and review/sync recipe | `workspace/publication.py` |
 | Command quoting and workspace/source argument propagation | `workspace/commands.py` |
@@ -119,8 +120,16 @@ recorded by hash in build manifests. Workflow descriptions receive resolved
 locations without selecting settings themselves. The
 [configuration contract](../reference/configuration-contract.md) defines
 resolution, preflight, and the remaining adoption boundaries. Project and several
-other command adapters retain orchestration that can move behind workspace owners as
+other command adapters retain orchestration that can move behind operation APIs as
 their behavior is characterized.
+
+`ops/projects/` groups project identity, manifests, inspection, creation,
+guarded content edits, and recommendation logic behind an explicit public API.
+The [project ownership contract](../reference/project-contract.md#python-ownership)
+defines the internal modules. Variant catalog loading lives in `variants.py`,
+so project operations and workspace inventory share it without importing each
+other. These ownership boundaries do not imply that all CLI orchestration has
+already moved into operations.
 
 ## Command adapters
 

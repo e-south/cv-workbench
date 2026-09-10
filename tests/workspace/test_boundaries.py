@@ -14,6 +14,37 @@ from importlib.util import resolve_name
 from pathlib import Path
 
 
+def test_project_api_exposes_owned_implementations_without_reverse_imports() -> None:
+    package = Path(__file__).resolve().parents[2] / "src/cvworkbench/ops/projects"
+    api = ast.parse((package / "__init__.py").read_text())
+    assert not any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        for node in ast.walk(api)
+    )
+    for node in api.body:
+        if isinstance(node, ast.ImportFrom):
+            assert (node.module or "").startswith("cvworkbench.ops.projects.")
+            assert all(alias.name != "*" for alias in node.names)
+
+    violations = []
+    for path in package.glob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if node.level:
+                    module = resolve_name("." * node.level + module, "cvworkbench.ops.projects")
+                imports = [module, *(f"{module}.{alias.name}" for alias in node.names)]
+            elif isinstance(node, ast.Import):
+                imports = [alias.name for alias in node.names]
+            else:
+                continue
+            if "cvworkbench.ops.projects" in imports:
+                violations.append(f"{path.name}:{node.lineno}")
+    assert not violations, f"Project owners must not import the public entrypoint: {violations}"
+
+
 def test_cli_entrypoint_only_registers_commands_and_groups() -> None:
     package_root = Path(__file__).resolve().parents[2] / "src/cvworkbench/cli"
     entrypoint = package_root / "app.py"

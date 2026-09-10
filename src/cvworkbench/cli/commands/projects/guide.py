@@ -38,8 +38,7 @@ from cvworkbench.ops.projects import (
     discard_project_workspace,
     retarget_project_variant,
 )
-from cvworkbench.variants import load_variant
-from cvworkbench.workspace.project_guidance import (
+from cvworkbench.ops.projects.guidance import (
     build_job_evidence,
     build_proposal_plan,
     job_keyword_overlap,
@@ -48,12 +47,10 @@ from cvworkbench.workspace.project_guidance import (
     normalize_keywords,
     recommend_variants,
 )
+from cvworkbench.variants import load_variant, load_variants_from_config
 from cvworkbench.workspace.source import (
     tags_summary_line,
     top_tags,
-)
-from cvworkbench.workspace.variants import (
-    load_variants_from_config,
 )
 
 

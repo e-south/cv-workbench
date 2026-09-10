@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -184,3 +185,33 @@ def _contact_fields(value: object) -> list[str]:
     if len(fields) != len(set(fields)):
         raise ValueError("Variant contact_fields must not contain duplicates")
     return fields
+
+
+def _variants_dir(config_path: Path) -> Path:
+    return config_path.parent / "variants"
+
+
+def load_variants_from_config(config_path: Path) -> list[dict[str, Any]]:
+    variants_dir = _variants_dir(config_path)
+    if not variants_dir.exists():
+        raise ValueError(f"Variants directory not found: {variants_dir}")
+    variants: list[dict[str, Any]] = []
+    for path in sorted(variants_dir.glob("*.yaml")):
+        variant = load_variant(path)
+        variants.append(
+            {
+                "id": variant.id,
+                "document_type": variant.document_type,
+                "outputs": variant.outputs,
+                "include_tags": variant.include_tags,
+                "exclude_tags": variant.exclude_tags,
+                "letter_id": variant.letter_id,
+                "render_theme": variant.render_theme,
+                "render_style_preset": variant.render_style_preset,
+                "max_bullets_per_role": variant.max_bullets_per_role,
+                "path": str(path),
+            }
+        )
+    if not variants:
+        raise ValueError("No variants found")
+    return variants

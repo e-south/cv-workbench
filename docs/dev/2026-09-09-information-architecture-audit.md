@@ -322,6 +322,26 @@ source data, no context issues, and `review_required` publication. The canonical
 master and public candidate hashes were unchanged; the personal-site tree
 remained clean on `main`. No site sync or remote operation was performed.
 
+Project operation ownership follow-up (2026-09-10): the 1,202-line operation
+module is now a package with a 44-line explicit public API and separate records,
+identity, manifest, inspection, creation, and guarded-patch owners. Job evidence
+and ranking live in `ops/projects/guidance.py`; shared variant catalog loading
+lives in `variants.py`. Workspace code retains inventory and optional-plan
+presentation. Internal project owners cannot import the public entrypoint or
+workspace presentation, enforced by an architecture gate. The guide command
+still coordinates its workflow; this extraction prepares that API boundary
+without claiming to implement it.
+
+All 60 project definition/state ASTs, 11 guidance function bodies, and two
+catalog functions match their pre-extraction definitions. All 65 command help
+surfaces and seven workspace snapshots remain byte-identical. Focused baseline
+and post-extraction project checks passed 86 tests; guidance/catalog checks
+passed 99 and repository/boundary checks passed 23. Default discovery passed
+625 tests with one remote skip and five existing dependency warnings. The
+isolated seven-step journey passed with empty stderr throughout. Evidence is
+under `/tmp/cvw-project-owners-*`; reconstruction sources are retained in the
+temporary directory named by `/tmp/cvw-project-owners-root.txt`.
+
 Proposed extraction order:
 
 1. Context, status, and recipe extraction is complete. Further reduce
@@ -608,9 +628,9 @@ ownership are complete.
 Project identity now has one read owner shared by inspection and execution.
 The next project boundary is a callable operation for guide/create/retarget,
 currently coordinated by the CLI. Characterize its validation, rollback, and
-proposal-plan writes before extracting it. Group manifest, creation/retarget,
-and guarded patch responsibilities beneath a project package as their seams are
-verified; avoid creating a general helper collection. A complete metadata model
+proposal-plan writes before extracting it. Manifest, creation/retarget, and
+guarded patch responsibilities now have verified owners beneath the project
+package. A complete metadata model
 must keep inventory existence, executable proposals, and review readiness
 distinct instead of inferring all three from one successful load.
 
