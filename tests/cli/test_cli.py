@@ -98,6 +98,35 @@ def test_variant_gc_explains_record_only_reconciliation(tmp_path: Path) -> None:
     assert registry.read_bytes() == before
 
 
+def test_runs_gc_explains_retained_invalid_runs(tmp_path: Path) -> None:
+    config = tmp_path / "config" / "workbench.yaml"
+    config.parent.mkdir()
+    config.write_text("paths:\n  runs: ../var/runs\n")
+    kept = tmp_path / "var" / "runs" / "projects" / "alpha" / "damaged"
+    kept.mkdir(parents=True)
+    (kept / "notes.md").write_text("Retained")
+    removable = tmp_path / "var" / "runs" / "unneeded"
+    removable.mkdir()
+    result = CliRunner().invoke(
+        app,
+        [
+            "runs",
+            "gc",
+            "--config",
+            str(config),
+            "--keep",
+            "projects/alpha/damaged",
+            "--include-invalid",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    assert payload["invalid_candidates"] == [str(removable)]
+    assert payload["keep_reasons"] == {"projects/alpha/damaged": ["explicit_keep"]}
+    assert kept.is_dir() and removable.is_dir()
+
+
 def test_validate_succeeds_with_sample_sot() -> None:
     runner = CliRunner()
 

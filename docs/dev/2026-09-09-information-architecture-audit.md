@@ -214,7 +214,15 @@ one absent bundle. No live cleanup was applied. Regression tests reproduce both
 stale-record failure and partial deletion before a later invalid path; all now
 pass. The owning semantics are in the
 [variant lifecycle contract](../reference/variant-lifecycle.md#cleanup-plan).
-Run retention and durable review references remain open.
+Run GC now retains recent runs independently per project and variant. Explicit
+retained IDs protect damaged manifests, including project-scoped IDs. The plan
+separates invalid candidates from invalid diagnostics and explains retention.
+Python API callers receive the same root/target guards as the CLI; symlink
+traversal is rejected before any deletion. Regression tests reproduce competing
+project retention, invalid-run keep failures, and deletion beyond the run store.
+The [artifact retention contract](../reference/artifact-retention.md) owns these
+rules. Durable review references remain open; routine cleanup documentation now
+leads with an inspectable GC plan and explicit review dependencies.
 
 ### Medium — documentation contained competing executable owners — fixed
 
@@ -269,6 +277,15 @@ inspection loaded all three page images without overflow or console warnings.
 Evidence is under `var/runs/preview/2026-09-10-publication-lifecycle/`, with
 validation logs at `/tmp/cvw-publication-*`. The canonical master DOCX and site
 checkout were rechecked unchanged.
+
+Artifact-retention follow-up: the full suite passed 388 tests with the same
+opt-in skip and five upstream warnings. A subsequent absolute-symlink-root
+regression and the run/repository contract tests passed together (18 checks).
+Red/green logs are under `/tmp/cvw-retention-*`. The live dry runs report
+25 proposal actions, including one record-only reconciliation, and 16 retained
+runs across project/variant scopes. No private artifact cleanup was applied.
+Ruff and secret-scanning commit hooks passed. Durable review/run references
+remain an explicit open dependency rather than an inferred retention guarantee.
 
 Useful verification commands:
 

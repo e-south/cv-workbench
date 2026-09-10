@@ -1822,6 +1822,17 @@ def _print_runs_gc_summary(summary: RunGcSummary, keep_latest: int, include_inva
     ]
     if include_invalid:
         rows.append(("invalid", str(len(summary.invalid))))
+        rows.append(("invalid_candidates", str(len(summary.invalid_candidates))))
+    rows.append(
+        (
+            "retained",
+            "\n".join(
+                f"{run_id} | {', '.join(reasons)}"
+                for run_id, reasons in summary.keep_reasons.items()
+            )
+            or "none",
+        )
+    )
     print_summary("runs.gc", rows)
 
 
@@ -4107,7 +4118,7 @@ def runs_gc(
         typer.Option(
             "--keep-latest",
             min=0,
-            help="Number of most recent runs to keep per variant",
+            help="Number of most recent runs to keep per project and variant",
         ),
     ] = 1,
     keep: Annotated[
@@ -4179,6 +4190,8 @@ def runs_gc(
         "candidates": [_run_gc_candidate_payload(candidate) for candidate in summary.candidates],
         "kept": [_run_payload(run) for run in summary.kept],
         "invalid": [str(path) for path in summary.invalid],
+        "invalid_candidates": [str(path) for path in summary.invalid_candidates],
+        "keep_reasons": summary.keep_reasons,
     }
 
     if get_output_mode() == OutputMode.JSON:

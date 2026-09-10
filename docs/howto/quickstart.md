@@ -350,21 +350,13 @@ review_diff_only`.
 
 ## 11) Follow-up: clean generated artifacts
 
-```bash
-uv run cvw clean runs --yes
-uv run cvw clean dist --yes
-uv run cvw clean drafts --yes
-uv run cvw clean reviews --yes
-uv run cvw clean registry --yes
-uv run cvw clean projects --yes
-```
-
-To prune old runs without wiping everything, keep the most recent runs per
-variant:
+Start with a run-retention preview. Keep recent runs separately for each
+project and variant, and retain any exact run still needed by a review/import:
 
 ```bash
-uv run cvw runs gc --keep-latest 2
-uv run cvw runs gc --keep-latest 2 --yes
+uv run cvw runs gc --keep-latest 2 --json
 ```
 
-Clean commands default to a dry run unless `--yes` is provided.
+Add `--keep <run-id>` for an outstanding review and `--yes` only to apply the
+chosen cleanup. See [Artifact retention](../reference/artifact-retention.md)
+for plan fields, project-scoped IDs, invalid manifests, and whole-store cleanup.
