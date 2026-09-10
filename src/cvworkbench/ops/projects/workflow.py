@@ -29,6 +29,7 @@ from cvworkbench.ingestion.registry import RegistryError
 from cvworkbench.inputs.sot import load_sot
 from cvworkbench.inputs.tags import extract_tags, tag_counts
 from cvworkbench.inputs.validation import validate_sot
+from cvworkbench.ops.projects.artifacts import capture_guidance_job_inputs
 from cvworkbench.ops.projects.creation import (
     create_project_from_file,
     create_project_from_url,
@@ -40,10 +41,10 @@ from cvworkbench.ops.projects.guidance import (
     build_proposal_plan,
     job_keyword_overlap,
     job_signal_counts,
-    load_job_signals,
     normalize_keywords,
     recommend_variants,
 )
+from cvworkbench.ops.projects.provenance import guidance_input_provenance
 from cvworkbench.ops.projects.records import ProjectError, ProjectPaths
 from cvworkbench.variants import load_variant, load_variants_from_config
 
@@ -133,7 +134,11 @@ def guide_project(
 
     stage = "project guidance"
     try:
-        signals = load_job_signals(paths.signals_path)
+        job_inputs = capture_guidance_job_inputs(paths)
+        signals = job_inputs.signals
+        provenance = guidance_input_provenance(
+            job_inputs, source_tags=counts, variants=variants, default_variant=default_variant
+        )
         keywords_value = signals.get("keywords")
         raw_keywords = (
             [item for item in keywords_value if isinstance(item, str)]
@@ -144,7 +149,7 @@ def guide_project(
         overlap = job_keyword_overlap(job_keywords, counts)
         signal_counts = job_signal_counts(signals, job_keywords)
         job_evidence = build_job_evidence(
-            paths.extracted_path.read_text(), signals=signals, job_keywords=job_keywords
+            job_inputs.text, signals=signals, job_keywords=job_keywords
         )
         recommendations = recommend_variants(
             variants, job_keywords, counts, default_variant, signal_counts
@@ -175,6 +180,7 @@ def guide_project(
             applied_variant=applied_variant,
             selection_mode=selection_mode,
         )
+        plan["provenance"] = provenance
         Path(plan["path"]).write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
         return ProjectGuideResult(
             paths=paths,

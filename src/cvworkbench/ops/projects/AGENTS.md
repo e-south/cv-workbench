@@ -16,6 +16,10 @@
 - Use `artifacts.py` for observations of stored job files against recorded hashes.
   Keep those observations separate from inventory, source/plan freshness, and
   run review readiness; do not reread the manifest inside detailed inspection.
+- Use `provenance.py` to record and compare the inputs consumed by guidance.
+  Read `docs/reference/guidance-provenance.md` before changing the input projection
+  or algorithm. Capture fingerprints from consumed values, preserve unknown
+  historical provenance, and keep schema/algorithm versions aligned with behavior.
 - Validate inputs before artifact writes. Project creation, retargeting, patch
   application, and proposal registration need explicit failure and recovery
   behavior; moving code does not establish transaction safety.

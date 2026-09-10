@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
@@ -198,3 +199,34 @@ def test_matching_job_artifacts_remain_distinct_from_run_review_readiness(tmp_pa
     assert "job_artifact_warning" not in preview
     assert shown["review"]["review_ready"] is False
     assert shown["review"]["status"] == "build_required"
+
+
+@pytest.mark.parametrize("state", ["matches_inputs", "changed", "unverifiable"])
+def test_cli_and_preview_share_saved_guidance_input_diagnostics(tmp_path, state):
+    config, project = _guided_project(tmp_path)
+    if state == "changed":
+        path = tmp_path / "sot.sample/experience.yaml"
+        data = yaml.safe_load(path.read_text())
+        data["roles"][0]["bullets"][0]["tags"].append("new-tag")
+        path.write_text(yaml.safe_dump(data))
+    elif state == "unverifiable":
+        path = project.job_dir / "proposal-plan.json"
+        data = json.loads(path.read_text())
+        del data["provenance"]
+        path.write_text(json.dumps(data))
+
+    shown = _show(config, project.project_dir)
+    preview = _load_project_context(project.project_dir, config_path=config)
+
+    assert shown["guidance_inputs"]["state"] == state
+    assert shown["guidance_inputs"] == preview["guidance_inputs"]
+    if state == "matches_inputs":
+        assert "guidance_input_warning" not in shown
+        assert "guidance_input_warning" not in preview
+    else:
+        assert shown["guidance_input_warning"] == preview["guidance_input_warning"]
+        plain = CliRunner().invoke(
+            app, ["project", "show", str(project.project_dir), "--config", str(config), "--plain"]
+        )
+        assert plain.exit_code == 0, plain.output
+        assert "guidance_input_warning" in plain.stdout

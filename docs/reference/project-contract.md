@@ -362,6 +362,11 @@ This comparison concerns the recorded variant selection only. Matching IDs do
 not establish freshness of the job, source facts, or variant catalog; review
 the recommendations against current evidence before applying content changes.
 
+New plans also record versioned input fingerprints. Inspection distinguishes
+matching inputs, known changes, and unverifiable provenance; old plans remain
+readable. The [guidance provenance contract](guidance-provenance.md) owns the
+component definitions, public inspection API, and comparison limits.
+
 ## Guidance API
 
 `cvworkbench.ops.projects.guide_project` is the callable owner of the guide
@@ -418,11 +423,12 @@ Internal modules import concrete owners rather than the public entrypoint.
 | Artifact, summary, typed metadata records, patch vocabulary, timestamps | `records.py` |
 | Project identity validation, selectors, and proposal identities | `identity.py` |
 | Manifest reading, typed metadata validation, and executable prerequisites | `manifest.py` |
-| Stored job-file observations against recorded digests | `artifacts.py` |
+| Job-byte capture and stored-file observations against recorded digests | `artifacts.py` |
 | Descriptive/proposal inspection and bounded saved-plan reads | `inspection.py` |
 | Creation preflight, captured inputs, retargeting, registration, and discard | `creation.py` |
 | Guarded edit authoring, compilation, and application | `patches.py` |
 | Job evidence, variant ranking, and proposal plans | `guidance.py` |
+| Saved guidance input fingerprints and comparison | `provenance.py` |
 | Guided creation, preflight, result records, and recovery | `workflow.py` |
 
 Catalog loading is shared through `cvworkbench.variants.load_variants_from_config`.

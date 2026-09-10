@@ -70,6 +70,10 @@ instead of following `ACTIVE`.
   polling reuses the result, and job-file edits alone do not trigger a rebuild.
   Use Rebuild to refresh. See [artifact inspection](project-contract.md#artifact-inspection)
   for the comparison scope and limits.
+  Plans also expose `guidance_inputs`, `guidance_input_status`, and optional
+  `guidance_input_warning`. These compare the saved provenance with local inputs
+  selected for this preview, including an explicit source override. Their timing
+  is also the last successful rebuild; see [guidance provenance](guidance-provenance.md).
 - `outputs` (format -> filename)
 
 `POST /api/render` rebuilds with optional overrides:

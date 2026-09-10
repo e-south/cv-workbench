@@ -163,6 +163,10 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         ("discard_step", summary["commands"]["discard"]),
     ]
     rows.extend(_proposal_plan_summary_rows(summary.get("proposal_plan")))
+    if "guidance_input_status" in summary:
+        rows.append(("guidance_inputs", summary["guidance_input_status"]))
+    if "guidance_input_warning" in summary:
+        rows.append(("guidance_input_warning", summary["guidance_input_warning"]))
     if summary["patch"]["render_warning"]:
         rows.append(("patch_note", summary["patch"]["render_warning"]))
     if summary["review"]["run_id"]:

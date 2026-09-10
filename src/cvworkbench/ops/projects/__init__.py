@@ -42,6 +42,8 @@ from cvworkbench.ops.projects.patches import (
     load_project_patch_payload as load_project_patch_payload,
 )
 from cvworkbench.ops.projects.patches import prepare_project_sot as prepare_project_sot
+from cvworkbench.ops.projects.provenance import inspect_guidance_inputs as inspect_guidance_inputs
+from cvworkbench.ops.projects.records import GuidanceInputCheck as GuidanceInputCheck
 from cvworkbench.ops.projects.records import ProjectArtifactCheck as ProjectArtifactCheck
 from cvworkbench.ops.projects.records import ProjectDetails as ProjectDetails
 from cvworkbench.ops.projects.records import ProjectError as ProjectError

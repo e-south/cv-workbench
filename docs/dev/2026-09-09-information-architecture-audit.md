@@ -35,6 +35,52 @@ source of truth.
 
 ## Findings and disposition
 
+### Medium — saved guidance was not bound to its consumed inputs — fixed for declared guidance inputs
+
+Job-file checks compared bytes only with the current project manifest. Updating
+both a file and its manifest hash could make those checks match while the saved
+recommendation still described earlier input. Source tag counts, ranking catalog
+fields, and the default variant had no saved comparison record at all.
+
+New guidance records versioned fingerprints for all five consumed input groups.
+Job parsing and hashes use the same captured bytes; source/catalog fingerprints
+use the values already loaded for scoring. Ranking and fingerprinting share one
+catalog projection. `inspect_guidance_inputs` reports matching inputs, changes,
+or unverifiable comparisons and preserves known changes when another input is
+unavailable. CLI and preview share its presentation. Preview honors the selected
+source override and labels cached observations by their last successful build.
+The [provenance contract](../reference/guidance-provenance.md) owns the schema,
+algorithm-version rule, exact comparison scope, and input-lifetime limits.
+
+Evidence: `/tmp/cvw-guidance-provenance-red.log` (11 initial failures),
+`/tmp/cvw-guidance-provenance-ui-red.log` (three missing adapter cases), and
+`/tmp/cvw-guidance-provenance-focused-green.log` (103 passing checks).
+Tests cover changed files plus updated manifest hashes, inputs edited after
+capture, unsupported/malformed records, unavailable inputs, explicit config
+snapshots, and real preview builds with a source override. Prose/render changes
+outside ranking inputs remain matches. A legacy preview fixture now explicitly
+expects unknown provenance; historical records are not silently upgraded.
+
+The full suite passed 771 tests, with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings. The seven-step isolated document journey passed. Local
+Chrome DevTools verification showed matching job files alongside changed source
+tag inputs, no horizontal overflow, and no console warnings/errors. Restoring
+the source triggered a rebuild that cleared the warning and reported a match.
+Evidence: `/tmp/cvw-guidance-provenance-full.log`,
+`/tmp/cvw-guidance-provenance-journey.json`, and the isolated browser bundle
+located by `/tmp/cvw-guidance-provenance-preview-fixture.json`.
+Ruff, formatting, and pre-commit checks passed. The audit tab and preview server
+were closed. Final context remained source-ready with no issues and publication
+`review_required`; the master/candidate hashes and personal-site tree were
+unchanged. No approval, site sync, or push occurred.
+
+Live read-only inspection found 11 plans without verifiable provenance, seven
+projects without plans, and seven whose existing proposal format prevented
+detailed inspection. No historical plan was rewritten. Provenance is not
+authenticated, a complete source-document fingerprint, or publication approval;
+inspection does not refetch the original job source. Inputs still have separate
+read lifetimes rather than one locked filesystem snapshot.
+
 ### Medium — inspection did not report changed or missing stored job context — fixed for recorded artifact observations
 
 Project creation recorded extracted-text and signals digests, but inspection
@@ -952,9 +998,11 @@ exposes changed saved-guidance selections. Typed descriptive metadata now has a
 single parser, inventory preserves partial/invalid descriptions, and saved-plan
 reads enforce project ownership. Stored job-file comparisons now expose missing,
 changed, or unreadable artifacts independently of run review readiness. Continue
-with input provenance for saved guidance and remaining project command
-orchestration. Keep inventory existence, executable proposals, recorded metadata,
-current artifact observations, and review readiness distinct.
+with shared project inspection and remaining command orchestration. New guidance
+now records its consumed input fingerprints and supports scoped comparisons;
+historical plans retain explicit unknown provenance. Keep inventory existence,
+executable proposals, recorded metadata, current artifact observations, and
+review readiness distinct.
 
 Extend explicit configuration snapshots to publication preparation/sync,
 lifecycle mutations, and preview selection. Follow with semantic document styles and further

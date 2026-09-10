@@ -96,6 +96,22 @@ class ProjectArtifactCheck:
 
 
 @dataclass(frozen=True)
+class GuidanceJobInputs:
+    text: str = field(repr=False)
+    signals: dict[str, Any] = field(repr=False)
+    extracted_sha256: str
+    signals_sha256: str
+
+
+@dataclass(frozen=True)
+class GuidanceInputCheck:
+    state: Literal["matches_inputs", "changed", "unverifiable"]
+    changed: tuple[str, ...] = ()
+    unavailable: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProjectDetails:
     spec: ProjectSpec
     created_at: str

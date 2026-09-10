@@ -13,8 +13,50 @@ from __future__ import annotations
 
 from typing import Any
 
-from cvworkbench.ops.projects import ProjectArtifactCheck
+from cvworkbench.ops.projects import GuidanceInputCheck, ProjectArtifactCheck
 from cvworkbench.variants import validate_variant_id
+
+_INPUT_LABELS = {
+    "extracted_text": "extracted text",
+    "signals": "signals",
+    "source_tags": "source tags",
+    "variant_catalog": "variant catalog",
+    "default_variant": "default variant",
+}
+
+
+def guidance_input_context(check: GuidanceInputCheck) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "guidance_inputs": {
+            "state": check.state,
+            "changed": list(check.changed),
+            "unavailable": list(check.unavailable),
+            "errors": list(check.errors),
+        },
+        "guidance_input_status": {
+            "matches_inputs": "match saved inputs",
+            "changed": "changed",
+            "unverifiable": "unverifiable",
+        }[check.state],
+    }
+    if check.state != "matches_inputs":
+        messages = []
+        if check.changed:
+            messages.append(
+                "Saved guidance inputs changed: "
+                + ", ".join(_INPUT_LABELS[key] for key in check.changed)
+                + "."
+            )
+        if check.unavailable:
+            messages.append(
+                "Could not compare: "
+                + ", ".join(_INPUT_LABELS[key] for key in check.unavailable)
+                + "."
+            )
+        messages.extend(check.errors)
+        messages.append("Review the recommendations before using them.")
+        context["guidance_input_warning"] = " ".join(messages)
+    return context
 
 
 def project_artifact_context(
@@ -29,8 +71,7 @@ def project_artifact_context(
         else "match saved record"
     }
     if problems:
-        labels = {"extracted_text": "extracted text", "signals": "signals"}
-        states = ", ".join(f"{labels[check.name]} ({check.state})" for check in problems)
+        states = ", ".join(f"{_INPUT_LABELS[check.name]} ({check.state})" for check in problems)
         context["job_artifact_warning"] = (
             f"Stored job context needs review: {states}. "
             "Review the source job description before relying on saved guidance."

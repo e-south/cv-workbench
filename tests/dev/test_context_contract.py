@@ -134,6 +134,23 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "`ProjectArtifactCheck`" in contract
     assert "`job_artifact_warning`" in contract
     assert "Inventory remains lightweight" in contract
+    assert "guidance-provenance.md" in contract
+
+
+def test_guidance_provenance_contract_defines_scope_and_version_ownership() -> None:
+    contract = (REPO_ROOT / "docs/reference/guidance-provenance.md").read_text()
+    for term in (
+        "cvw-guidance-inputs-v1",
+        "tag-overlap-v1",
+        "GuidanceInputCheck",
+        "matches_inputs",
+        "unverifiable",
+        "guidance_catalog_inputs",
+        "ConfigSnapshot",
+        "not authenticated",
+        "Older plans remain readable",
+    ):
+        assert term in contract
 
 
 def test_docs_make_bounded_editing_scope_explicit() -> None:

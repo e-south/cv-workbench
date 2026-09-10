@@ -11,20 +11,25 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from cvworkbench.text import normalize_tag
 
+GUIDANCE_ALGORITHM = "tag-overlap-v1"
 
-def load_job_signals(signals_path: Path) -> dict[str, Any]:
-    if not signals_path.exists():
-        raise ValueError(f"Job signals not found: {signals_path}")
-    raw = json.loads(signals_path.read_text())
-    if not isinstance(raw, dict):
-        raise ValueError(f"Job signals are invalid: {signals_path}")
-    return raw
+
+def guidance_catalog_inputs(variants: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Define the catalog fields consumed by ranking and its input provenance."""
+    return [
+        {
+            "id": variant["id"],
+            "document_type": variant["document_type"],
+            "include_tags": sorted(set(variant.get("include_tags") or [])),
+            "exclude_tags": sorted(set(variant.get("exclude_tags") or [])),
+        }
+        for variant in variants
+    ]
 
 
 def normalize_keywords(values: list[str]) -> list[str]:
@@ -154,7 +159,7 @@ def recommend_variants(
     job_set = set(job_keywords)
     tag_set = set(tag_counts.keys())
     recommendations: list[dict[str, Any]] = []
-    for variant in variants:
+    for variant in guidance_catalog_inputs(variants):
         include = set(variant.get("include_tags") or [])
         exclude = set(variant.get("exclude_tags") or [])
         include_matches = sorted(include & job_set)

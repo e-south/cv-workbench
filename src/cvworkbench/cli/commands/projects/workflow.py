@@ -36,6 +36,7 @@ from cvworkbench.ops.projects import (
     apply_project_patch,
     create_project_from_file,
     create_project_from_url,
+    inspect_guidance_inputs,
     load_project,
     load_project_details,
     load_project_plan,
@@ -45,6 +46,7 @@ from cvworkbench.ops.projects import (
 )
 from cvworkbench.variants import load_variant
 from cvworkbench.workspace.project_guidance import (
+    guidance_input_context,
     project_artifact_context,
     proposal_plan_selection_warning,
 )
@@ -290,6 +292,11 @@ def project_show(
     }
     if proposal_plan is not None:
         summary["proposal_plan"] = proposal_plan
+        summary.update(
+            guidance_input_context(
+                inspect_guidance_inputs(proposal_plan, details=details, config_path=config_path)
+            )
+        )
     if proposal_plan_error is not None:
         summary["proposal_plan_error"] = proposal_plan_error
     plan_warning = proposal_plan_selection_warning(proposal_plan, details.spec.base_variant_id)

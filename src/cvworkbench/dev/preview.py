@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import build_documents
 from cvworkbench.config import (
+    ConfigSource,
     resolve_config_path,
     resolve_dist_path,
     resolve_projects_path,
@@ -44,6 +45,7 @@ from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_
 from cvworkbench.inputs.validation import validate_sot
 from cvworkbench.ops.projects import (
     ProjectError,
+    inspect_guidance_inputs,
     load_project,
     load_project_details,
     load_project_plan,
@@ -54,6 +56,7 @@ from cvworkbench.ops.projects import (
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
 from cvworkbench.workspace.project_guidance import (
+    guidance_input_context,
     project_artifact_context,
     proposal_plan_selection_warning,
 )
@@ -130,7 +133,9 @@ def _project_context_error_payload(project_dir: Path, error: str) -> dict[str, A
     }
 
 
-def _load_project_context(project_dir: Path) -> dict[str, Any]:
+def _load_project_context(
+    project_dir: Path, *, config_path: ConfigSource | None = None, sot_path: Path | None = None
+) -> dict[str, Any]:
     try:
         details = load_project_details(project_dir)
     except ProjectError as exc:
@@ -154,6 +159,13 @@ def _load_project_context(project_dir: Path) -> dict[str, Any]:
         **project_artifact_context(details.artifact_checks),
     }
     if proposal_plan is not None:
+        payload.update(
+            guidance_input_context(
+                inspect_guidance_inputs(
+                    proposal_plan, details=details, config_path=config_path, sot_path=sot_path
+                )
+            )
+        )
         payload["recommended_variant"] = proposal_plan.get("selected_variant")
         payload["recommendation_status"] = proposal_plan.get("status")
         payload["recommendation_summary"] = proposal_plan.get("summary")
@@ -244,6 +256,7 @@ class PreviewController:
             self._validate_format(self._format)
 
             variant_path_override = None
+            project_source_path = None
             try:
                 if self._project_dir is not None:
                     project_spec = load_project(self._project_dir)
@@ -254,6 +267,7 @@ class PreviewController:
                         sot_path = resolve_sot_path(self._project_sot_override, self._config_path)
                     else:
                         sot_path = resolve_active_sot_path(project_spec.sot_path)
+                    project_source_path = sot_path
                     run_dir = (
                         resolve_runs_path(self._config_path) / "preview" / project_spec.project_id
                     )
@@ -310,7 +324,9 @@ class PreviewController:
             build_id = 1 if self._state is None else self._state.build_id + 1
             project_context = None
             if self._project_dir is not None:
-                project_context = _load_project_context(self._project_dir)
+                project_context = _load_project_context(
+                    self._project_dir, config_path=self._config_path, sot_path=project_source_path
+                )
             self._state = PreviewState(
                 variant_id=result.variant.id,
                 theme_id=result.theme_id or self._theme_id,

@@ -302,6 +302,16 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
     assert payload["project_context"] == {
         "project_id": "job",
         "job_artifact_status": "match saved record",
+        "guidance_inputs": {
+            "state": "unverifiable",
+            "changed": [],
+            "unavailable": [],
+            "errors": ["Saved guidance has no input provenance."],
+        },
+        "guidance_input_status": "unverifiable",
+        "guidance_input_warning": (
+            "Saved guidance has no input provenance. Review the recommendations before using them."
+        ),
         "proposal_document_type": "cover-letter",
         "patch_status": "1 op",
         "patch_operations": ["replace-project-summary"],
