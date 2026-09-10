@@ -106,6 +106,7 @@ projections and their distinct error and read-cost boundaries.
 | Job evidence, variant recommendations, and proposal planning | `ops/projects/guidance.py` |
 | Project metadata, proposal inspection, and bounded saved-plan reads | `ops/projects/inspection.py` |
 | Stored job-file observations against recorded digests | `ops/projects/artifacts.py` |
+| Source copies for guarded project edits and owned failure cleanup | `ops/projects/preparation.py` |
 | Saved guidance input fingerprints and comparison | `ops/projects/provenance.py` |
 | Saved-guidance selection warnings and recommendation summaries | `workspace/projects/guidance.py` |
 | Content-review inventory and source health | `workspace/reviews.py` |

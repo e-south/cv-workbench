@@ -25,6 +25,10 @@
 - Validate inputs before artifact writes. Project creation, retargeting, patch
   application, and proposal registration need explicit failure and recovery
   behavior; moving code does not establish transaction safety.
+- `preparation.py` owns copied source preparation. Nonempty edits require a fresh
+  destination outside source/project trees; cleanup must verify directory
+  ownership. Preview callers own temporary lifetimes rather than replacing an
+  existing staging directory.
 - `guidance.py` interprets job evidence and ranks variants. It does not select
   terminal output modes or start preview servers. Catalog loading belongs to
   `cvworkbench.variants`; workspace code owns inventory presentation.

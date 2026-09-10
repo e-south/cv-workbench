@@ -15,10 +15,12 @@ import json
 import os
 import threading
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
@@ -167,7 +169,7 @@ class PreviewController:
         output_format: str | None = None,
         auto_pdf: bool | None = None,
     ) -> PreviewState:
-        with self._lock:
+        with self._lock, ExitStack() as preparation:
             if variant_id is not None:
                 self._variant_id = variant_id
             if theme_id is not None:
@@ -202,9 +204,11 @@ class PreviewController:
                     )
                     run_dir.mkdir(parents=True, exist_ok=True)
                     staging_dir = (
-                        resolve_runs_path(self._config_path)
-                        / "preview-staging"
-                        / project_spec.project_id
+                        Path(
+                            preparation.enter_context(
+                                TemporaryDirectory(prefix="cvw-project-preview-")
+                            )
+                        )
                         / "sot"
                     )
                     sot_path = prepare_project_sot(

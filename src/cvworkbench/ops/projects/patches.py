@@ -86,24 +86,6 @@ def apply_project_patch(*, project_dir: Path, sot_path: Path) -> None:
         raise ProjectError(str(exc)) from exc
 
 
-def prepare_project_sot(*, project_dir: Path, sot_path: Path, target_dir: Path) -> Path:
-    diff = load_project_patch(project_dir, sot_path=sot_path)
-    if diff.strip() == "":
-        return sot_path
-    if target_dir.exists():
-        import shutil
-
-        shutil.rmtree(target_dir)
-    import shutil
-
-    shutil.copytree(sot_path, target_dir)
-    try:
-        apply_patch_text(patch_text=diff, cwd=target_dir)
-    except PatchError as exc:
-        raise ProjectError(str(exc)) from exc
-    return target_dir
-
-
 def append_replace_experience_bullet_operation(
     *,
     project_dir: Path,

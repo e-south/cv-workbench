@@ -129,6 +129,10 @@ content editor.
 
 ## Interaction semantics
 
+- Each project rebuild prepares its edits in a temporary source copy, which is
+  released after success or failure. The source profile remains unchanged;
+  generated preview outputs retain their configured locations. This follows the
+  [source preparation contract](project-contract.md#source-preparation).
 - `build_id` increments after each successful rebuild and is used to cache-bust
   the iframe URL.
 - UI controls call `/api/render`; state updates are visible via `/api/state`.

@@ -218,6 +218,33 @@ freshness of the original source, source facts, variant catalog, saved guidance,
 or build output. Review readiness continues to describe the selected immutable
 run's available review inputs; it is independent of this job-artifact check.
 
+## Source preparation
+
+`cvworkbench.ops.projects.prepare_project_sot(project_dir=..., sot_path=...,
+target_dir=...)` compiles the project's guarded edits against an existing source
+directory. An empty patch returns the resolved source path without creating or
+replacing the destination. A nonempty patch requires a fresh destination outside
+both the source and project directory trees. Neither an ancestor nor a descendant
+is allowed; checks use resolved paths and reject existing files, directories,
+and destination symlinks.
+
+The operation exclusively creates the destination before copying source files
+and applying the compiled patch there. The source and project remain unchanged.
+It returns the prepared directory; it does not render, publish, or declare full
+source-schema validity. Build and preview retain their content-validation gates.
+
+On a copy or patch failure, cleanup compares the destination's device/inode
+identity with the directory this call created. An observed replacement is left
+intact, and any cleanup error accompanies the original failure. Cancellation
+retains the interrupt and attempts the same owned-directory cleanup. Parent
+directories created along the destination path may remain. These checks are not
+a filesystem transaction and do not prevent every concurrent replacement race.
+
+Builds use a fresh run-local destination. Preview owns a temporary directory for
+each rebuild and releases it after success or failure; it does not refresh a
+shared staging directory in place. Existing historical staging directories are
+outside this operation's cleanup ownership.
+
 ## Creation preflight
 
 File and URL creation validate their local inputs before creating directories.
@@ -460,6 +487,7 @@ Internal modules import concrete owners rather than the public entrypoint.
 | Descriptive/proposal inspection and bounded saved-plan reads | `inspection.py` |
 | Creation preflight, captured inputs, retargeting, registration, and discard | `creation.py` |
 | Guarded edit authoring, compilation, and application | `patches.py` |
+| Source preparation in a fresh owned directory and failure cleanup | `preparation.py` |
 | Job evidence, variant ranking, and proposal plans | `guidance.py` |
 | Saved guidance input fingerprints and comparison | `provenance.py` |
 | Guided creation, preflight, result records, and recovery | `workflow.py` |

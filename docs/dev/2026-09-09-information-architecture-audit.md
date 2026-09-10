@@ -35,6 +35,61 @@ source of truth.
 
 ## Findings and disposition
 
+### High for source preservation — project preparation replaced existing directories — fixed
+
+`prepare_project_sot` removed an existing destination before copying source
+files. Disposable cases confirmed deletion when that destination was the source,
+its parent, the project, or an unrelated directory. Descendant destinations also
+reached the copying operation without an overlap check. The public preparation
+API therefore violated source preservation independently of CLI selection.
+
+Source preparation now has a separate owner, `ops/projects/preparation.py`,
+while guarded edit compilation/application stays in `patches.py`. Nonempty
+patches require a fresh destination outside source and project trees. Exclusive
+directory creation rejects a destination claimed after preflight. Failure
+cleanup compares the generated directory's device/inode identity and leaves an
+observed replacement intact, reporting the cleanup problem with the original
+error. Cancellation retains its interrupt. Empty patches return the source
+without allocating a copy. The
+[source preparation contract](../reference/project-contract.md#source-preparation)
+defines the API, ownership, and concurrency limits.
+
+Preview rebuilds now own a temporary source copy for each render and release it
+after success or failure. Real sequential HTML renders pick up changed proposal
+text, preserve source bytes, and leave no retained preparation directory. An
+injected render failure also releases staging and preserves the previous output.
+Historical staging directories are untouched; this change does not authorize
+cleanup of preexisting private workspace contents.
+
+Six initial regressions reproduced source/destination damage or missing overlap
+guards (`/tmp/cvw-project-preparation-red.log`). Three lifecycle checks reproduced
+partial-copy retention, failed-patch retention, and persistent shared preview
+staging (`/tmp/cvw-project-preparation-lifetime-red.log`). Replacement-directory
+failure evidence is in `/tmp/cvw-project-preparation-ownership-red.log`.
+The final focused suite passes 16 cases, including symlinks, cancellation, late
+destination claims, replacement ownership, and real preview refresh/cleanup.
+
+The full suite passed 841 tests with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings (`/tmp/cvw-project-preparation-full.log`). All seven isolated
+CLI journey steps passed with empty stderr
+(`/tmp/cvw-project-preparation-journey.json`). Ruff and the documentation/import
+boundary checks passed. The canonical master and public candidate hashes were
+unchanged, context reported a ready source with no issues, and publication still
+required review. The site remained clean; no network refresh, publication
+approval, sync, or push occurred.
+
+### Medium — project build allocates a run before render preflight — open
+
+The CLI still creates a project run before the build pipeline validates render
+settings. A real isolated `build --project research --format md --json` with a
+missing theme exited with the expected diagnostic but left a new run directory.
+The source was unchanged. Evidence: `/tmp/cvw-project-build-preflight-audit.json`.
+This fails the preflight-before-artifact-write criterion and can accumulate
+incomplete runs. The next operation extraction should share validated build
+inputs between the Python API and CLI, and defer persistent run allocation until
+source, proposal, formats, and render-plan checks have passed. Rendering failures
+after validated inputs need a separately defined artifact-recovery contract.
+
 ### High — suggested project commands could mutate a different copy — fixed
 
 Project command descriptions retained only the manifest ID after inspecting an
