@@ -34,6 +34,9 @@ navigation:
 - Preview requests validate local Host and same-origin browser headers, bound
   request bodies and socket reads, and reject malformed requests before any
   render or stop action. See [the preview contract](preview-contract.md).
+- Variant identifiers and artifact stems cannot introduce paths into output or
+  promotion destinations. See the [name contract](configuration-contract.md#variant-and-artifact-names)
+  for model and path-resolution checks.
 - Pre-commit includes gitleaks to catch secrets before commit.
 - `uv run cvw init` installs pre-commit hooks when a `.pre-commit-config.yaml`
   is present in the repo. Hook installation requires a writable `.git/hooks/`

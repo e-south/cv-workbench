@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,6 +36,26 @@ class Variant:
     render_theme: str | None
     render_style_preset: str | None
     contact_fields: list[str] = field(default_factory=lambda: list(CONTACT_FIELDS))
+
+    def __post_init__(self) -> None:
+        validate_variant_id(self.id)
+        if (
+            not isinstance(self.output_name, str)
+            or not self.output_name.strip()
+            or self.output_name in {".", ".."}
+            or re.search(r'[/\\<>:"|?*\x00-\x1f\x7f]', self.output_name)
+        ):
+            raise ValueError("Variant output_name must be a nonempty filename stem")
+
+
+def validate_variant_id(variant_id: str) -> None:
+    if (
+        not isinstance(variant_id, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", variant_id) is None
+    ):
+        raise ValueError(
+            "Variant id must start with a letter or number and contain only letters, numbers, '.', '_' or '-'"
+        )
 
 
 DEFAULT_ORDER = [
@@ -70,7 +91,9 @@ def load_variant(path: Path) -> Variant:
     exclude_tags = normalize_tags(_string_list(variant_data.get("exclude_tags")))
     order = _string_list(variant_data.get("order"), default=DEFAULT_ORDER)
     max_bullets = _optional_int(variant_data.get("max_bullets_per_role"))
-    output_name = _optional_str(variant_data.get("output_name"), default="cv")
+    output_name = variant_data.get("output_name")
+    if output_name is None:
+        output_name = "cv"
     document_type = _optional_str(variant_data.get("document_type"), default="resume")
     letter_id = _optional_str_or_none(variant_data.get("letter_id"))
     render_data = _optional_mapping(variant_data.get("render"))

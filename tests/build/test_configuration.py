@@ -130,3 +130,32 @@ def test_invalid_output_path_fails_before_creating_a_run(tmp_path):
     assert result.exit_code == 1
     assert "paths.dist" in result.output
     assert {path.relative_to(tmp_path) for path in tmp_path.rglob("*")} == before
+
+
+@pytest.mark.parametrize("field", ["id", "output_name"])
+@pytest.mark.parametrize("command", ["build", "render"])
+def test_unsafe_variant_names_fail_before_creating_artifacts(tmp_path, field, command):
+    import yaml
+
+    init_project(tmp_path, sample_default=True)
+    config = tmp_path / "config/workbench.yaml"
+    variant_file = config.parent / "variants/base.yaml"
+    data = yaml.safe_load(variant_file.read_text())
+    data["variant"][field] = "../../escaped"
+    variant_file.write_text(yaml.safe_dump(data))
+    canonical = tmp_path / "input.md"
+    canonical.write_text("# Example\n\nResearch and engineering.\n")
+    before = {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    before_directories = {p.relative_to(tmp_path) for p in tmp_path.rglob("*") if p.is_dir()}
+    args = [command, "--config", str(config), "--format", "md"]
+    if command == "render":
+        args += ["--canonical", str(canonical)]
+    result = CliRunner().invoke(app, args)
+    assert result.exit_code == 1
+    assert field in result.output
+    assert {
+        p.relative_to(tmp_path) for p in tmp_path.rglob("*") if p.is_dir()
+    } == before_directories
+    assert {
+        p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+    } == before

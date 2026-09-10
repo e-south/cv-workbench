@@ -35,6 +35,25 @@ source of truth.
 
 ## Findings and disposition
 
+### High for local artifact integrity — variant names escaped output destinations — fixed
+
+In an isolated real build, `output_name: ../outside-variant` wrote Markdown to
+the parent of the selected variant output directory. The manifest retained only
+the basename and therefore pointed to a missing artifact within that directory.
+Variant IDs also entered build and promotion paths without identifier validation.
+This is a local input/write boundary; no remote exploit was attempted.
+
+`variants.py` now owns identity and filename-stem validation, including direct
+model construction. Config path resolution reuses the identifier validator, and
+output path construction rejects path-bearing extensions. Standard build/render
+commands reject these inputs before creating files or directories. Human-readable
+output stems remain supported. The initial regression run had 30 intended
+failures, including real escaped build/render outputs; name validation and
+promotion checks now protect the same boundary across callers.
+
+Evidence: `/tmp/cvw-variant-output-boundary-evidence.json` and
+`/tmp/cvw-artifact-names-red.log`.
+
 ### High — default test discovery omitted the build domain — fixed
 
 The installed pytest default `norecursedirs` includes `build`. With no explicit
@@ -486,6 +505,15 @@ the missing API, missing-config diagnostic, and mixed status settings after
 config edit/removal. Evidence: `/tmp/cvw-status-red.log`,
 `/tmp/cvw-status-green.log`, `/tmp/cvw-status-targeted.log`,
 `/tmp/cvw-status-full.log`, and `/tmp/cvw-status-journey.json`.
+
+Artifact-name follow-up: the inclusive suite passed 594 tests with one opt-in
+integration skip and the same five upstream warnings. The initial 103 targeted
+checks passed after validation was added, and the full suite includes the
+promotion rejection check. A separate real build with `Example résumé CV` as
+its output stem produced matching files and manifest hashes in both run and
+dist directories. All seven CLI snapshots remained byte-identical. Evidence:
+`/tmp/cvw-artifact-names-green.log`, `/tmp/cvw-artifact-names-full.log`, and
+`/tmp/cvw-readable-output-evidence.json`.
 
 Useful verification commands:
 

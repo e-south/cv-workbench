@@ -130,6 +130,18 @@ def test_configured_source_path_requires_a_string(tmp_path, value):
         resolve_sot_path(None, path)
 
 
+@pytest.mark.parametrize(
+    "variant_id", ["../outside", "/absolute", "nested\\name", ".", "..", "base --format pdf"]
+)
+def test_variant_resolution_rejects_non_identifiers(tmp_path, variant_id):
+    from cvworkbench.config import resolve_variant_path
+
+    config = tmp_path / "workbench.yaml"
+    config.write_text("{}\n")
+    with pytest.raises(ValueError, match="id"):
+        resolve_variant_path(variant_id, config)
+
+
 @pytest.mark.parametrize("key", ["pdf_engine", "style_preset"])
 @pytest.mark.parametrize("value", [False, 123, [], ""])
 def test_explicit_optional_render_settings_require_nonempty_strings(tmp_path, key, value):

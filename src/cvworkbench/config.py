@@ -21,6 +21,7 @@ from typing import Any
 import yaml
 
 from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
+from cvworkbench.variants import validate_variant_id
 
 
 @dataclass(frozen=True)
@@ -244,8 +245,7 @@ def resolve_default_variant(config_path: ConfigSource) -> str:
 
 
 def resolve_variant_path(variant_id: str, config_path: ConfigSource) -> Path:
-    if not variant_id.strip():
-        raise ValueError("Variant id is required")
+    validate_variant_id(variant_id)
     config_path = resolve_config_path(config_path)
     variant_dir = config_path.parent / "variants"
     return variant_dir / f"{variant_id}.yaml"

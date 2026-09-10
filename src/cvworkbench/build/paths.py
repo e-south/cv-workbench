@@ -22,6 +22,8 @@ def filters_dir() -> Path:
 
 
 def output_path(dist_dir: Path, variant: Variant, fmt: str) -> Path:
+    if not isinstance(fmt, str) or not fmt.isascii() or not fmt.isalnum():
+        raise ValueError("Output format must be an alphanumeric extension")
     if fmt == "ats":
         filename = f"{variant.output_name}.ats.txt"
     else:

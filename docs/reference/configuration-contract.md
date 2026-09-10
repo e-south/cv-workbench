@@ -84,6 +84,27 @@ Each build run and dist manifest records `configuration.sha256`, identifying
 the workbench config bytes used by that build. It remains the captured hash if
 the file is edited during rendering; the manifest does not re-read the config.
 
+## Variant and artifact names
+
+`variants.py` owns variant identity and output filename validation. Variant IDs
+start with an ASCII letter or number and contain only ASCII letters, numbers,
+dots, underscores, or hyphens. Selectors such as `--variant` and promotion IDs
+follow this same contract. They select a file beneath `config/variants/`; an ID
+is not a path.
+
+`variant.output_name` is a filename stem, such as `cv` or `Example Person CV`.
+Omitted/null values use `cv`. Explicit values must be nonempty strings; path
+separators, control characters, reserved filename punctuation (`<>:"|?*`), and
+the components `.` and `..` are rejected. Human-readable spaces and Unicode
+letters are retained. Both YAML loading and direct `Variant` construction
+enforce these name contracts.
+
+`build.paths.output_path` requires an ASCII alphanumeric format extension before
+joining the generated filename to its selected destination. Build/render reject
+unsafe names before creating artifacts; manifests can therefore refer to the
+actual generated filename within that destination. Configured output roots and
+explicit destination overrides retain their existing ownership semantics.
+
 ## Inspection boundaries
 
 `inspect_workspace` captures one snapshot for the source selection, default

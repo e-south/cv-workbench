@@ -13,6 +13,10 @@ Variant drafts and project proposals are treated as ephemeral until you
 explicitly keep them. The lifecycle is tracked locally so you can prune
 inconsequential variants and keep only intentional ones.
 
+Variant selectors and promotion IDs follow the
+[variant and artifact name contract](configuration-contract.md#variant-and-artifact-names).
+They are identifiers, not filesystem paths.
+
 ## Configuration
 
 Set the retention window in `config/workbench.yaml`:
