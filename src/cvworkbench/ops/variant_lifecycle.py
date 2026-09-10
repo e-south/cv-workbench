@@ -24,7 +24,12 @@ from typing import Any, Literal
 
 import yaml
 
-from cvworkbench.config import resolve_project_root, resolve_var_root, resolve_variant_ttl_days
+from cvworkbench.config import (
+    ConfigSource,
+    resolve_project_root,
+    resolve_var_root,
+    resolve_variant_ttl_days,
+)
 from cvworkbench.ops.variant_promote import PromoteError, promote_variant
 
 
@@ -91,7 +96,7 @@ _REGISTRY_MUTEXES: dict[str, Lock] = {}
 _REGISTRY_MUTEXES_GUARD = Lock()
 
 
-def load_variant_registry(config_path: Path) -> VariantRegistry:
+def load_variant_registry(config_path: ConfigSource) -> VariantRegistry:
     raw = _load_registry_raw(config_path)
     entries = [_parse_entry(entry, config_path) for entry in raw["entries"]]
     return VariantRegistry(entries=entries)
@@ -283,17 +288,17 @@ def gc_variants(*, config_path: Path, confirm: bool) -> VariantGcSummary:
         )
 
 
-def list_variant_inbox(config_path: Path) -> list[VariantRegistryEntry]:
+def list_variant_inbox(config_path: ConfigSource) -> list[VariantRegistryEntry]:
     registry = load_variant_registry(config_path)
     entries = [entry for entry in registry.entries if entry.status == "ephemeral"]
     return sorted(entries, key=lambda entry: entry.expires_at)
 
 
-def _registry_path(config_path: Path) -> Path:
+def _registry_path(config_path: ConfigSource) -> Path:
     return resolve_var_root(config_path) / "variants" / "registry.json"
 
 
-def _load_registry_raw(config_path: Path) -> dict[str, Any]:
+def _load_registry_raw(config_path: ConfigSource) -> dict[str, Any]:
     path = _registry_path(config_path)
     if not path.exists():
         return {"version": _REGISTRY_VERSION, "entries": []}
@@ -406,7 +411,7 @@ def _validate_entry(entry: Any) -> None:
         raise VariantLifecycleError("Variant registry entry is invalid")
 
 
-def _parse_entry(entry: dict[str, Any], config_path: Path) -> VariantRegistryEntry:
+def _parse_entry(entry: dict[str, Any], config_path: ConfigSource) -> VariantRegistryEntry:
     return VariantRegistryEntry(
         variant_id=entry["variant_id"],
         variant_path=_path_from_registry(entry["variant_path"], config_path),
@@ -487,7 +492,7 @@ def _path_for_registry(path: Path, config_path: Path) -> str:
         return resolved.as_posix()
 
 
-def _path_from_registry(value: str, config_path: Path) -> Path:
+def _path_from_registry(value: str, config_path: ConfigSource) -> Path:
     candidate = Path(value)
     if candidate.is_absolute():
         return candidate

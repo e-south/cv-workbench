@@ -17,6 +17,7 @@ from typing import Any
 import yaml
 
 from cvworkbench.config import (
+    ConfigSource,
     resolve_projects_path,
 )
 from cvworkbench.ops.projects import (
@@ -104,7 +105,7 @@ def project_review_payload(project_id: str, config_path: Path) -> dict[str, Any]
     }
 
 
-def load_project_summaries(config_path: Path) -> tuple[list[dict[str, Any]], list[Path]]:
+def load_project_summaries(config_path: ConfigSource) -> tuple[list[dict[str, Any]], list[Path]]:
     projects_root = resolve_projects_path(config_path)
     if not projects_root.exists():
         return [], []
@@ -155,7 +156,7 @@ def projects_summary_line(projects: list[dict[str, Any]]) -> str:
 
 
 def build_projects_context(
-    config_path: Path,
+    config_path: ConfigSource,
     *,
     include_items: bool,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:

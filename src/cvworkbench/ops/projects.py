@@ -526,7 +526,7 @@ def load_project_patch(project_dir: Path, *, sot_path: Path | None = None) -> st
 def suggest_project_variant_id(
     *,
     project_id: str,
-    config_path: Path,
+    config_path: ConfigSource,
     preferred_id: str | None = None,
 ) -> str:
     candidate = (preferred_id or "").strip()

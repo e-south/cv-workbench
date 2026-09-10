@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.config import ConfigSource, resolve_config_path
 from cvworkbench.ops.projects import (
     suggest_project_variant_id,
 )
@@ -78,7 +79,9 @@ def _inbox_display_status(entry: Any) -> tuple[str, bool]:
     return entry.status, False
 
 
-def inbox_entry_payload(entry: Any, config_path: Path) -> dict[str, Any]:
+def inbox_entry_payload(entry: Any, config_path: ConfigSource) -> dict[str, Any]:
+    configuration = config_path
+    config_path = resolve_config_path(configuration)
     project_id = _project_id_from_variant_entry_path(entry.variant_path)
     selector_kind = "project" if entry.source == "project" and project_id else "path"
     selector = project_id if selector_kind == "project" else str(entry.variant_path)
@@ -104,7 +107,7 @@ def inbox_entry_payload(entry: Any, config_path: Path) -> dict[str, Any]:
         payload["patch_path"] = str(patch_root / "patch.yaml")
         keep_variant_id = suggest_project_variant_id(
             project_id=project_id,
-            config_path=config_path,
+            config_path=configuration,
             preferred_id=entry.variant_id,
         )
         payload["keep_command"] = recipe_command(

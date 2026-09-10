@@ -84,6 +84,20 @@ Each build run and dist manifest records `configuration.sha256`, identifying
 the workbench config bytes used by that build. It remains the captured hash if
 the file is edited during rendering; the manifest does not re-read the config.
 
+## Inspection boundaries
+
+`inspect_workspace` captures one snapshot for the source selection, default
+variant, retention setting, run/project/review locations, and publication
+inventory. The `context`, `bootstrap`, and `workflow` commands share this API.
+Its Python callers may supply an existing snapshot. Editing or removing the
+workbench file after capture does not change that inspection's settings; the
+next path-based invocation reads current contents.
+
+`inspect_publication` likewise captures or reuses a snapshot for publication,
+review, and person-source locations. It retains its explicit freshness and
+review checks. Workflow descriptions receive the resolved workspace location
+and ordinary config path; constructing commands does not reopen the settings.
+
 ## Scope and adoption
 
 This snapshot covers `workbench.yaml`, not a transaction across every input
@@ -91,15 +105,16 @@ file or directory. Source facts, active-version pointers, variant files, theme
 assets, publication policy, and site configuration have separate lifetimes.
 Their existing hashes/checks do not establish a global immutable input bundle.
 
-Workspace inspection, publication/lifecycle orchestration, and preview
-controller selection still include path-based resolution outside the captured
-build boundary. Adopt explicit snapshots at those operation boundaries with
-their own behavior tests. Do not infer that accepting `ConfigSource` alone
-proves a whole caller uses one generation.
+Status/project command orchestration, publication preparation/sync, lifecycle
+mutations, and preview controller selection still include path-based resolution
+outside the captured boundaries. Adopt explicit snapshots at those operation
+boundaries with their own behavior tests. Do not infer that accepting
+`ConfigSource` alone proves a whole caller uses one generation.
 
 Verification:
 
 ```bash
 uv run pytest tests/ops/test_config.py tests/build/test_configuration.py
 uv run pytest tests/build
+uv run pytest tests/workspace tests/ops/publication/test_state.py
 ```

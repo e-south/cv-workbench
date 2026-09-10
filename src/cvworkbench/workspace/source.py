@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from cvworkbench.config import (
+    ConfigSource,
     load_config,
+    resolve_config_path,
     resolve_project_root,
 )
 from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES
@@ -37,7 +39,7 @@ def inspect_source(sot_path: Path):
     return inspect_sot(sot_path)
 
 
-def configured_sot_path(config_path: Path) -> str | None:
+def configured_sot_path(config_path: ConfigSource) -> str | None:
     try:
         config = load_config(config_path)
     except (FileNotFoundError, ValueError):
@@ -48,10 +50,10 @@ def configured_sot_path(config_path: Path) -> str | None:
     value = paths.get("sot")
     if not isinstance(value, str) or not value.strip():
         return None
-    return str((config_path.parent / value.strip()).resolve())
+    return str((resolve_config_path(config_path).parent / value.strip()).resolve())
 
 
-def sample_sot_path(config_path: Path) -> Path | None:
+def sample_sot_path(config_path: ConfigSource) -> Path | None:
     sample_path = resolve_project_root(config_path) / "sot.sample"
     if sample_path.exists():
         return sample_path

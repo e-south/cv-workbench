@@ -12,7 +12,7 @@ Module Author(s): Eric J. South
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from cvworkbench.config import resolve_reviews_path
+from cvworkbench.config import ConfigSource, resolve_reviews_path
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.record import (
     SOURCE_RECORD_NAME,
@@ -83,7 +83,7 @@ def inspect_review_source(directory: Path) -> ReviewSourceSummary:
     return result
 
 
-def list_review_summaries(config_path: Path) -> list[ReviewSummary]:
+def list_review_summaries(config_path: ConfigSource) -> list[ReviewSummary]:
     root = resolve_reviews_path(config_path)
     directories = sorted(
         {

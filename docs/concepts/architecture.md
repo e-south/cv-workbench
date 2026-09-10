@@ -111,8 +111,10 @@ local and relative imports. Describing a command never executes it.
 
 Inspection reuses each validated source payload for its section/tag summaries.
 This is not a transaction across all configuration and artifact reads.
-`config.py::ConfigSnapshot` gives build and render an explicit immutable
-workbench configuration generation, recorded by hash in build manifests. The
+`config.py::ConfigSnapshot` gives build, render, workspace inspection, and
+publication inspection an explicit immutable workbench configuration generation,
+recorded by hash in build manifests. Workflow descriptions receive resolved
+locations without selecting settings themselves. The
 [configuration contract](../reference/configuration-contract.md) defines
 resolution, preflight, and the remaining adoption boundaries. Status and several
 command adapters retain orchestration that can move behind workspace owners as

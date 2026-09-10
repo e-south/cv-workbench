@@ -16,9 +16,12 @@ from pathlib import Path
 from typing import Any
 
 from cvworkbench.config import (
+    ConfigSnapshot,
+    ConfigSource,
     load_config,
-    resolve_config_path,
+    read_config,
     resolve_default_variant,
+    resolve_project_root,
     resolve_sot_path,
     resolve_variant_ttl_days,
 )
@@ -53,7 +56,7 @@ from cvworkbench.workspace.workflows.recommendations import build_recommended_wo
 
 @dataclass(frozen=True)
 class ContextSharedState:
-    config_path: Path
+    configuration: ConfigSnapshot
     project_name: str | None
     configured_sot: str | None
     resolved_sot: Path | None
@@ -71,18 +74,23 @@ class ContextSharedState:
     sample_sot: Path | None
     issues: list[str]
 
+    @property
+    def config_path(self) -> Path:
+        return self.configuration.path
+
 
 def _build_context_shared_state(
     *,
     sot_path: Path | None,
     strict: bool,
-    config: Path,
+    config: ConfigSource,
 ) -> ContextSharedState:
-    config_path = resolve_config_path(config)
-    config_payload = load_config(config_path)
+    configuration = read_config(config)
+    config_path = configuration.path
+    config_payload = load_config(configuration)
 
     issues: list[str] = []
-    configured_sot = configured_sot_path(config_path)
+    configured_sot = configured_sot_path(configuration)
     resolved_sot: Path | None = None
     sot_errors: list[str] = []
     sot_details = {
@@ -97,7 +105,7 @@ def _build_context_shared_state(
     versions_summary = ""
 
     try:
-        resolved_sot = resolve_sot_path(sot_path, config_path)
+        resolved_sot = resolve_sot_path(sot_path, configuration)
     except (FileNotFoundError, ValueError) as exc:
         _record_context_issue(str(exc), issues, strict)
         sot_errors.append(str(exc))
@@ -126,7 +134,7 @@ def _build_context_shared_state(
 
     default_variant: str | None = None
     try:
-        default_variant = resolve_default_variant(config_path)
+        default_variant = resolve_default_variant(configuration)
     except ValueError as exc:
         _record_context_issue(str(exc), issues, strict)
 
@@ -139,15 +147,15 @@ def _build_context_shared_state(
 
     inbox_payload: list[dict[str, Any]] = []
     try:
-        inbox_entries = list_variant_inbox(config_path)
-        inbox_payload = [inbox_entry_payload(entry, config_path) for entry in inbox_entries]
+        inbox_entries = list_variant_inbox(configuration)
+        inbox_payload = [inbox_entry_payload(entry, configuration) for entry in inbox_entries]
     except (VariantLifecycleError, ValueError) as exc:
         _record_context_issue(str(exc), issues, strict)
     inbox_summary = inbox_summary_line(inbox_payload)
 
     ttl_days: int | None = None
     try:
-        ttl_days = resolve_variant_ttl_days(config_path)
+        ttl_days = resolve_variant_ttl_days(configuration)
     except ValueError as exc:
         _record_context_issue(str(exc), issues, strict)
 
@@ -159,7 +167,7 @@ def _build_context_shared_state(
             project_name = name_value.strip()
 
     return ContextSharedState(
-        config_path=config_path,
+        configuration=configuration,
         project_name=project_name,
         configured_sot=configured_sot,
         resolved_sot=resolved_sot,
@@ -174,7 +182,7 @@ def _build_context_shared_state(
         inbox_payload=inbox_payload,
         inbox_summary=inbox_summary,
         ttl_days=ttl_days,
-        sample_sot=sample_sot_path(config_path),
+        sample_sot=sample_sot_path(configuration),
         issues=issues,
     )
 
@@ -189,7 +197,7 @@ def inspect_workspace(
     *,
     sot_path: Path | None,
     strict: bool,
-    config: Path,
+    config: ConfigSource,
     compact: bool = False,
 ) -> dict[str, Any]:
     """Inspect local state without terminal output or workspace writes.
@@ -206,7 +214,7 @@ def inspect_workspace(
     }
     try:
         runs_section, latest_payload = build_runs_context(
-            shared.config_path,
+            shared.configuration,
             shared.variants,
             include_recents=not compact,
         )
@@ -221,7 +229,7 @@ def inspect_workspace(
     }
     try:
         projects_section, projects = build_projects_context(
-            shared.config_path,
+            shared.configuration,
             include_items=not compact,
         )
     except (ValueError, FileNotFoundError) as exc:
@@ -232,7 +240,7 @@ def inspect_workspace(
         "summary": "count=0",
     }
     try:
-        reviews_section = build_reviews_context(shared.config_path, include_items=not compact)
+        reviews_section = build_reviews_context(shared.configuration, include_items=not compact)
     except (ValueError, FileNotFoundError) as exc:
         _record_context_issue(str(exc), shared.issues, strict)
 
@@ -241,6 +249,7 @@ def inspect_workspace(
 
     recipes = build_context_recipes(
         config_path=shared.config_path,
+        workspace_root=resolve_project_root(shared.configuration),
         sot_path=recipe_sot_path,
         configured_sot_path=recipe_configured_sot,
         sot_status=shared.sot_status,
@@ -248,7 +257,7 @@ def inspect_workspace(
         default_variant=shared.default_variant,
     )
 
-    publication = inspect_workspace_publication(shared.config_path, sot_path=sot_path)
+    publication = inspect_workspace_publication(shared.configuration, sot_path=sot_path)
     recipes.append(
         publication_recipe(
             publication,

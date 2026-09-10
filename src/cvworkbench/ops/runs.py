@@ -18,7 +18,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.config import resolve_reviews_path, resolve_runs_path, resolve_var_root
+from cvworkbench.config import (
+    ConfigSource,
+    resolve_reviews_path,
+    resolve_runs_path,
+    resolve_var_root,
+)
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.catalog import load_review_sources
 
@@ -64,7 +69,7 @@ class RunGcSummary:
 
 
 def scan_runs(
-    config_path: Path,
+    config_path: ConfigSource,
     *,
     strict: bool = False,
     include_project_runs: bool = True,
@@ -132,7 +137,7 @@ def group_runs_by_variant(runs: list[RunInfo]) -> dict[str, list[RunInfo]]:
 
 
 def latest_runs_by_variant(
-    config_path: Path,
+    config_path: ConfigSource,
     *,
     limit: int = 3,
     include_project_runs: bool = False,

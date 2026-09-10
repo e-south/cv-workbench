@@ -18,7 +18,8 @@ from typing import Literal
 
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import (
-    resolve_config_path,
+    ConfigSource,
+    read_config,
     resolve_publish_path,
     resolve_reviews_path,
     resolve_sot_path,
@@ -70,7 +71,7 @@ class PublicationState:
 
 
 def inspect_publication(
-    config_path: Path,
+    config_path: ConfigSource,
     variant_id: str,
     *,
     publish_config_path: Path | None = None,
@@ -81,8 +82,8 @@ def inspect_publication(
     try:
         if Path(variant_id).name != variant_id or variant_id in {"", ".", ".."}:
             raise ValueError("Publication variant must be a workspace variant identifier")
-        config = resolve_config_path(config_path)
-        directory = resolve_publish_path(config) / variant_id
+        configuration = read_config(config_path)
+        directory = resolve_publish_path(configuration) / variant_id
         record_path = directory / "preparation.json"
         state = replace(
             state,
@@ -104,7 +105,7 @@ def inspect_publication(
             or Path(record.exported_pdf.path).suffix.lower() != ".pdf"
         ):
             raise ValueError("Preparation record must identify a DOCX and PDF source pair")
-        review_dir = resolve_reviews_path(config) / "publication" / record.pdf_sha256
+        review_dir = resolve_reviews_path(configuration) / "publication" / record.pdf_sha256
         state = replace(
             state,
             authored_source=record.authored_source.path,
@@ -127,9 +128,9 @@ def inspect_publication(
                     state="missing" if not Path(stamp.path).is_file() else phase,
                     reasons=(problem,),
                 )
-        policy_path = (publish_config_path or config.parent / "publish.yaml").resolve()
-        variant_path = resolve_variant_path(variant_id, config).resolve()
-        person_path = resolve_sot_path(sot_path, config).resolve() / "person.yaml"
+        policy_path = (publish_config_path or configuration.path.parent / "publish.yaml").resolve()
+        variant_path = resolve_variant_path(variant_id, configuration).resolve()
+        person_path = resolve_sot_path(sot_path, configuration).resolve() / "person.yaml"
         if (str(policy_path), str(variant_path), str(person_path)) != (
             record.policy.path,
             record.variant_config.path,

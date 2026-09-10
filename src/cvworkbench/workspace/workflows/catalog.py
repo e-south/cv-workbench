@@ -38,6 +38,7 @@ from cvworkbench.workspace.workflows.steps import finalize_recipe_steps
 def build_context_recipes(
     *,
     config_path: Path,
+    workspace_root: Path,
     sot_path: Path | None,
     configured_sot_path: str | None,
     sot_status: str,
@@ -51,6 +52,7 @@ def build_context_recipes(
         recipes.append(
             bootstrap_sample_workspace_recipe(
                 config_path=config_path,
+                workspace_root=workspace_root,
                 configured_sot_path=configured_sot_path,
                 sample_sot_path=sample_sot_path,
                 variant_label=variant_label,
@@ -64,6 +66,7 @@ def build_context_recipes(
         recipes.append(
             bootstrap_local_workspace_recipe(
                 config_path=config_path,
+                workspace_root=workspace_root,
                 configured_sot_path=configured_sot_path,
                 variant_label=variant_label,
             )

@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.config import ConfigSource
 from cvworkbench.ops.runs import (
     RunInfo,
     latest_runs_by_variant,
@@ -99,7 +100,7 @@ def run_is_review_ready(run: RunInfo | Mapping[str, Any]) -> bool:
 
 
 def build_runs_context(
-    config_path: Path,
+    config_path: ConfigSource,
     variants: list[dict[str, Any]],
     *,
     include_recents: bool,

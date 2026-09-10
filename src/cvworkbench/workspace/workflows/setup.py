@@ -14,15 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.config import (
-    resolve_project_root,
-)
 from cvworkbench.workspace.commands import init_command, recipe_command
 
 
 def bootstrap_sample_workspace_recipe(
     *,
     config_path: Path,
+    workspace_root: Path,
     configured_sot_path: str | None,
     sample_sot_path: Path | None,
     variant_label: str,
@@ -38,7 +36,7 @@ def bootstrap_sample_workspace_recipe(
             {
                 "command": init_command(
                     sample_default=True,
-                    workspace_root=resolve_project_root(config_path),
+                    workspace_root=workspace_root,
                 ),
                 "description": (
                     "Create or update the local scaffold so config/workbench.yaml "
@@ -79,7 +77,7 @@ def bootstrap_sample_workspace_recipe(
 
 
 def bootstrap_local_workspace_recipe(
-    *, config_path: Path, configured_sot_path: str | None, variant_label: str
+    *, config_path: Path, workspace_root: Path, configured_sot_path: str | None, variant_label: str
 ) -> dict[str, Any]:
     return {
         "id": "bootstrap.local_workspace",
@@ -93,7 +91,7 @@ def bootstrap_local_workspace_recipe(
             {
                 "command": init_command(
                     sample_default=False,
-                    workspace_root=resolve_project_root(config_path),
+                    workspace_root=workspace_root,
                 ),
                 "description": (
                     "Recreate the local scaffold and copy the bundled sample into ./local/sot."

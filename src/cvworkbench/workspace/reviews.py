@@ -11,9 +11,9 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
+from cvworkbench.config import ConfigSource
 from cvworkbench.ops.review.catalog import list_review_summaries
 
 
@@ -33,7 +33,7 @@ def reviews_summary_line(reviews: list[dict[str, Any]]) -> str:
     return f"count={len(reviews)}\n" + "\n".join(lines)
 
 
-def build_reviews_context(config_path: Path, *, include_items: bool) -> dict[str, Any]:
+def build_reviews_context(config_path: ConfigSource, *, include_items: bool) -> dict[str, Any]:
     reviews = list_review_summaries(config_path)
     section: dict[str, Any] = {
         "count": len(reviews),

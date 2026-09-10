@@ -241,8 +241,8 @@ selection. Import-direction tests protect workspace/adapter and domain owners.
 Proposed extraction order:
 
 1. Context and recipe extraction is complete. Further reduce status and
-   project-guide orchestration in CLI adapters; give configuration resolution
-   an operation-scoped contract before introducing shared snapshots.
+   project-guide orchestration in CLI adapters using the explicit configuration
+   snapshot contract.
 2. Publication command extraction is complete. Register review, tailoring and
    build commands from their own CLI modules without changing command syntax.
 3. Preview asset extraction is complete. Continue separating server transport
@@ -267,8 +267,19 @@ reject booleans. Invalid settings are resolved before build artifact writes;
 the regression suite previously found partial files for invalid theme, preset,
 theme directory, and output-path configuration. The
 [configuration contract](../reference/configuration-contract.md) distinguishes
-these guarantees from remaining workspace, publication/lifecycle, preview
-selection, and other-input snapshot work.
+these guarantees from publication preparation/sync, lifecycle mutations,
+preview selection, and other-input snapshot work.
+
+Inspection follow-up: `context`, `bootstrap`, and `workflow` share one captured
+workbench configuration through source selection, variant settings, artifact
+inventories, and publication inspection. The publication inspector also captures
+once when used directly. A real populated workspace reproduced mixed source,
+project, review, run, and publication state after an intervening config edit.
+Ten regressions now retain the same output after edit/removal, accept an explicit
+snapshot, and preserve missing-source bootstrap guidance. Two more checks cover
+the complete prepared-publication path. Subsequent operations see updated
+settings. Workflow descriptions receive resolved workspace locations rather than
+reading configuration themselves.
 
 ### Medium — artifact retention is not dependency-aware — partly fixed
 
@@ -450,6 +461,13 @@ its summary is `/tmp/cvw-configuration-journey.json`. Ruff checks and the
 harness-engineering skill audit passed. The site and canonical source remain
 outside this implementation scope; the live publication is still
 `review_required`.
+
+Inspection snapshot follow-up: 552 tests passed in the inclusive default suite,
+with one opt-in integration skip and the same five upstream warnings. The 161
+targeted checks passed, and all seven recorded CLI outputs remained byte-identical.
+Evidence: `/tmp/cvw-inspection-config-red.log`,
+`/tmp/cvw-inspection-config-green.log`, `/tmp/cvw-inspection-targeted.log`, and
+`/tmp/cvw-inspection-full.log`.
 
 Useful verification commands:
 

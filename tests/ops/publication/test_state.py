@@ -106,6 +106,34 @@ def _prepare(root: Path):
     return config, docx, pdf, policy, sot
 
 
+@pytest.mark.parametrize("mutation", ["edit", "remove"])
+def test_publication_inspection_uses_captured_workbench_settings(tmp_path, monkeypatch, mutation):
+    import yaml
+
+    config, *_ = _prepare(tmp_path)
+    expected = inspect_publication(config, "base")
+    assert expected.state == "review_required"
+    original_read = Path.read_bytes
+    reads = []
+
+    def mutate_after_read(path):
+        content = original_read(path)
+        if path == config:
+            reads.append(path)
+            if mutation == "edit":
+                data = yaml.safe_load(content)
+                data["paths"]["sot"] = "../different/sot"
+                data["paths"]["reviews"] = "../different/reviews"
+                path.write_text(yaml.safe_dump(data))
+            else:
+                path.unlink()
+        return content
+
+    monkeypatch.setattr(Path, "read_bytes", mutate_after_read)
+    assert inspect_publication(config, "base") == expected
+    assert reads == [config]
+
+
 def test_publication_review_is_explicit_and_bound_to_current_bytes(tmp_path: Path) -> None:
     config, docx, _, _, _ = _prepare(tmp_path)
     state = inspect_publication(config, "base")

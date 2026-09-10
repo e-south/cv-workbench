@@ -16,12 +16,12 @@ import shlex
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.config import resolve_publication_variant
+from cvworkbench.config import ConfigSource, resolve_publication_variant
 from cvworkbench.ops.publication.state import PublicationState, inspect_publication
 
 
 def inspect_workspace_publication(
-    config_path: Path, *, sot_path: Path | None = None
+    config_path: ConfigSource, *, sot_path: Path | None = None
 ) -> PublicationState:
     try:
         variant = resolve_publication_variant(config_path)

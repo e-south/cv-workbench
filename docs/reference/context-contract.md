@@ -66,6 +66,13 @@ corresponding section. With `strict=True`, the first such problem raises
 mode. CLI adapters translate these errors into their terminal message and exit
 code; Python callers handle the exception themselves.
 
+One inspection uses one immutable workbench configuration snapshot. Source
+selection, configured artifact locations, default variant, retention settings,
+and publication inventory share that snapshot. The API also accepts an explicit
+`ConfigSnapshot` as `config`. A later path-based call captures updated settings.
+This is a settings guarantee, not a transaction over all source and artifact
+files; see the [configuration contract](configuration-contract.md).
+
 `compact=True` limits inventory work (for example, one recent run per variant)
 and omits detailed run/project/review items. The API still returns full recipe
 descriptions. CLI compact presentation additionally reduces source/variant
