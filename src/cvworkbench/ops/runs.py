@@ -20,12 +20,15 @@ from typing import Any
 
 from cvworkbench.config import (
     ConfigSource,
+    read_config,
+    resolve_drafts_path,
     resolve_reviews_path,
     resolve_runs_path,
     resolve_var_root,
 )
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.catalog import load_review_sources
+from cvworkbench.ops.review.drafts import load_import_draft_sources
 
 
 class RunError(RuntimeError):
@@ -261,7 +264,7 @@ def _parse_manifest(manifest_path: Path, run_id: str) -> RunInfo:
 
 def gc_runs(
     *,
-    config_path: Path,
+    config_path: ConfigSource,
     keep_latest: int,
     keep: list[str],
     include_invalid: bool,
@@ -270,12 +273,13 @@ def gc_runs(
     if keep_latest < 0:
         raise RunError("keep_latest must be zero or greater")
 
-    runs_root = resolve_runs_path(config_path)
-    var_root = resolve_var_root(config_path).resolve()
+    configuration = read_config(config_path)
+    runs_root = resolve_runs_path(configuration)
+    var_root = resolve_var_root(configuration).resolve()
     if runs_root.resolve() == var_root or not runs_root.resolve().is_relative_to(var_root):
         raise RunError(f"Configured runs root must be a directory beneath var: {runs_root}")
 
-    catalog = scan_runs(config_path, strict=False)
+    catalog = scan_runs(configuration, strict=False)
     runs = catalog.runs
     invalid = catalog.invalid
 
@@ -287,18 +291,26 @@ def gc_runs(
 
     keep_ids = set(keep)
     try:
-        review_sources = load_review_sources(config_path)
+        review_sources = load_review_sources(configuration)
+        draft_sources = load_import_draft_sources(configuration)
     except ReviewError as exc:
         raise RunError(str(exc)) from exc
-    review_reasons: dict[str, list[str]] = {}
-    reviews_root = resolve_reviews_path(config_path)
+    reference_reasons: dict[str, list[str]] = {}
+    reviews_root = resolve_reviews_path(configuration)
     source_paths = {run.path.resolve(): run.run_id for run in runs}
     source_paths.update({path.resolve(): _run_id(runs_root, path) for path in invalid})
     for directory, source in review_sources.items():
         run_id = source_paths.get(Path(source.run_path).resolve())
         if run_id is not None:
-            review_reasons.setdefault(run_id, []).append(
+            reference_reasons.setdefault(run_id, []).append(
                 f"review:{directory.relative_to(reviews_root).as_posix()}"
+            )
+    drafts_root = resolve_drafts_path(configuration)
+    for directory, source in draft_sources.items():
+        run_id = source_paths.get(source.run_path)
+        if run_id is not None:
+            reference_reasons.setdefault(run_id, []).append(
+                f"draft:{directory.relative_to(drafts_root).as_posix()}"
             )
     kept_by_latest: set[str] = set()
     grouped: dict[tuple[str, str], list[RunInfo]] = {}
@@ -309,11 +321,11 @@ def gc_runs(
         for run in variant_runs[:keep_latest]:
             kept_by_latest.add(run.run_id)
 
-    kept_ids = keep_ids | kept_by_latest | review_reasons.keys()
+    kept_ids = keep_ids | kept_by_latest | reference_reasons.keys()
     keep_reasons = {
         run_id: (["explicit_keep"] if run_id in keep_ids else [])
         + (["latest_in_scope"] if run_id in kept_by_latest else [])
-        + review_reasons.get(run_id, [])
+        + reference_reasons.get(run_id, [])
         for run_id in sorted(kept_ids)
     }
     invalid_candidates = [

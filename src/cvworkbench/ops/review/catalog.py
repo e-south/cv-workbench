@@ -44,7 +44,7 @@ class ReviewSummary(TypedDict):
     source: ReviewSourceSummary | None
 
 
-def load_review_sources(config_path: Path) -> dict[Path, ReviewSource]:
+def load_review_sources(config_path: ConfigSource) -> dict[Path, ReviewSource]:
     root = resolve_reviews_path(config_path)
     return {
         path.parent: load_source_record(path) for path in sorted(root.rglob(SOURCE_RECORD_NAME))

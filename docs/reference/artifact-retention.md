@@ -43,7 +43,7 @@ The JSON plan distinguishes:
   `--include-invalid` is selected, excluding explicitly retained IDs.
 - `kept`: retained valid runs.
 - `keep_reasons`: retained IDs with `explicit_keep`, `latest_in_scope`, and/or
-  `review:<review-id>`.
+  `review:<review-id>` and `draft:<draft-id>`.
 
 A nonempty preview exits with code 2. An empty plan exits with code 0. Add
 `--yes` to apply a plan recalculated from current state. It is not a frozen
@@ -64,12 +64,50 @@ visible through `context` and `status`; changed source bytes still protect the
 run for recovery even though they prevent import.
 
 Historical bundles without a source record and custom Python API bundles outside
-the configured reviews root require explicit `--keep` retention. GC does not yet
-infer dependencies from standalone import drafts or other patch proposals. The
-run contains canonical text and selection metadata needed to interpret edits.
+the configured reviews root require explicit `--keep` retention. Standalone
+imports have their own source references below; other patch proposals do not
+implicitly retain runs. A run contains canonical text and selection metadata
+needed to interpret edits.
 
 Authored publication uses a separate source/export pair and hash-addressed
 review packet outside the run store. `runs gc` does not remove those artifacts.
+
+## Import Draft Dependencies
+
+`ops/review/drafts.py::load_import_draft_sources` owns the retention projection
+of import metadata. It reads the declared `source: import-docx`, normalized
+relative `run_id`, and absolute `canonical_path` ending in `canonical.md`.
+For sources inside the configured run store, the path and ID must agree.
+References protect exact source directories, not another run with the same
+basename. External source paths do not retain unrelated local runs.
+
+Run GC preserves these references under the configured draft store independently
+of recency, manifest health, canonical-byte freshness, and `apply_status`.
+`ready_no_changes` and `review_diff_only` do not authorize discarding the
+comparison baseline. A damaged or missing canonical file still protects its
+remaining run directory for recovery. This projection does not validate
+application eligibility or declare the source content current.
+
+Directories containing `draft.json` or `imported.md`, and directories named
+`import-*`, identify potential imports. Missing/malformed records, duplicate JSON
+fields, unsupported source kinds, invalid paths, and directory/record symlinks
+stop cleanup before deletion. Ordinary unregistered proposal folders without
+import markers do not gain invented run dependencies.
+
+For legacy imports without records, preserve the files and inspect their
+historical evidence. Recover original provenance from a trusted copy if available;
+do not manufacture it from today's hashes or a latest-run guess. Before an
+explicit archive/discard decision, retain possible baselines with `--keep` or
+archive the draft and its baseline evidence together outside cleanup-managed
+stores. No automatic migration or live cleanup is implied.
+
+`gc_runs` captures or reuses one `ConfigSnapshot` for run, review, and draft
+locations. The CLI delegates root validation to that operation. This keeps one
+request's settings coherent, not a filesystem-wide snapshot or writer lock.
+Changed dependencies after inspection remain outside this guarantee; use an
+idle workspace for deliberate cleanup. Existing partial-deletion I/O limits
+still apply. See `tests/ops/review/test_draft_retention.py` for guarded deletion
+in temporary fixtures and CLI plan behavior.
 
 ## Preview Artifacts
 

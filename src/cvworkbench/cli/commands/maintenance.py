@@ -151,8 +151,6 @@ def runs_gc(
     configure_output_mode(plain, json_output)
     try:
         config_path = resolve_config_path(config)
-        runs_root = resolve_runs_path(config_path)
-        _require_var_path("runs", runs_root, config_path)
         summary = gc_runs(
             config_path=config_path,
             keep_latest=keep_latest,

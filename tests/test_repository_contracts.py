@@ -183,6 +183,20 @@ def test_preview_ownership_contract_routes_paths_and_retention() -> None:
     assert "var/dist/<variant>/cv.html" not in (ROOT / "docs/howto/styling.md").read_text()
 
 
+def test_import_draft_retention_routes_its_identity_owner_and_limits() -> None:
+    contract = (ROOT / "docs/reference/artifact-retention.md").read_text()
+    assert "## Import Draft Dependencies" in contract
+    assert "ops/review/drafts.py::load_import_draft_sources" in contract
+    assert "tests/ops/review/test_draft_retention.py" in contract
+    assert "draft:<draft-id>" in contract
+    for relative in (
+        "docs/reference/review-contract.md",
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/review/AGENTS.md",
+    ):
+        assert "artifact-retention.md#import-draft-dependencies" in (ROOT / relative).read_text()
+
+
 def test_render_asset_contract_routes_fingerprints_and_limits() -> None:
     contract = (ROOT / "docs/reference/configuration-contract.md").read_text()
     architecture = (ROOT / "docs/concepts/architecture.md").read_text()

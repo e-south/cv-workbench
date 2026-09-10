@@ -343,6 +343,12 @@ outside the captured boundaries. Adopt explicit snapshots at those operation
 boundaries with their own behavior tests. Do not infer that accepting
 `ConfigSource` alone proves a whole caller uses one generation.
 
+Run GC captures or reuses one snapshot for run scanning and review/import-draft
+dependencies. Its CLI delegates selection and root validation to the operation.
+The [retention contract](artifact-retention.md#import-draft-dependencies) owns
+reference validation and cleanup limits; this does not snapshot concurrently
+created or edited review/draft records.
+
 Explicit draft/project application resolves its supplied or recorded source
 once and reports the concrete directory. Its [source-selection contract](patch-application.md#source-selection)
 owns version-pack behavior; this is independent of a workbench configuration

@@ -75,17 +75,19 @@ are in `/tmp/cvw-retention-inventory.json`,
 
 - [x] Inspect live stores without writes and capture current GC decisions.
 - [x] Reproduce loss of standalone draft dependencies in disposable fixtures.
-- [ ] Add import-draft source discovery under the content-review owner and use
+- [x] Add import-draft source discovery under the content-review owner and use
   it in run GC. Keep parsing out of CLI presentation and avoid a second metadata
   interpretation inside the run catalog.
-- [ ] Re-run the live dry-run and export candidate/keep reasons. Reconcile legacy
-  reviews with explicit retained IDs before considering any removal.
+- [x] Re-run the live dry-run. It now refuses ambiguous imports instead of
+  presenting an unsafe candidate set.
+- [ ] Reconcile legacy imports and reviews with explicit retained IDs before
+  considering any removal; no live cleanup is authorized by this plan.
 - [ ] Reassess preview retention after durable invocation metadata exists. Keep
   current legacy evidence outside automatic cleanup eligibility.
 
-## Next implementation contract
+## Import dependency implementation contract
 
-The next slice extends run retention to standalone imports; it does not delete
+The implemented slice extends run retention to standalone imports; it does not delete
 drafts or add a new cleanup subsystem.
 
 Done criteria:
@@ -110,6 +112,33 @@ unrelated removable run. Exercise the existing CLI JSON plan and its exit codes.
 Run retention/review regressions, workspace boundaries, repository contracts,
 the full suite, and the isolated CLI harness. Preserve the current partial-I/O
 cleanup limitation; this slice does not claim a concurrent-writer transaction.
+
+## Implementation evidence
+
+The retention reader now lives in `ops/review/drafts.py`. Ten initial failures
+demonstrated missing retention; twelve further failures exposed ambiguous
+identity and changing-configuration cases. The focused retention, review, CLI,
+and documentation group passed 102 tests. The live dry-run stops because 20
+legacy import folders have no `draft.json`; no live files were removed.
+Those records must not be fabricated from current hashes.
+
+The seven-step isolated CLI harness passed. A follow-up used its real DOCX
+import, built a newer run, and selected a different empty review store. GC then
+retained the old comparison baseline solely through `draft:<draft-id>`, with
+zero removals. This follow-up changed only the owned harness workspace.
+
+Final verification passed 1,165 tests, one existing opt-in integration skip,
+and five upstream warnings. Lint/format checks and repository hooks passed.
+The full log is `/tmp/cvw-draft-retention-full.log`; harness results are in
+`/tmp/cvw-draft-retention-journey.json`.
+
+Evidence is retained in `/tmp/cvw-draft-retention-red.log`,
+`/tmp/cvw-draft-retention-invalid-red.log`,
+`/tmp/cvw-draft-retention-targeted.log`,
+`/tmp/cvw-draft-retention-live-result.json`, and
+`/tmp/cvw-draft-retention-import-journey.json`. The live
+[import-draft retention contract](../reference/artifact-retention.md#import-draft-dependencies)
+owns behavior and recovery guidance.
 
 ## Preview follow-up threshold
 

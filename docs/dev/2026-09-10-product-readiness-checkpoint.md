@@ -41,7 +41,7 @@ publish**. More modules, tests, or audit findings are not completion criteria.
 | Apply an edit to the selected source version | Draft and project application share one selection owner, preserve explicit version pins, and report the concrete edited directory | Directory selection is not a global source snapshot; expected-text/byte guards retain their documented concurrency limits |
 | Preserve work when a save fails | Proposal locking, expected-text/byte guards, staged rendering, and recoverable grouped writes | No crash-durability or universal concurrent-writer guarantee |
 | Publish a faithful, private-data-checked CV | Captured preparation inputs, consistent action settings, disclosure checks, source freshness, immutable artifact hashes, and exact-PDF review | Current public candidate requires human review; site update remains on hold |
-| Keep the workspace understandable | Separate sources, proposals, runs, previews, reviews, and publication artifacts; read-only retention inventory and reproduced dependency-loss cases | Implement import-draft run retention; reconcile legacy review evidence before live cleanup; automatic preview pruning deferred |
+| Keep the workspace understandable | Separate artifact owners; review and import drafts retain exact source runs; cleanup explains dependencies and rejects ambiguous import metadata | Twenty legacy imports need provenance/retention decisions before cleanup; preserve them; automatic preview pruning deferred |
 
 ## Document review evidence and limits
 
@@ -121,11 +121,16 @@ advisory evidence.
 
 ## Bounded remaining effort
 
-1. **Protect retained editing work.** The [retention plan](../plans/2026-09-10-artifact-retention.md)
-   now records the live inventory and demonstrates that run cleanup can strand
-   standalone import drafts. Implement that dependency guard and inspect the
-   resulting plan. Legacy preview/review evidence needs explicit decisions;
-   no live pruning is part of this phase.
+Import-draft retention subsequently passed 1,165 tests (one existing opt-in skip),
+the seven-step CLI harness, and a real import/new-build/retention journey. The
+remaining legacy-data decisions below are explicit; validation did not remove
+or rewrite historical evidence.
+
+1. **Preserve legacy evidence.** The [retention implementation](../plans/2026-09-10-artifact-retention.md)
+   now protects standalone import baselines, including stale or damaged runs.
+   The live dry-run refuses 20 older imports without source metadata. Keep those
+   files and reconcile historical evidence before any future cleanup; do not
+   synthesize verified provenance. No live pruning is part of this phase.
 2. **Reach the review decision.** Present the selected authored/public artifact
    and identify verified, pending-review, and deferred items. Keep the supported
    PDF-structure investigation explicit rather than treating headings as proof.

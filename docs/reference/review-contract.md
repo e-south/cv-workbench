@@ -95,7 +95,9 @@ root, including runs whose manifests are damaged. `keep_reasons` names the
 protecting review. A malformed record stops GC before deletion because its
 dependencies cannot be established. Historical bundles without records and
 Python callers' custom bundles outside the configured store require explicit
-`--keep` retention. See [artifact retention](artifact-retention.md).
+`--keep` retention. Standalone imports retain their declared canonical source
+through the [import-draft retention contract](artifact-retention.md#import-draft-dependencies),
+including no-op drafts. Retention does not establish source freshness or approval.
 
 `reviewpack --force` explicitly replaces an existing review, including its
 edited DOCX. Required inputs and selection metadata are checked first. The

@@ -9,6 +9,11 @@
 - `record.py` owns source identity and baseline hashes. A valid record pins its
   run for imports and for GC within the configured review store. Do not infer
   missing provenance from whichever run happens to be latest.
+- `drafts.py` reads import-draft source identities for retention. Keep this
+  projection separate from apply eligibility and source-freshness checks. Run GC
+  consumes these references with one captured configuration; malformed or
+  unrecorded imports stop deletion. Follow
+  `docs/reference/artifact-retention.md#import-draft-dependencies`.
 - Keep authored publication review in `ops/publication/`. A content review edits
   source claims; a publication review approves one prepared public PDF.
 - Validate run identity and required inputs before writing or replacing a bundle.
