@@ -172,11 +172,7 @@ def project_new(
     if get_output_mode() == OutputMode.JSON:
         typer.echo(json.dumps(summary, indent=2, sort_keys=True))
     else:
-        _print_project_new_summary(
-            project_dir=result.project_dir,
-            variant_id=load_variant(result.variant_path).id,
-            job_source=job_source,
-        )
+        _print_project_new_summary(summary)
 
     if open_after:
         dev_serve(
@@ -267,8 +263,8 @@ def project_apply(
 ) -> None:
     configure_output_mode(plain, json_output)
     config_path = resolve_config_path(config)
-    project_dir = resolve_project_dir(project, config_path)
     try:
+        project_dir = resolve_project_dir(project, config_path)
         spec = load_project(project_dir)
     except ProjectError as exc:
         typer.echo(f"ERROR: {exc}", err=True)

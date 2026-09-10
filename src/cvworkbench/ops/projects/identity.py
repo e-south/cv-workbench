@@ -35,11 +35,26 @@ def validate_project_id(project_id: object) -> None:
         )
 
 
-def resolve_project_dir(project: str, config_path: ConfigSource) -> Path:
-    candidate = Path(project)
-    if candidate.is_absolute() or candidate.exists():
-        return candidate
-    return resolve_projects_path(config_path) / project
+def resolve_project_dir(project: str | Path, config_path: ConfigSource) -> Path:
+    """Resolve IDs in the configured store and explicit paths from the caller's directory."""
+    if isinstance(project, str):
+        if not project.strip():
+            raise ProjectError("Project selector is required")
+        candidate = Path(project)
+        explicit_path = (
+            candidate.is_absolute() or project in {".", ".."} or project != candidate.name
+        )
+        if not explicit_path:
+            validate_project_id(project)
+            candidate = resolve_projects_path(config_path) / project
+    elif isinstance(project, Path):
+        candidate = project
+    else:
+        raise ProjectError("Project selector must be a string or Path")
+    try:
+        return candidate.resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ProjectError("Project path could not be resolved") from exc
 
 
 def suggest_project_variant_id(

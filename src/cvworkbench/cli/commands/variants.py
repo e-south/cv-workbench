@@ -147,6 +147,7 @@ def _print_variant_inbox(entries: list[Any], config_path: Path) -> None:
         (
             f"{item['variant_id']} | {item['source']} | {item['status']} | "
             f"{item['expires_at']} | {item['variant_path']}"
+            + (f" | project_error: {item['project_error']}" if "project_error" in item else "")
         )
         for item in entry_payload
     ]

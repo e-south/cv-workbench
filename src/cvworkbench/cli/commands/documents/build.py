@@ -180,9 +180,9 @@ def build(
     project_spec = None
     variant_path_override = None
     run_dir = None
-    if project:
-        project_dir = resolve_project_dir(project, configuration)
+    if project is not None:
         try:
+            project_dir = resolve_project_dir(project, configuration)
             project_spec = load_project(project_dir)
         except ProjectError as exc:
             typer.echo(f"ERROR: {exc}", err=True)

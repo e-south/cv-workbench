@@ -35,6 +35,57 @@ source of truth.
 
 ## Findings and disposition
 
+### High — suggested project commands could mutate a different copy — fixed
+
+Project command descriptions retained only the manifest ID after inspecting an
+explicit directory. An isolated regression copied a registered project to an
+archive, inspected it, and executed its suggested discard command: the command
+deleted the configured same-ID neighbor's proposal instead of the inspected
+copy. This violated the requirement that a described action preserve its target.
+
+Selector resolution now distinguishes configured IDs from explicit paths.
+Current-directory names cannot shadow IDs, missing explicit paths cannot become
+store-relative selectors, and empty selectors cannot start a default build or
+preview. Command descriptions require the selected directory; they retain the
+ID only when the configured mapping selects that directory, otherwise quoting
+its absolute path. CLI adapters translate selector errors before artifact writes.
+Plain creation summaries consume the same configuration-preserving commands as
+JSON. The [project selector contract](../reference/project-contract.md#project-selectors)
+owns this behavior.
+
+The inbox also inferred identity from a hard-coded `var/projects` path. It now
+reads validated manifest identity for the registered proposal location and uses
+the shared selector description, supporting custom stores and archived copies.
+Invalid metadata remains visible through `project_error`, concrete registered
+path commands, and no inferred preview action. Shared manifest reads reject
+external symlinks and non-regular files before opening them. This is a local
+ownership check, not protection against every concurrent filesystem replacement.
+
+The routing regressions exercise real temporary projects, copied proposals,
+custom configuration, generated commands, and unchanged neighboring artifacts.
+The initial failures are recorded in `/tmp/cvw-project-routing-red.log`;
+stronger invalid-selector checks failed in
+`/tmp/cvw-project-routing-selector-red.log`. Inbox identity and bounded-manifest
+read failures are in `/tmp/cvw-project-routing-inbox-red.log` and
+`/tmp/cvw-project-routing-manifest-red.log`. No live proposal was discarded.
+
+Run and review namespaces still use the manifest ID within a configuration.
+Directory preservation does not make two copied manifests independent run
+identities. A future clone/relocation workflow should define identity allocation,
+registry updates, and retained-run references together rather than encourage
+untracked directory copies. Configuration lifetime across side-effecting CLI
+orchestration remains a separate audit item.
+
+Verification: all 825 tests passed, with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings (`/tmp/cvw-project-routing-full.log`). The 84 routing and
+manifest checks passed, and all seven isolated CLI journey steps passed with
+empty stderr (`/tmp/cvw-project-routing-manifest-green.log` and
+`/tmp/cvw-project-routing-journey.json`). Ruff lint and formatting passed.
+The canonical CV master and public candidate hashes remained unchanged; context
+reported a ready source, no issues, and publication still requiring review.
+The personal-site tree remained clean. This pass used no public network access,
+publication approval, site sync, or push.
+
 ### Medium — retained project history depended on ephemeral proposal files — fixed
 
 Detailed inspection required the executable-project loader. Discarded proposal

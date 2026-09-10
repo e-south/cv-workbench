@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import re
+import stat
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -39,10 +40,12 @@ def load_project_metadata(project_dir: Path) -> dict[str, Any]:
 def _read_project_manifest(project_dir: Path) -> ProjectManifest:
     if not project_dir.exists():
         raise ProjectError(f"Project directory not found: {project_dir}")
-    project_file = project_dir / "project.yaml"
+    project_file = _project_relative_path(project_dir, "project.yaml", "manifest")
     if not project_file.exists():
         raise ProjectError(f"Project manifest not found: {project_file}")
     try:
+        if not stat.S_ISREG(project_file.stat().st_mode):
+            raise ProjectError("Project manifest must be a regular file")
         content = project_file.read_bytes()
         raw = yaml.safe_load(content.decode("utf-8"))
     except (UnicodeError, yaml.YAMLError) as exc:

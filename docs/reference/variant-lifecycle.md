@@ -41,6 +41,21 @@ Cleanup owns the variant file itself or its immediate bundle directory. Shared
 containers such as `var/`, `var/drafts/`, and a project's parent directory are
 not cleanup targets for a nested proposal.
 
+### Inbox project identity
+
+For a registered `source: project` entry at `proposals/variant.yaml`, the inbox
+reads the owning project's validated manifest identity. It reports `project_id`
+and `project_dir`; it does not infer identity from a `var/projects` directory
+name. Project commands follow the [project selector contract](project-contract.md#project-selectors),
+so custom stores and archived directories retain their actual selection.
+
+If the proposal location or manifest cannot establish project identity, the
+entry retains concrete `--path` lifecycle commands and reports `project_error`
+in JSON and terminal summaries. `project_id` is null, and no project preview
+command is suggested. This diagnostic does not hide or remove the registered
+proposal. Lifecycle execution still validates the selected artifact and cleanup
+ownership; the command description is not permission to delete it.
+
 ## Registration preflight
 
 `ops.variant_lifecycle.preflight_variant_registration` checks a prospective

@@ -16,11 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.config import ConfigSource, resolve_config_path
+from cvworkbench.config import ConfigSource, read_config
 from cvworkbench.ops.projects import (
+    ProjectError,
+    load_project_metadata,
     suggest_project_variant_id,
 )
 from cvworkbench.workspace.commands import recipe_command
+from cvworkbench.workspace.projects.commands import project_selector
 
 
 def variants_summary_line(variants: list[dict[str, Any]]) -> str:
@@ -49,11 +52,8 @@ def _inbox_display_status(entry: Any) -> tuple[str, bool]:
 
 
 def inbox_entry_payload(entry: Any, config_path: ConfigSource) -> dict[str, Any]:
-    configuration = config_path
-    config_path = resolve_config_path(configuration)
-    project_id = _project_id_from_variant_entry_path(entry.variant_path)
-    selector_kind = "project" if entry.source == "project" and project_id else "path"
-    selector = project_id if selector_kind == "project" else str(entry.variant_path)
+    configuration = read_config(config_path)
+    config_path = configuration.path
     display_status, expired = _inbox_display_status(entry)
     payload = {
         "variant_id": entry.variant_id,
@@ -65,32 +65,34 @@ def inbox_entry_payload(entry: Any, config_path: ConfigSource) -> dict[str, Any]
         "expired": expired,
         "expires_at": entry.expires_at,
         "label": entry.label,
-        "selector_kind": selector_kind,
-        "selector": selector,
-        "project_id": project_id,
+        "selector_kind": "path",
+        "selector": str(entry.variant_path),
+        "project_id": None,
     }
-    if selector_kind == "project" and project_id is not None:
-        patch_root = entry.cleanup_path
-        if patch_root.name != "proposals":
-            patch_root = patch_root / "proposals"
-        payload["patch_path"] = str(patch_root / "patch.yaml")
+    if entry.source == "project":
+        try:
+            payload.update(_inbox_project(entry.variant_path, configuration))
+        except ProjectError as exc:
+            payload["project_error"] = str(exc)
+    if payload["selector_kind"] == "project":
+        selector = shlex.quote(payload["selector"])
         keep_variant_id = suggest_project_variant_id(
-            project_id=project_id,
+            project_id=payload["project_id"],
             config_path=configuration,
             preferred_id=entry.variant_id,
         )
         payload["keep_command"] = recipe_command(
-            f"variant keep --project {shlex.quote(project_id)} --id {shlex.quote(keep_variant_id)}",
+            f"variant keep --project {selector} --id {shlex.quote(keep_variant_id)}",
             config_path=config_path,
             sot_path=None,
         )
         payload["discard_command"] = recipe_command(
-            f"variant discard --project {shlex.quote(project_id)} --yes",
+            f"variant discard --project {selector} --yes",
             config_path=config_path,
             sot_path=None,
         )
         payload["preview_command"] = recipe_command(
-            f"preview --project {shlex.quote(project_id)}",
+            f"preview --project {selector}",
             config_path=config_path,
             sot_path=None,
         )
@@ -126,12 +128,18 @@ def inbox_entry_payload(entry: Any, config_path: ConfigSource) -> dict[str, Any]
     return payload
 
 
-def _project_id_from_variant_entry_path(path: Path) -> str | None:
-    parts = path.parts
-    for index in range(len(parts) - 2):
-        if parts[index] == "var" and parts[index + 1] == "projects":
-            return parts[index + 2]
-    return None
+def _inbox_project(path: Path, config_path: ConfigSource) -> dict[str, Any]:
+    if path.name != "variant.yaml" or path.parent.name != "proposals":
+        raise ProjectError("Project proposal must be located at proposals/variant.yaml")
+    project_dir = path.parent.parent
+    project_id = load_project_metadata(project_dir)["id"]
+    return {
+        "selector_kind": "project",
+        "selector": project_selector(project_id, project_dir=project_dir, config_path=config_path),
+        "project_id": project_id,
+        "project_dir": str(project_dir),
+        "patch_path": str(path.parent / "patch.yaml"),
+    }
 
 
 def inbox_summary_line(entries: list[dict[str, Any]]) -> str:
@@ -139,6 +147,7 @@ def inbox_summary_line(entries: list[dict[str, Any]]) -> str:
         return "count=0"
     lines = [
         f"{entry['label'] or entry['variant_id']} | {entry['source']} | {entry['status']} | {entry['expires_at']}"
+        + (f" | project_error: {entry['project_error']}" if "project_error" in entry else "")
         for entry in entries
     ]
     return f"count={len(entries)}\n" + "\n".join(lines)

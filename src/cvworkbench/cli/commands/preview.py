@@ -268,7 +268,7 @@ def dev_serve(
     config_path = resolve_config_path(config)
     project_spec = None
     try:
-        if project:
+        if project is not None:
             project_dir = resolve_project_dir(project, config_path)
             project_spec = load_project(project_dir)
             if variant:

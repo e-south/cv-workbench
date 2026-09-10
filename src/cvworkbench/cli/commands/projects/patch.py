@@ -99,8 +99,8 @@ def project_patch_replace_experience_bullet(
 ) -> None:
     configure_output_mode(plain, json_output)
     config_path = resolve_config_path(config)
-    project_dir = resolve_project_dir(project, config_path)
     try:
+        project_dir = resolve_project_dir(project, config_path)
         spec = load_project(project_dir)
     except ProjectError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -129,6 +129,7 @@ def project_patch_replace_experience_bullet(
     followup_sot = resolved_sot if resolved_sot != spec.sot_path.resolve() else None
     commands = project_commands(
         spec.project_id,
+        project_dir=spec.project_dir,
         config_path=config_path,
         sot_path=followup_sot,
     )
@@ -220,8 +221,8 @@ def project_patch_replace_project_summary(
 ) -> None:
     configure_output_mode(plain, json_output)
     config_path = resolve_config_path(config)
-    project_dir = resolve_project_dir(project, config_path)
     try:
+        project_dir = resolve_project_dir(project, config_path)
         spec = load_project(project_dir)
     except ProjectError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -249,6 +250,7 @@ def project_patch_replace_project_summary(
     followup_sot = resolved_sot if resolved_sot != spec.sot_path.resolve() else None
     commands = project_commands(
         spec.project_id,
+        project_dir=spec.project_dir,
         config_path=config_path,
         sot_path=followup_sot,
     )

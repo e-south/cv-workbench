@@ -8,6 +8,9 @@
   Preview inspection retains partial diagnostics without scanning run history.
 - Preserve retained history when proposal inputs are unavailable. Describe only
   applicable commands; a retained run can be packaged without live proposals.
+- Command descriptions require the selected directory as well as manifest ID.
+  Reuse `commands.py` selector ownership; do not replace explicit locations with
+  IDs unless the configured mapping selects that directory.
 - Keep the public entrypoint explicit and free of implementation. Internal
   modules import concrete owners, never this package's entrypoint.
 - Adapters own printing, exit codes, and preview lifecycle. Inspection has no

@@ -676,6 +676,7 @@ def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, mo
     project_dir = tmp_path / "var" / "projects" / "job"
     proposals_dir = project_dir / "proposals"
     proposals_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.yaml").write_text("project:\n  id: job\n  base_variant: base\n")
     variant_path = proposals_dir / "variant.yaml"
     patch_path = proposals_dir / "patch.yaml"
     variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")

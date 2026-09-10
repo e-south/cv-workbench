@@ -65,6 +65,25 @@ paths:
   projects: ../var/projects
 ```
 
+### Project selectors
+
+A bare string such as `research` is an ID within the configured project store.
+A same-named directory in the caller's working directory does not override that
+mapping. Use `./research` to select that local directory explicitly. Absolute
+paths, `.`, `..`, and strings containing path separators are explicit paths;
+relative paths resolve from the caller's working directory even when missing.
+Python `Path` arguments always describe paths, including `Path("research")`.
+Empty strings and malformed IDs raise `ProjectError`; CLI adapters report the
+error on stderr and exit with code 1 before writing project or build artifacts.
+
+Generated project commands preserve the selected directory and configuration.
+They use the ID only when its configured mapping selects that exact directory;
+otherwise they use a shell-quoted absolute path. Plain and JSON creation
+summaries consume the same command descriptions. Commands describe current
+selection, not a filesystem reservation: later moves or replacement can invalidate
+them. Project run and review namespaces remain ID-scoped within the selected
+configuration; copying a manifest does not create an independent run identity.
+
 ## Layout
 
 ```
@@ -101,6 +120,10 @@ Use:
 Identifiers are single components: paths, whitespace, option-like values, and
 non-string YAML values are invalid. Project builds validate this identity before
 creating a run directory or copying source files.
+
+The manifest must resolve to a regular file within its project directory.
+Manifest reads reject external symlinks and non-regular inputs before opening
+them. These checks do not lock out concurrent filesystem changes.
 
 Workspace inventory reads identity without requiring proposal artifacts. A
 project whose proposals were discarded can remain visible in context. A missing,

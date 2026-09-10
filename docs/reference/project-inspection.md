@@ -22,7 +22,9 @@ from cvworkbench.workspace.projects import inspect_project
 state = inspect_project("research", config=Path("config/workbench.yaml"))
 ```
 
-The selector accepts a project ID or directory path. The returned dictionary
+The selector follows the [project selector contract](project-contract.md#project-selectors):
+bare string IDs use the configured store, and explicit paths retain their
+directory. The returned dictionary
 contains the project, proposal, job, signals, patch, latest project-run review
 state, available command descriptions, stored-file observations, and optional
 saved guidance. It is the `project show --json` payload without the CLI's
@@ -34,6 +36,11 @@ run lookup, proposal-ID suggestions, and saved-guidance comparisons. `config`
 also accepts an explicit `ConfigSnapshot`. A later path-based call captures
 updated settings. This does not capture all project, source, variant, or run
 files atomically; see [configuration lifetime](configuration-contract.md).
+
+`project_commands` requires `project_dir` alongside the manifest ID. Its shared
+selector description retains an absolute directory when the configured ID
+would select another project. Command values are shell-quoted, executable
+descriptions; inspection does not execute them or authorize their side effects.
 
 Invalid project metadata raises `ProjectError`. Configuration failures remain
 filesystem errors or `ValueError` for Python callers. The CLI reports these

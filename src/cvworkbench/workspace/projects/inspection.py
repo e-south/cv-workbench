@@ -84,12 +84,13 @@ def _read_project_inspection(
 def inspect_project(project: str | Path, *, config: ConfigSource) -> dict[str, Any]:
     """Inspect project state, saved guidance, run review inputs, and next commands."""
     configuration = read_config(config)
-    project_dir = resolve_project_dir(str(project), configuration)
+    project_dir = resolve_project_dir(project, configuration)
     state = _read_project_inspection(project_dir, config_path=configuration)
     details = state.details
     review = project_review_payload(details.spec.project_id, configuration)
     commands = project_commands(
         details.spec.project_id,
+        project_dir=details.spec.project_dir,
         config_path=configuration,
         variant_id=details.proposal_variant_id,
         review_run_id=review["run_id"] if review["review_ready"] else None,

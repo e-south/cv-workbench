@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from cvworkbench.cli.output import print_summary
-from cvworkbench.workspace.commands import shell_command
 from cvworkbench.workspace.projects import (
     project_commands,
 )
@@ -54,20 +53,15 @@ def _proposal_plan_summary_rows(
     return rows
 
 
-def _print_project_new_summary(
-    *,
-    project_dir: Path,
-    variant_id: str,
-    job_source: str,
-) -> None:
+def _print_project_new_summary(summary: dict[str, Any]) -> None:
     print_summary(
         "project.new",
         [
-            ("project_dir", project_dir),
-            ("proposal_variant", variant_id),
-            ("job_source", job_source),
-            ("next_step", shell_command(f"project show {project_dir.name}")),
-            ("preview_step", shell_command(f"preview --project {project_dir.name}")),
+            ("project_dir", summary["project"]["project_dir"]),
+            ("proposal_variant", summary["proposal"]["variant_id"]),
+            ("job_source", summary["project"]["job_source"]),
+            ("next_step", summary["commands"]["show"]),
+            ("preview_step", summary["commands"]["preview"]),
         ],
     )
 
@@ -92,6 +86,7 @@ def _project_summary_payload(
         },
         "commands": project_commands(
             project_id,
+            project_dir=project_dir,
             config_path=config_path,
             variant_id=proposal_variant_id or base_variant,
         ),
@@ -121,14 +116,8 @@ def _print_project_guide_summary(summary: dict[str, Any]) -> None:
         ("job_evidence", evidence_summary or "none"),
         ("sot_tags_top", summary["sot"]["tags_summary"]),
         ("recommendations", recommendations_summary_line(summary["recommendations"])),
-        (
-            "next_step",
-            shell_command(f"project show {summary['project']['project_id']}"),
-        ),
-        (
-            "preview_step",
-            shell_command(f"preview --project {summary['project']['project_id']}"),
-        ),
+        ("next_step", summary["commands"]["show"]),
+        ("preview_step", summary["commands"]["preview"]),
     ]
     print_summary("project.guide", rows)
 
