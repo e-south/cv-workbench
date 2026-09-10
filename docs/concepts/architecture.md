@@ -80,6 +80,15 @@ copied themes or configuration takes effect without reinstalling. The
 [distribution test](../reference/verify-contract.md#installed-distribution)
 checks this boundary with checkout imports excluded.
 
+## Preview presentation boundary
+
+`dev/preview.py` owns the local controller and server; `dev/preview_http.py`
+owns request validation. The page markup, styles, and browser interactions live
+under `dev/assets/preview/`. `dev/presentation.py` assembles those package assets
+into one HTML response. It contains no workflow or source-selection decisions
+and adds no browser asset requests. UI layout and interaction changes belong in
+these assets; build and publication decisions remain in their Python owners.
+
 The personal site is a downstream presenter, not another CV compiler. Editable
 review artifacts remain local to the workbench; the public site exposes one PDF
 view/download surface.

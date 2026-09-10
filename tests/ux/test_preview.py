@@ -18,13 +18,13 @@ from pathlib import Path
 from urllib import request as url_request
 
 from cvworkbench.config import resolve_config_path, resolve_themes_dir
+from cvworkbench.dev.presentation import preview_page_html
 from cvworkbench.dev.preview import (
     ClientActivity,
     PreviewController,
     PreviewIdleWatchdog,
     _load_project_context,
     _make_handler,
-    _preview_page_html,
 )
 
 
@@ -378,7 +378,7 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
 
 
 def test_preview_page_html_contains_controls() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
     assert 'id="sidebar"' in html
     assert 'id="hero"' in html
@@ -394,14 +394,14 @@ def test_preview_page_html_contains_controls() -> None:
 
 
 def test_preview_page_sidebar_left() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
     assert "left: 0" in html
     assert "width:" in html
 
 
 def test_preview_page_html_includes_responsive_layout_breakpoints() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
     assert "@media (max-width: 1024px)" in html
     assert "@media (max-width: 640px)" in html
@@ -409,7 +409,7 @@ def test_preview_page_html_includes_responsive_layout_breakpoints() -> None:
 
 
 def test_preview_keyboard_shortcuts_ignore_interactive_controls() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
     assert "['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A']" in html
     assert 'button,select,input,textarea,a,[role="button"],[role="tab"]' in html

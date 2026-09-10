@@ -147,12 +147,20 @@ because the current fidelity contract preserves all approved graphics. Resolve
 that ornament in the authored style or through an explicit, narrowly scoped
 decoration-redaction contract; do not hide it with a website-layer patch.
 
-### Medium — transport, workflow decisions, and presentation share large files — open
+### Medium — transport, workflow decisions, and presentation share large files — partly fixed
 
 At audit baseline, [cli/app.py](../../src/cvworkbench/cli/app.py) contained about
 7,200 lines, 51 registered command functions, and a 563-line recipe builder.
 [dev/preview.py](../../src/cvworkbench/dev/preview.py) embedded a 1,281-line
 HTML/CSS/JavaScript page alongside its controller and HTTP server.
+
+Implemented follow-up: the preview page now has separate markup, stylesheet,
+and interaction assets under `dev/assets/preview/`, assembled by the small
+`dev/presentation.py` module. `preview.py` is 866 lines. The assembled response
+matches the previous page except outer whitespace normalized by repository
+hooks, and still uses one request for markup/styles/script. Focused tests cover
+the UI contracts, real HTTP boundary, controller behavior, and installed-wheel
+asset availability. CLI/context decomposition below remains open.
 
 Proposed extraction order:
 
@@ -160,8 +168,8 @@ Proposed extraction order:
    typed results; leave CLI parsing and output adapters thin.
 2. Register publication, review, tailoring, and build commands from their own
    CLI modules without changing command syntax.
-3. Extract preview HTML, CSS, and JavaScript into package assets. Keep request
-   validation, server transport, and build control independently testable.
+3. Preview asset extraction is complete. Continue separating server transport
+   and build control where new behavior would otherwise cross their boundaries.
 4. Group publication policy, source correspondence, PDF preparation, visual
    review, and site handoff under a publication owner as those modules change.
 
@@ -212,6 +220,16 @@ prepared PDF retains all three approved profile links. Pre-commit hooks were
 installed in this checkout; verification used cached tools with Git HTTPS fetches
 disabled.
 
+Distribution/presentation follow-up: 350 tests passed with the same skip and
+upstream warnings; the seven-step CLI journey and repeated ergonomics harness
+passed. Ruff and all pre-commit checks, including secret scanning, passed.
+Browser review confirmed
+the sample document loaded, Rebuild advanced the build ID, and there was no
+horizontal overflow, warning, error, or additional presentation-asset request.
+Evidence is under `var/runs/preview/2026-09-10-resource-audit/`, with test and
+journey logs at `/tmp/cvw-architecture-final-*`. The canonical DOCX hash and the
+personal site's clean Git state were rechecked unchanged.
+
 Useful verification commands:
 
 ```bash
@@ -235,9 +253,10 @@ review item. No exploit against an external destination was attempted.
 
 ## Recommended next increment
 
-Make the engine portable first, then make authored publication discoverable and
-freshness-aware. Follow with semantic document styles and the preview/CLI
-extractions, each behind its own behavior tests. Reconcile lifecycle records and
+Portability and preview presentation extraction are complete. Next make authored
+publication discoverable and freshness-aware, then extract context/workflow
+decisions from the CLI. Follow with semantic document styles and further
+owner-bounded decomposition, each behind its own behavior tests. Reconcile lifecycle records and
 protect referenced artifacts before pruning the workspace. Keep the personal
 site on hold until the chosen workbench changes and the exact public PDF are
 reviewed.

@@ -72,6 +72,19 @@ def test_installed_wheel_initializes_and_renders_outside_checkout(tmp_path: Path
         [str(python), "-I", "-c", bootstrap + "import cvworkbench; print(cvworkbench.__file__)"],
     ).strip()
     assert Path(imported).is_relative_to(runtime)
+    shell = run(
+        "preview-shell",
+        [
+            str(python),
+            "-I",
+            "-c",
+            bootstrap
+            + "from cvworkbench.dev.presentation import preview_page_html; print(preview_page_html())",
+        ],
+    )
+    assert 'data-cvw-action="rebuild"' in shell
+    assert "{{CVW_PREVIEW_" not in shell
+    assert "<style>" in shell and "<script>" in shell
     for resource in ("filters", "workspace"):
         path = run(
             resource,

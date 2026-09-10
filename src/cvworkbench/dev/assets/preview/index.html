@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>cv-workbench preview</title>
+    <link rel="icon" href="data:," />
+    <style>
+{{CVW_PREVIEW_STYLE}}    </style>
+  </head>
+  <body tabindex="0" data-cvw-build-id="" data-cvw-session-id="" data-cvw-controller-state="active">
+    <div id="layout">
+      <aside id="sidebar">
+        <div id="hero">
+          <div>
+            <div id="eyebrow">local preview control plane</div>
+            <div id="brand">cv-workbench</div>
+          </div>
+          <div id="status-pills">
+            <span
+              id="controller-pill"
+              class="status-pill"
+              data-cvw-status="controller-pill"
+              data-cvw-state="active"
+            >active controller</span>
+            <span id="build-pill" class="status-pill" data-cvw-status="build-pill">build pending</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Workspace</div>
+          <label>
+            <span>Project</span>
+            <select id="project-select" data-cvw-control="project"></select>
+          </label>
+          <label>
+            <span>Variant</span>
+            <select id="variant-select" data-cvw-control="variant"></select>
+          </label>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Styling</div>
+          <label>
+            <span>Theme</span>
+            <select id="theme-select" data-cvw-control="theme"></select>
+          </label>
+          <label>
+            <span>Preset</span>
+            <select id="preset-select" data-cvw-control="preset"></select>
+          </label>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Format</div>
+          <div id="format-tabs" data-cvw-control="format-tabs">
+            <button data-format="html" data-cvw-format="html" type="button">HTML</button>
+            <button data-format="pdf" data-cvw-format="pdf" type="button">PDF</button>
+            <button data-format="md" data-cvw-format="md" type="button">MD</button>
+            <button data-format="ats" data-cvw-format="ats" type="button">ATS</button>
+          </div>
+          <label class="toggle">
+            <span>Auto PDF</span>
+            <input id="auto-pdf-toggle" data-cvw-control="auto-pdf" type="checkbox" />
+          </label>
+        </div>
+
+        <div class="section">
+          <button id="rebuild" data-cvw-action="rebuild" type="button">Rebuild</button>
+          <button id="stop-preview" data-cvw-action="stop" type="button">Stop</button>
+          <div id="status" data-cvw-status="status" aria-live="polite">Listening for changes...</div>
+          <div id="error" data-cvw-status="error" aria-live="polite"></div>
+          <div id="summary" data-cvw-status="summary" aria-live="polite"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Project Guidance</div>
+          <div id="project-guidance" data-cvw-status="project-guidance" aria-live="polite"></div>
+          <div id="project-warning" data-cvw-status="project-warning" aria-live="polite"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Runs</div>
+          <div id="run-list" data-cvw-status="run-list" aria-live="polite"></div>
+        </div>
+
+        <div id="shortcuts">
+          Keys:
+          <kbd>t</kbd> theme
+          <kbd>p</kbd> preset
+          <kbd>v</kbd> variant
+          <kbd>f</kbd> format
+          <kbd>r</kbd> rebuild
+          <kbd>x</kbd> stop
+        </div>
+      </aside>
+
+      <main id="preview-area">
+        <iframe id="preview" data-cvw-view="preview-frame" src="about:blank"></iframe>
+      </main>
+    </div>
+    <script>
+{{CVW_PREVIEW_SCRIPT}}    </script>
+  </body>
+</html>
