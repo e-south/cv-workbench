@@ -41,7 +41,7 @@ publish**. More modules, tests, or audit findings are not completion criteria.
 | Apply an edit to the selected source version | Draft and project application share one selection owner, preserve explicit version pins, and report the concrete edited directory | Directory selection is not a global source snapshot; expected-text/byte guards retain their documented concurrency limits |
 | Preserve work when a save fails | Proposal locking, expected-text/byte guards, staged rendering, and recoverable grouped writes | No crash-durability or universal concurrent-writer guarantee |
 | Publish a faithful, private-data-checked CV | Captured preparation inputs, consistent action settings, disclosure checks, source freshness, immutable artifact hashes, and exact-PDF review | Current public candidate requires human review; site update remains on hold |
-| Keep the workspace understandable | Separate sources, proposals, runs, previews, reviews, and publication artifacts with concrete owners and routed contracts | Preview and standalone-draft retention need a tested plan before any live cleanup |
+| Keep the workspace understandable | Separate sources, proposals, runs, previews, reviews, and publication artifacts; read-only retention inventory and reproduced dependency-loss cases | Implement import-draft run retention; reconcile legacy review evidence before live cleanup; automatic preview pruning deferred |
 
 ## Document review evidence and limits
 
@@ -121,9 +121,11 @@ advisory evidence.
 
 ## Bounded remaining effort
 
-1. **Define maintenance without deleting work.** Produce a tested, reviewable
-   retention plan for preview outputs and standalone drafts that preserves
-   referenced runs and reviews. No live pruning in this phase.
+1. **Protect retained editing work.** The [retention plan](../plans/2026-09-10-artifact-retention.md)
+   now records the live inventory and demonstrates that run cleanup can strand
+   standalone import drafts. Implement that dependency guard and inspect the
+   resulting plan. Legacy preview/review evidence needs explicit decisions;
+   no live pruning is part of this phase.
 2. **Reach the review decision.** Present the selected authored/public artifact
    and identify verified, pending-review, and deferred items. Keep the supported
    PDF-structure investigation explicit rather than treating headings as proof.

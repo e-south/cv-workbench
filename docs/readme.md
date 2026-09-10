@@ -130,6 +130,7 @@ Top-level repo entry points:
 Use these when you need historical design context or open planning records:
 
 - [2026-09-10 product readiness checkpoint](dev/2026-09-10-product-readiness-checkpoint.md): user value, verified journeys, remaining product gaps, and completion criteria
+- [2026-09-10 artifact retention plan](plans/2026-09-10-artifact-retention.md): observed workspace inventory, import-dependency loss, and bounded cleanup criteria
 - [2026-09-09 information architecture audit](dev/2026-09-09-information-architecture-audit.md): findings, implemented hardening, and proposed next work
 
 - [plans/dev-plan.md](plans/dev-plan.md)
