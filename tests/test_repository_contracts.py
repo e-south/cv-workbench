@@ -101,3 +101,19 @@ def test_scoped_agent_routes_keep_private_and_documentation_rules_local() -> Non
     assert "progressive disclosure" in docs_rules
     assert "publication boundary" in ops_rules
     assert "fail closed" in ops_rules
+
+
+def test_docs_router_links_to_canonical_configuration_and_sample_sources() -> None:
+    router = ROOT / "docs/readme.md"
+    text = router.read_text()
+    links = dict(re.findall(r"\[([^\]]+)\]\(([^)]+)\)", text))
+    for path in (
+        "config/workbench.yaml",
+        "config/publish.yaml",
+        "config/site-sync.yaml",
+        "config/variants/base.yaml",
+        "build/themes/default/theme.yaml",
+        "sot.sample/",
+    ):
+        assert (router.parent / links[path]).resolve() == (ROOT / path).resolve()
+    assert "local/sot/" not in links

@@ -108,12 +108,12 @@ Contributors and maintainers:
 ## Config And Example Surfaces
 
 Configuration and sample assets:
-- [config/workbench.yaml](config/workbench.yaml)
-- [config/publish.yaml](config/publish.yaml)
-- [config/site-sync.yaml](config/site-sync.yaml)
-- [config/variants/base.yaml](config/variants/base.yaml)
-- [local/sot/](local/sot/)
-- [build/themes/default/theme.yaml](build/themes/default/theme.yaml)
+- [config/workbench.yaml](../config/workbench.yaml)
+- [config/publish.yaml](../config/publish.yaml)
+- [config/site-sync.yaml](../config/site-sync.yaml)
+- [config/variants/base.yaml](../config/variants/base.yaml)
+- [sot.sample/](../sot.sample/): tracked examples; private inputs stay local
+- [build/themes/default/theme.yaml](../build/themes/default/theme.yaml)
 
 Top-level repo entry points:
 - [../README.md](../README.md)
@@ -122,6 +122,8 @@ Top-level repo entry points:
 ## Planning And Design Notes
 
 Use these when you need historical design context or open planning records:
+
+- [2026-09-09 information architecture audit](dev/2026-09-09-information-architecture-audit.md): findings, implemented hardening, and proposed next work
 
 - [plans/dev-plan.md](plans/dev-plan.md)
 - [plans/2026-01-29-cv-workbench-design.md](plans/2026-01-29-cv-workbench-design.md)

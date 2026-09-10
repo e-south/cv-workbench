@@ -9,7 +9,7 @@ navigation:
 
 # Architecture
 
-This workbench separates three planes:
+This workbench separates four planes:
 
 1) Source authorities
 - Structured YAML input outside this repo
@@ -37,6 +37,8 @@ This workbench separates three planes:
 - Verify PDF type, variant metadata, and artifact hash again before writes
 - Store reviewed publication artifacts under `var/publish`, never the generic
   `var/dist` build workspace
+- Render sanitized review evidence under `var/reviews/publication/<pdf-sha256>`;
+  page previews are a review surface, not another editable source
 - Copy only the public PDF plus a sanitized provenance manifest
 - Keep site presentation separate from CV selection and rendering
 
@@ -45,6 +47,10 @@ This workbench separates three planes:
 - Never mutates SoT without explicit apply step
 
 Outputs are always treated as build artifacts and are never committed.
+
+Configuration lives in the root `config/` tree, sample inputs in `sot.sample/`,
+and theme assets in `build/themes/`. Documentation links to these owners rather
+than maintaining executable copies beneath `docs/`.
 
 The personal site is a downstream presenter, not another CV compiler. Editable
 review artifacts remain local to the workbench; the public site exposes one PDF
