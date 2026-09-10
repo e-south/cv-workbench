@@ -2,6 +2,9 @@
 
 - Start with [the lifecycle contract](../../../../docs/reference/publication-contract.md).
 - `pdf.py` owns sanitization and layout correspondence; `policy.py` owns disclosure policy loading; `manifest.py` owns authored provenance schemas/serialization; `artifact.py` owns manifest eligibility and immutable artifact reads.
+- `object_text.py` decodes PDF object strings for the shared disclosure checks;
+  see [non-page disclosure](../../../../docs/reference/publication-contract.md#non-page-disclosure).
+  Keep object decoding separate from policy decisions and page redaction.
 - `record.py` owns private snapshot schemas; `state.py` owns freshness and review declarations; `packet.py` renders the local visual evidence.
 - CLI adapters live in `cli/commands/publication.py`; workflow descriptions live in `workspace/publication.py`. Neither may weaken the operations checks.
 - Keep private preparation and review records out of sanitized site manifests. Validate freshness and review before site writes in `ops/syncing.py`.

@@ -30,6 +30,7 @@ import yaml
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_reviews_path, resolve_variant_path
 from cvworkbench.ops.publication.manifest import publication_manifest_content
+from cvworkbench.ops.publication.object_text import PdfObjectTextError, pdf_object_text
 from cvworkbench.ops.publication.packet import PublicationReviewError, publication_review_files
 from cvworkbench.ops.publication.policy import PublishConfig, load_publish_config
 from cvworkbench.ops.publication.record import preparation_bytes
@@ -264,6 +265,10 @@ def _validate_public_document(
         _validate_source_visual_contract(document, publish)
         _validate_pdf_links(document, person=person, variant=variant)
         text = "\n".join(page.get_text() for page in document)
+        try:
+            text += "\n" + pdf_object_text(document)
+        except PdfObjectTextError as exc:
+            raise PublicPdfError(str(exc)) from exc
     finally:
         document.close()
 
@@ -432,6 +437,19 @@ def _validate_pdf_links(
     variant: Variant,
 ) -> None:
     allowed_urls = _allowed_public_links(person, variant)
+    for bookmark in document.get_toc(simple=False):
+        destination = bookmark[3]
+        xref = destination.get("xref")
+        if not isinstance(xref, int) or xref <= 0:
+            raise PublicPdfError("Public PDF bookmark action could not be inspected")
+        action_present = document.xref_get_key(xref, "A")[0] != "null"
+        if (
+            destination.get("kind") not in {pymupdf.LINK_NONE, pymupdf.LINK_GOTO}
+            or (action_present and document.xref_get_key(xref, "A/S")[1] != "/GoTo")
+            or document.xref_get_key(xref, "A/Next")[0] != "null"
+            or document.xref_get_key(xref, "AA")[0] != "null"
+        ):
+            raise PublicPdfError("Public PDF contains an unsafe or external bookmark action")
     for page_index, page in enumerate(document):
         word_rectangles = [pymupdf.Rect(*word[:4]) for word in page.get_text("words")]
         for link in page.get_links():

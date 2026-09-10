@@ -82,15 +82,33 @@ destinations from automatic application. The CLI harness now requires a no-op
 with zero operations when importing its unchanged review document; existence of
 an import draft no longer counts as proof of a successful editing round trip.
 
-Remaining document work concerns semantic authored-document styles and tagged
-PDF output. The authored DOCX still has 90 default/direct paragraphs and 31 list
-paragraphs; the authored public PDF has no bookmarks or structure tree. The
-generated DOCX has heading styles, but its PDF also lacks a structure tree.
+An isolated authored review copy now has a title style and nine section-heading
+styles with outline levels. Applying styles initially changed pagination because
+the source relied on Word's contextual spacing between Normal paragraphs.
+Making only the previously suppressed spacing explicit preserved the layout:
+all three pages have identical 96-DPI pixels, extracted text, and link positions
+relative to a fresh original export. The strict glyph/graphics comparison passed.
+The source and public candidate remain unchanged; this is a review copy, not a
+promoted source version.
+
+The tested local Word export still produces no PDF bookmarks or structure tree,
+even from the styled copy. The generated PDF also lacks a structure tree.
+PDF accessibility therefore remains separate acceptance work; source headings
+alone do not establish it.
+
+The structure audit also exposed private text surviving in PDF bookmarks and
+accessibility fields. The publication boundary now applies disclosure policy to
+decoded object strings and rejects unsafe bookmark actions, including hidden or
+chained actions omitted by the destination summary. Public navigation and
+accessibility strings that satisfy policy remain intact. The live
+[non-page disclosure contract](../reference/publication-contract.md#non-page-disclosure)
+defines the scope; this does not constitute a general PDF malware assessment.
+
 The preview-control follow-up now keeps the document visible before scrolling.
 At 961 × 800, its top moved from 1,067 to 421 pixels; at 500 × 800, from 1,202 to
 413 pixels. Native **Document settings** and **Build details** sections disclose
-secondary information, while project, variant, format, actions, errors, and warnings stay
-visible. The live [preview contract](../reference/preview-contract.md#preview-controls)
+secondary information, while project, variant, actions, errors, and warnings
+stay visible. The live [preview contract](../reference/preview-contract.md#preview-controls)
 owns this interaction and the presentation-file boundaries.
 
 Browser checks at 320, 375, 500, 961, and 1,440 pixels found no horizontal overflow
@@ -117,8 +135,9 @@ while the remaining acceptance work below stays explicit.
 
 1. **Document quality and workflow clarity.** The generated-document walk and
    edited-DOCX round trip now have direct evidence. Finish the bounded remaining
-   work on authored-document heading semantics and PDF structure. Retain an
-   inspectable output and specific acceptance checks;
+   work on reviewing the authored heading copy and producing verified PDF
+   structure through a supported local path. Retain inspectable output and
+   specific acceptance checks;
    automated fidelity checks alone cannot approve appearance.
 2. **Authority at consequential actions.** Trace the selected source version
    and configuration through apply and publication commands. Change code only

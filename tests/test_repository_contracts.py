@@ -244,6 +244,18 @@ def test_contact_presentation_routes_one_owner_and_export_contract() -> None:
     assert "styling.md#contact-presentation" in architecture
 
 
+def test_non_page_pdf_disclosure_has_one_decoder_and_routed_contract() -> None:
+    contract = (ROOT / "docs/reference/publication-contract.md").read_text()
+    rules = (ROOT / "src/cvworkbench/ops/publication/AGENTS.md").read_text()
+    security = (ROOT / "docs/reference/security.md").read_text()
+    assert "## Non-page disclosure" in contract
+    assert "object_text.py::pdf_object_text" in contract
+    assert "tests/ops/publication/test_object_text.py" in contract
+    assert "Opaque stream bytes" in contract
+    assert "publication-contract.md#non-page-disclosure" in rules
+    assert "publication-contract.md#non-page-disclosure" in security
+
+
 def test_entry_layout_and_review_normalization_have_routed_owners() -> None:
     styling = (ROOT / "docs/howto/styling.md").read_text()
     review = (ROOT / "docs/reference/review-contract.md").read_text()

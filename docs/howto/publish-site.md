@@ -31,6 +31,13 @@ Export locally from Word for Mac using **PDF → Best for printing**. The electr
 distribution option uses an online service. Export the whole document, then
 check every page before approving a changed visual fingerprint.
 
+Use named paragraph styles and outline levels for section headings in the
+editable document. Compare the export after applying styles: Word's contextual
+spacing can change when adjacent paragraphs no longer share a style, even if
+font settings are unchanged. Preserve the intended spacing explicitly at those
+boundaries. Do not infer PDF bookmarks, reading order, or accessibility tags from
+the DOCX styles; inspect the exported PDF itself.
+
 The preparation command verifies token-frequency coverage from DOCX to PDF and
 from PDF to DOCX, removes fields and sections prohibited by
 `config/publish.yaml`, strips hidden or embedded payloads, rejects hidden or
@@ -38,6 +45,10 @@ non-HTTPS links, rejects raster or complex vector content that cannot be
 verified against the text policy, and validates the result before replacing
 `var/publish/<variant>/cv.pdf`. The manifest records content hashes and the
 transformation without publishing local paths.
+
+Disclosure checks also inspect bookmark titles and accessibility strings. Private
+values in those fields stop preparation rather than being silently rewritten;
+see [non-page disclosure](../reference/publication-contract.md#non-page-disclosure).
 
 `config/publish.yaml` also pins `approved_visual_fingerprint_sha256`. When an
 authored export changes its non-text rectangle layout, preparation reports the

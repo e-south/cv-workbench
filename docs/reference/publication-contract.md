@@ -68,11 +68,42 @@ with explicit source paths, reviewed, and then synced. There is no inferred
 migration or automatic approval. See [the authored CV guide](../howto/publish-site.md)
 for the operator journey and [the site contract](site-contract.md) for writes.
 
+## Non-page disclosure
+
+The same phone, email, and forbidden-section checks apply to page text and
+decoded PDF object strings. Bookmark titles, accessibility descriptions, text
+alternatives, and nested or indirect string values can retain private content
+after visible glyphs have been removed. Preparation and captured-byte sync
+validation both inspect these values before publishing an artifact.
+
+`ops/publication/object_text.py::pdf_object_text` uses MuPDF to parse dictionaries
+and arrays and decode PDF string encodings. It visits cross-reference objects
+without following indirect edges, avoiding cycles through page parents and
+structure trees. Unreadable object text fails closed. Opaque stream bytes are
+outside this string inspection; attachment, visual-payload, and link checks
+retain their separate responsibilities. This is not a general malware scanner.
+
+Public bookmarks and accessibility descriptions remain intact when they satisfy
+the disclosure policy. Bookmarks may navigate within the document or group other
+bookmarks; external, unsupported, or chained bookmark actions are rejected. Both
+the resolved destination and underlying action dictionary are checked, because
+the summary can omit JavaScript or a subsequent action. Page links still require the
+approved visible-label and exact-target checks.
+
+Preparation does not guess how to rewrite accessibility text after redaction.
+If private object strings remain, it stops before replacing publication files.
+Correct the authored public content and export again, then repeat preparation
+and review. The existing prepared artifact is preserved on rejection. These
+checks neither add structure tags nor establish accessibility conformance.
+See `tests/ops/publication/test_object_text.py` for retained public structure,
+hidden-contact rejection, encoding/indirection cases, and output preservation.
+
 ## Code ownership
 
 `ops/publication/` owns the lifecycle: `record.py` defines the private schemas,
 `state.py` inspects freshness and records review, `pdf.py` performs sanitization,
-`packet.py` renders review evidence, `policy.py` loads disclosure policy, and
+`object_text.py` decodes non-page strings, `packet.py` renders review evidence,
+`policy.py` loads disclosure policy, and
 `manifest.py` defines and serializes authored provenance, and `artifact.py`
 validates manifest eligibility. Python consumers use these modules;
 the former flat `ops/public_pdf.py`, `ops/publish.py`, and

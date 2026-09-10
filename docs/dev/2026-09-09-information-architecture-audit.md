@@ -1795,6 +1795,73 @@ The original source facts, authored CV, prepared public PDF, and website remain
 unchanged. No publication approval, site sync, remote push, or advisory refresh
 belongs to this slice.
 
+### High — private PDF object text survived preparation — fixed with shared disclosure inspection
+
+Synthetic PDFs containing a forbidden phone number only in a bookmark title or
+structure-element alternative text passed preparation and artifact validation.
+The number remained in the prepared PDF objects while page text contained none.
+Page-text checks and the existing scrub operation did not cover these strings.
+
+`ops/publication/object_text.py` now owns decoding PDF object strings through
+MuPDF's parser. Nested arrays/dictionaries, indirect values, and PDF text
+encodings feed the existing phone, email, and forbidden-section checks. Path and
+captured-byte validation share the same boundary. Preparation stops before
+replacing publication files when those strings retain private values; it does
+not guess how to rewrite reading-order content. Public bookmark and alternative
+text preservation has a positive control. Raw stream bytes are outside this
+inspection, and this is not a general malware or steganography assessment.
+
+The navigation check also found accepted external bookmark destinations. Further
+negative controls showed that a destination summary could omit inline JavaScript
+or a chained action. Validation now checks the underlying bookmark action as
+well: grouping nodes or a single internal GoTo are allowed; unsupported,
+external, chained, and additional actions fail closed. This change concerns
+bookmarks; existing visible page-link target and hitbox rules remain separate.
+
+The initial object-text run failed 16 cases with one public-structure case already
+passing. Two external-destination cases and four hidden/chained-action cases
+also failed before their fixes. The final focused publication, sync, CLI, and
+documentation run passed 134 tests. Evidence is in
+`/tmp/cvw-pdf-semantic-leak-probe.json` and
+`/tmp/cvw-document-semantics-{red,green,actions-red,actions-green,action-details-red,final-targeted}.log`.
+The live [publication contract](../reference/publication-contract.md#non-page-disclosure)
+owns the limits and recovery guidance.
+
+Final verification passed 1,102 tests with one existing opt-in integration skip
+and five upstream warnings. The seven-step isolated CLI journey passed with
+empty stderr; lint, formatting, repository-contract checks, and pre-commit hooks
+passed. Evidence: `/tmp/cvw-document-semantics-complete-suite.log`,
+`/tmp/cvw-document-semantics-journey.json`, and
+`/tmp/cvw-document-semantics-hooks.log`. Current publication status remains
+`review_required`; no remote checks or site writes were performed.
+
+### Medium — authored headings lacked semantic styles — review copy verified, promotion pending
+
+The configured authored document had 90 default/direct paragraphs, 31 list
+paragraphs, no outline levels, and no tracked changes or comments. An isolated
+copy now gives the title and nine exact section headings named Word styles.
+The first styled export moved teaching rows between pages. A second style-name
+experiment reproduced the drift; the cause was contextual spacing, whose effect
+depends on adjacent paragraphs sharing a style. The accepted copy makes the
+previously suppressed spacing explicit only at changed same-style boundaries,
+while retaining spacing at transitions into list paragraphs.
+
+All three final pages match a fresh original Word export pixel-for-pixel at
+96 DPI, with identical text and link positions. The strict glyph and graphics
+comparison passed. DOCX wording and unrelated ZIP members are unchanged, and
+the declared style/spacing changes can be reversed to recover the original
+document XML. The private review folder contains the DOCX, PDF, change log, and
+fidelity report; `/tmp/cvw-document-semantics-workspace.json` identifies it.
+
+The tested local Word export produces three pages and three links, but no
+bookmarks or structure tree, from both original and styled inputs. Heading styles
+therefore do not prove PDF accessibility. A supported local export path with
+verified structure remains follow-up work. The canonical source, prepared public
+PDF, and website are unchanged; no publication review or source promotion was
+declared. Word exports were restricted to exact temporary document copies. A
+file-access prompt on an existing temporary PDF was canceled; fresh output names
+allowed local export without changing application permissions.
+
 ## Verification and limits
 
 Baseline: 326 tests passed, one opt-in remote PR integration test skipped. The

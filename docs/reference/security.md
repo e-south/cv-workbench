@@ -25,6 +25,10 @@ navigation:
   and validates that every removed glyph falls inside a policy-derived region
   while every surviving glyph and approved vector graphic retains its visual
   geometry.
+- Phone, email, and forbidden-section checks also cover decoded PDF object
+  strings, including bookmark titles and accessibility descriptions. External
+  bookmark actions are rejected. See [non-page disclosure](publication-contract.md#non-page-disclosure)
+  for inspection scope and preservation behavior.
 - Site sync reparses the PDF and validates current variant policy and artifact
   hash before writing. The site receives a sanitized provenance manifest, not
   source paths, authored-source hashes, or private SoT hashes.
