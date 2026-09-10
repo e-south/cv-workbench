@@ -39,7 +39,7 @@ path. More modules, tests, or audit findings are not completion criteria.
 | Generate and inspect a useful document | Concise contact links, readable paragraphs, stable pagination; preview controls keep the document visible at inspected narrow widths | Review real wording and appearance; no full accessibility conformance claim |
 | Explain and revise a cover letter | [Selection evidence](../reference/selection-contract.md) describes the chosen letter's paragraphs and tag decisions; manual revision/rebuild retains prior run evidence | DOCX letter imports remain review-only comparisons; accepted wording is edited manually in source |
 | Return supported Word edits to the right source | Guarded bullet patches, unchanged-import no-ops, shared [source selection](../reference/patch-application.md#source-selection), explicit version pins | Broader editing coverage remains limited to supported operations; no bidirectional authored-CV conversion |
-| Create and compare a source experiment | [Pack initialization](../howto/sot-versions.md#initialization-contract) creates a separate validated copy; comparison includes snippets and machine-readable JSON; CLI journey builds revised content | Fresh destination and regular files required; configuration selection remains deliberate; existing clone/activation failure recovery still needs a targeted audit |
+| Create and compare a source experiment | [Pack initialization](../howto/sot-versions.md#initialization-contract) creates a separate validated copy; comparison includes snippets and machine-readable JSON; [lifecycle recovery](../howto/sot-versions.md#lifecycle-contract) preserves baselines and selection after failed writes | Fresh destination and regular files required; configuration selection remains deliberate; source-schema validation and concurrent-writer limits remain explicit |
 | Keep edits and their baselines recoverable | Expected-content guards and shared recoverable writes; [draft dependencies](../reference/artifact-retention.md#import-draft-dependencies) preserve exact source runs | No universal concurrent-writer or crash-durability guarantee; preserve ambiguous legacy imports |
 | Publish exactly the reviewed public CV | [Captured inputs](../reference/publication-contract.md#input-lifetime), disclosure checks, source freshness, artifact hashes, and exact-PDF review | Current candidate requires human review; site update remains on hold |
 
@@ -51,25 +51,30 @@ to the original source/configuration. A real CLI journey created the pack,
 cloned a version, revised a paragraph, compared and activated it, then built and
 explained the revised letter. The source and initial version remained unchanged.
 
-The existing `ops.sot_versions` API now routes to separate initialization,
-lifecycle, comparison, and result owners. Source selection, schema validation,
-and recoverable writes retain their existing owners. This makes each policy
-easier to change without duplicating it in the CLI or introducing a second
-storage implementation. Forty-three checks passed before and after extraction.
+The existing `ops.sot_versions` API routes to separate initialization, lifecycle,
+comparison, copying, and result owners. Input-owned name constraints, selection
+records, and directory containment are shared by readers and operations. Schema
+validation and recoverable writes retain their existing owners. This keeps
+policy changes out of CLI adapters and avoids parallel storage implementations.
 
-Initialization has 27 checks covering real CLI/API use, selection, source and
-configuration preservation, invalid inputs, destination conflicts, observed
-source edits, and final-write failure/cancellation recovery. Missing required
-files now stop processing before unrelated directory contents are read. Shared
-name checks reject whitespace/control values that cannot round-trip reliably
-through the active-version record. These checks establish creation behavior;
-the existing `sot new` and `sot activate` copy/write paths still need a targeted
-recovery audit. That is a bounded follow-up, not a claim of full lifecycle hardening.
+The lifecycle audit reproduced invalid activation targets, linked selection
+reads/writes crossing the pack boundary, partial selections after write failure,
+and partial clones after copy failure. Shared input checks and recoverable writes
+now protect these boundaries. Twenty-three lifecycle cases cover malformed
+records, unsafe sources, destination conflicts, permissions, observed concurrent
+edits, and injected I/O failure/cancellation. The shared source-capture extraction
+passed the same 51 checks before and after its move.
 
-The final code suite passed **1,217 tests**, with one existing opt-in integration
+A real CLI journey cloned an experiment, rejected an invalid activation while
+retaining the prior selection, compared the revised paragraph, then activated,
+built, and explained the letter. Source, base, and configuration stayed unchanged.
+This establishes the intended editing path and bounded recovery behavior; it
+does not establish source locking or crash durability.
+
+The final code suite passed **1,240 tests**, with one existing opt-in integration
 skip and five upstream warnings. The seven-step isolated CLI harness also passed.
-Evidence: `/tmp/cvw-pack-init-final-full.log`,
-`/tmp/cvw-pack-init-harness.json`, and `/tmp/cvw-pack-init-journey.json` (the latter
+Evidence: `/tmp/cvw-lifecycle-full.log`,
+`/tmp/cvw-lifecycle-harness.json`, and `/tmp/cvw-lifecycle-journey.json` (the latter
 locates the real journey workspace and logs). Earlier retained evidence includes
 `/tmp/cvw-cover-letter-journey.json`, `/tmp/cvw-draft-retention-import-journey.json`,
 and `/tmp/cvw-publication-authority-real-journey.json`. These are local session
@@ -78,7 +83,7 @@ artifacts; live contracts above remain the durable behavior authority.
 Before/after inventories confirm unchanged regular-file paths and bytes under
 `local/` and `var/`, along with unchanged canonical master and public PDF hashes.
 Context reports a ready source with no issues and publication still requiring
-review. `/tmp/cvw-pack-init-invariants.json` records those checks. The website
+review. `/tmp/cvw-lifecycle-invariants.json` records those checks. The website
 working tree remains clean; no source promotion, site sync, or push occurred.
 
 ## Current public artifact review

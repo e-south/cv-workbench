@@ -9,7 +9,11 @@ from typing import Iterable
 import yaml
 
 from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES
-from cvworkbench.inputs.sot_versions import resolve_versioned_root
+from cvworkbench.inputs.sot_versions import (
+    SotVersionError,
+    resolve_version_directory,
+    resolve_versioned_root,
+)
 from cvworkbench.ops.sot_versions.records import SotPackError, _validate_version_name
 
 
@@ -41,16 +45,10 @@ def diff_versions(root: Path, left: str, right: str) -> str:
 
 
 def _comparison_version(root: Path, name: str) -> Path:
-    path = root / "versions" / name
     try:
-        resolved = path.resolve()
-    except (OSError, RuntimeError) as exc:
-        raise SotPackError(f"Cannot resolve SoT version: {path}") from exc
-    if not resolved.is_relative_to(root / "versions"):
-        raise SotPackError("Compared SoT versions must remain within the pack's versions directory")
-    if not resolved.is_dir():
-        raise SotPackError(f"SoT version directory not found: {path}")
-    return resolved
+        return resolve_version_directory(root, name)
+    except SotVersionError as exc:
+        raise SotPackError(str(exc)) from exc
 
 
 def _version_file(version_dir: Path, relative: Path) -> Path:

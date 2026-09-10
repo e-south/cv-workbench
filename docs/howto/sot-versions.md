@@ -113,6 +113,41 @@ Original source timestamps are not copied, and no settings are retargeted.
 and pinned sources, source/configuration preservation, destination conflicts,
 source changes, private validation copies, and interrupted-write recovery.
 
+## Lifecycle contract
+
+The public `cvworkbench.ops.sot_versions` API exposes `list_versions(root)`,
+`create_version(root, name, base)`, and `activate_version(root, name)`. Lifecycle
+operations belong to `ops/sot_versions/lifecycle.py`. Input-owned
+`validate_version_name` owns name constraints for commands and selection records;
+`read_active_version` rejects linked, malformed, or unreadable selection records;
+`resolve_version_directory` confines named directories to the pack's `versions`
+directory and is shared by active selection, lifecycle, and comparison.
+
+Cloning requires an absent destination. It reuses `ops/sot_versions/copying.py`
+with initialization to capture regular file bytes, ordinary permissions, and
+empty directories. Linked/special source entries and observed changes during
+capture reject the clone before destination writes. Existing destination files,
+directories, and dangling links are preserved. Cloning keeps `ACTIVE` unchanged.
+It preserves an in-progress source without requiring full schema validation;
+source timestamps are not copied. Validate/build the selected source separately.
+
+Activation requires an existing version directory inside the pack and a regular
+`ACTIVE` file. It captures the prior selection bytes and uses expected-content
+checks before and after staging. An observed competing selection edit is
+preserved and reported as an error. Cloning and activation use the shared
+[file recovery contract](../reference/configuration-contract.md#build-bundle-recovery):
+injected copy/replacement failures and cancellation restore the prior selection
+or remove the partial new version. Recovery failures retain the writer's explicit
+diagnostic/backup behavior. Ordinary I/O failures become `SotPackError`; expected
+input errors remain `SotVersionError`. CLI adapters print errors on stderr and
+exit 1; cancellation is propagated after cleanup.
+
+These checks do not lock source directories or exclude all concurrent writers,
+provide simultaneous visibility of a copied tree, or establish crash durability.
+Wait for a successful command result before using its output.
+`tests/ops/sot_versions/test_lifecycle.py` covers API/CLI boundaries, partial-write
+recovery, permissions, empty directories, and observed concurrent changes.
+
 ## Comparison contract
 
 `ops/sot_versions/comparison.py::diff_versions` compares the two named versions without

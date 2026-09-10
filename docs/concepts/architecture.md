@@ -79,9 +79,12 @@ selection in the build layer and explanation/checklist presentation in consumers
 Source-version path resolution belongs to `inputs/sot_versions.py`. The public
 `ops.sot_versions` API routes to `initialization.py` for captured-copy creation,
 `lifecycle.py` for existing-pack management, `comparison.py` for read-only diffs,
-and `records.py` for results and shared name constraints. Internal imports use
-those concrete owners. The [version workflow](../howto/sot-versions.md) owns
-initialization and comparison contracts.
+`copying.py` for shared source capture, and `records.py` for results and operation
+errors. Internal imports use those concrete owners. Version-name constraints,
+active-record reads, and named-directory containment stay in
+`inputs/sot_versions.py`; all writes use shared storage recovery.
+The [version workflow](../howto/sot-versions.md) owns
+initialization, lifecycle, and comparison contracts.
 
 Preview uses `dev/preview_paths.py` to separate canonical input from served
 output and assign an independent directory to each invocation. Audited builds,

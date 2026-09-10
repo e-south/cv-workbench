@@ -1,9 +1,11 @@
-"""Source-version results, errors, and name constraints."""
+"""Source-version operation results and domain error translation."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
+from cvworkbench.inputs.sot_versions import SotVersionError, validate_version_name
 
 
 class SotPackError(RuntimeError):
@@ -29,12 +31,7 @@ class InitializedSotPack:
 
 
 def _validate_version_name(name: str) -> None:
-    if not name.strip():
-        raise SotPackError("SoT version name is required")
-    if (
-        Path(name).name != name
-        or name in {".", ".."}
-        or name != name.strip()
-        or any(ord(character) < 32 or ord(character) == 127 for character in name)
-    ):
-        raise SotPackError("SoT version name contains invalid characters")
+    try:
+        validate_version_name(name)
+    except SotVersionError as exc:
+        raise SotPackError(str(exc)) from exc

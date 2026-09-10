@@ -162,7 +162,9 @@ def test_source_version_comparison_routes_one_workflow_owner() -> None:
     assert "tests/ops/sot_versions/test_comparison.py" in guide
     assert "## Initialization contract" in guide
     assert "tests/ops/sot_versions/test_initialization.py" in guide
-    for owner in ("initialization.py", "lifecycle.py", "comparison.py", "records.py"):
+    assert "## Lifecycle contract" in guide
+    assert "tests/ops/sot_versions/test_lifecycle.py" in guide
+    for owner in ("initialization.py", "lifecycle.py", "comparison.py", "copying.py", "records.py"):
         assert owner in architecture
         assert (ROOT / "src/cvworkbench/ops/sot_versions" / owner).is_file()
 

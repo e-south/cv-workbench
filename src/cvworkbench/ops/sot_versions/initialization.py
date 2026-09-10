@@ -2,26 +2,19 @@
 
 from __future__ import annotations
 
-import stat
-from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from cvworkbench.inputs.sot import REQUIRED_FILES
 from cvworkbench.inputs.sot_versions import resolve_active_sot_path
 from cvworkbench.inputs.validation import validate_sot
+from cvworkbench.ops.sot_versions.copying import CapturedSource, capture_source
 from cvworkbench.ops.sot_versions.records import (
     InitializedSotPack,
     SotPackError,
     _validate_version_name,
 )
 from cvworkbench.storage import AtomicWriteError, replace_files_atomically
-
-
-@dataclass(frozen=True)
-class _CapturedSource:
-    files: dict[Path, tuple[bytes, int]] = field(repr=False)
-    directories: dict[Path, int] = field(repr=False)
 
 
 def initialize_pack(*, source: Path, destination: Path, name: str = "base") -> InitializedSotPack:
@@ -47,9 +40,9 @@ def initialize_pack(*, source: Path, destination: Path, name: str = "base") -> I
     if missing:
         raise SotPackError(f"Required source files missing: {', '.join(missing)}")
 
-    captured = _capture_source(selected)
+    captured = capture_source(selected)
     _validate_captured_source(captured, selected)
-    if _capture_source(selected) != captured:
+    if capture_source(selected) != captured:
         raise SotPackError("Source changed during pack initialization; no pack was created")
 
     result = InitializedSotPack(source=selected, root=target, active=name)
@@ -72,28 +65,7 @@ def initialize_pack(*, source: Path, destination: Path, name: str = "base") -> I
     return result
 
 
-def _capture_source(source: Path) -> _CapturedSource:
-    files: dict[Path, tuple[bytes, int]] = {}
-    directories: dict[Path, int] = {}
-    try:
-        for path in [source, *sorted(source.rglob("*"))]:
-            relative = path.relative_to(source)
-            mode = path.lstat().st_mode
-            permissions = stat.S_IMODE(mode)
-            if stat.S_ISDIR(mode):
-                directories[relative] = permissions
-            elif stat.S_ISREG(mode):
-                files[relative] = (path.read_bytes(), permissions)
-            else:
-                raise SotPackError(
-                    f"Source pack copying requires regular files/directories: {relative}"
-                )
-    except OSError as exc:
-        raise SotPackError(f"Cannot capture source directory: {source}") from exc
-    return _CapturedSource(files, directories)
-
-
-def _validate_captured_source(captured: _CapturedSource, source: Path) -> None:
+def _validate_captured_source(captured: CapturedSource, source: Path) -> None:
     with TemporaryDirectory(prefix="cvw-sot-pack-validation-") as temporary:
         staged = Path(temporary)
         try:
