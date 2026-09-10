@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 from cvworkbench.config import (
@@ -20,6 +21,18 @@ from cvworkbench.config import (
     resolve_variant_path,
 )
 from cvworkbench.ops.projects.records import ProjectError
+
+
+def validate_project_id(project_id: object) -> None:
+    if not project_id:
+        raise ProjectError("Project id is required")
+    if (
+        not isinstance(project_id, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", project_id) is None
+    ):
+        raise ProjectError(
+            "Project id must start with a letter or number and contain only letters, numbers, '.', '_' or '-'"
+        )
 
 
 def resolve_project_dir(project: str, config_path: ConfigSource) -> Path:
@@ -56,6 +69,8 @@ def _project_id_from_url(url: str) -> str:
 
 
 def _slugify(value: str) -> str:
+    if not isinstance(value, str):
+        raise ProjectError("Project slug must be a string")
     cleaned: list[str] = []
     for char in value.lower():
         if char.isalnum():

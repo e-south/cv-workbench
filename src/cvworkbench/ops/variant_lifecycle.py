@@ -102,6 +102,24 @@ def load_variant_registry(config_path: ConfigSource) -> VariantRegistry:
     return VariantRegistry(entries=entries)
 
 
+def preflight_variant_registration(
+    *,
+    variant_path: Path,
+    cleanup_path: Path,
+    source: str,
+    config_path: ConfigSource,
+) -> None:
+    """Check a proposed registration before its artifacts exist; reserve nothing."""
+    if source not in _ALLOWED_SOURCES:
+        raise VariantLifecycleError(f"Variant source is not supported: {source}")
+    _require_variant_cleanup(variant_path, cleanup_path, config_path)
+    _registration_times(config_path)
+    registry = _load_registry_raw(config_path)
+    existing = _find_entry(registry["entries"], _path_for_registry(variant_path, config_path))
+    if existing and existing["status"] != "ephemeral":
+        raise VariantLifecycleError(f"Variant is not eligible for registration: {variant_path}")
+
+
 def register_variant(
     *,
     variant_path: Path,
@@ -110,20 +128,21 @@ def register_variant(
     config_path: ConfigSource,
     label: str | None,
 ) -> VariantRegistryEntry:
-    if source not in _ALLOWED_SOURCES:
-        raise VariantLifecycleError(f"Variant source is not supported: {source}")
     variant_path = variant_path.resolve()
     cleanup_path = cleanup_path.resolve()
+    preflight_variant_registration(
+        variant_path=variant_path,
+        cleanup_path=cleanup_path,
+        source=source,
+        config_path=config_path,
+    )
     if not variant_path.exists():
         raise VariantLifecycleError(f"Variant file not found: {variant_path}")
     if not cleanup_path.exists():
         raise VariantLifecycleError(f"Cleanup path not found: {cleanup_path}")
-    _require_variant_cleanup(variant_path, cleanup_path, config_path)
-
     variant_id = _load_variant_id(variant_path)
-    ttl_days = resolve_variant_ttl_days(config_path)
-    now = _now()
-    expires_at = (now + timedelta(days=ttl_days)).isoformat()
+    now, expires = _registration_times(config_path)
+    expires_at = expires.isoformat()
 
     with _registry_write_lock(config_path):
         registry = _load_registry_raw(config_path)
@@ -507,6 +526,16 @@ def _parse_time(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _registration_times(config_path: ConfigSource) -> tuple[datetime, datetime]:
+    ttl_days = resolve_variant_ttl_days(config_path)
+    now = _now()
+    try:
+        expires = now + timedelta(days=ttl_days)
+    except OverflowError as exc:
+        raise VariantLifecycleError("Variant lifetime exceeds the supported date range") from exc
+    return now, expires
 
 
 def _now() -> datetime:

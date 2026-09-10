@@ -115,6 +115,30 @@ Additional metadata fields retain their operation-specific
 checks; successful identity inspection alone does not establish build or review
 readiness.
 
+## Creation preflight
+
+File and URL creation validate their local inputs before creating directories.
+They share the project identity validator with manifest loading, require an
+existing SoT directory, validate the selected base variant with the normal
+variant schema, and check the prospective registration's lifetime, cleanup
+boundary, and registry eligibility. URL creation performs these checks before
+fetching. The registration contract belongs to
+[variant lifecycle](variant-lifecycle.md#registration-preflight).
+
+Only an omitted/`None` slug derives an ID from the job filename or URL. Explicit
+values must be strings that normalize to the documented project identifier
+alphabet; empty or malformed values fail instead of choosing another ID.
+Local job input must be a regular file containing readable UTF-8 text. Variant
+YAML/encoding errors identify the file without echoing its contents.
+
+The selected variant is parsed once before staging; its validated definition,
+including extension metadata, supplies the proposal. Local job text is also
+captured before staging and supplies both the extracted text and job signals.
+These are separate input captures, not a snapshot of all source files. Direct
+creation checks the SoT directory's kind; full source-content validation remains
+the responsibility of guidance and build. Registry preflight reserves nothing,
+so registration rechecks current eligibility and can still require recovery.
+
 ## Mutation recovery
 
 File and URL creation share one staging, publication, and registration lifecycle
@@ -128,8 +152,8 @@ adds a note if cleanup also fails.
 This ownership check does not provide exclusive creation or isolation from
 concurrent filesystem changes. It does not prevent every race between checking
 identity and deletion, or reserve the destination against an empty directory
-appearing before rename. Direct creation still validates some inputs after
-staging; the guide workflow provides additional preflight checks.
+appearing before rename. Input preflight does not guarantee future filesystem
+writes will succeed.
 
 `retarget_project_variant` stages the proposal variant and project manifest
 together using `ops.atomic.replace_files_atomically`. An ordinary I/O failure
@@ -284,10 +308,10 @@ Internal modules import concrete owners rather than the public entrypoint.
 | Responsibility | Owner beneath `ops/projects/` |
 | --- | --- |
 | Artifact records, patch vocabulary, record timestamps | `records.py` |
-| Project selectors and proposal identities | `identity.py` |
-| Manifest identity and executable-project prerequisites | `manifest.py` |
+| Project identity validation, selectors, and proposal identities | `identity.py` |
+| Manifest reading and executable-project prerequisites | `manifest.py` |
 | Detailed metadata and proposal visibility | `inspection.py` |
-| Creation, retargeting, registration, and discard | `creation.py` |
+| Creation preflight, captured inputs, retargeting, registration, and discard | `creation.py` |
 | Guarded edit authoring, compilation, and application | `patches.py` |
 | Job evidence, variant ranking, and proposal plans | `guidance.py` |
 | Guided creation, preflight, result records, and recovery | `workflow.py` |
@@ -300,7 +324,7 @@ launch remain in the CLI. Other project adapters retain their own extraction
 boundaries.
 
 `cvworkbench.ops.projects.load_project_metadata` owns manifest reading and
-identity validation. Workspace inventory consumes that reader;
+delegates project identity validation to `identity.py`. Workspace inventory consumes that reader;
 `load_project` adds executable-project prerequisites, and `load_project_details`
 adds descriptive and proposal information from the same manifest generation.
 

@@ -112,6 +112,10 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "original staging directory" in contract
     assert "ops.atomic.replace_files_atomically" in contract
     assert "concurrent writers" in contract
+    assert "## Creation preflight" in contract
+    assert "before\nfetching" in contract
+    assert "variant-lifecycle.md#registration-preflight" in contract
+    assert "not a snapshot of all source files" in contract
 
 
 def test_docs_make_bounded_editing_scope_explicit() -> None:

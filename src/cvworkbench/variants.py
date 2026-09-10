@@ -75,7 +75,11 @@ DEFAULT_ORDER = [
 
 
 def load_variant(path: Path) -> Variant:
-    raw = yaml.safe_load(path.read_text())
+    return parse_variant(yaml.safe_load(path.read_text()))
+
+
+def parse_variant(raw: object) -> Variant:
+    """Validate one parsed definition without rereading its source file."""
     if raw is None:
         raise ValueError("Variant file is empty")
     if not isinstance(raw, dict):

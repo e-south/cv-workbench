@@ -11,12 +11,12 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from cvworkbench.ops.projects.identity import validate_project_id
 from cvworkbench.ops.projects.records import ProjectError, ProjectSpec
 from cvworkbench.variants import validate_variant_id
 
@@ -41,16 +41,7 @@ def load_project_metadata(project_dir: Path) -> dict[str, Any]:
     project_data = raw.get("project")
     if not isinstance(project_data, dict):
         raise ProjectError("Project manifest is invalid")
-    project_id = project_data.get("id")
-    if not project_id:
-        raise ProjectError("Project id is required")
-    if (
-        not isinstance(project_id, str)
-        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", project_id) is None
-    ):
-        raise ProjectError(
-            "Project id must start with a letter or number and contain only letters, numbers, '.', '_' or '-'"
-        )
+    validate_project_id(project_data.get("id"))
     base_variant = project_data.get("base_variant")
     if not base_variant:
         raise ProjectError("Project base_variant is required")

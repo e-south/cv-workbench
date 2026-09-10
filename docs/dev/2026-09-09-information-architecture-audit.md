@@ -35,6 +35,48 @@ source of truth.
 
 ## Findings and disposition
 
+### Medium — direct creation validated inputs after artifact writes — fixed
+
+Nine local fixtures demonstrated late validation or acceptance of invalid job
+text/kind, project identity, base variant, lifetime, cleanup root, registry
+contents, or source kind. Creation accepted a regular file as its SoT
+directory and copied a variant whose output filename violated the normal
+variant schema. A URL fixture reached the fetch boundary before noticing a
+missing base variant. These violate the operation's preflight-before-write
+contract; successful cleanup did not make the late validation acceptable.
+
+Creation now preflights local inputs through their existing owners: project IDs
+in `identity.py`, parsed variants in `variants.py`, and prospective registration
+in `variant_lifecycle.py`. The variant parser is shared with normal file
+loading, and registration rechecks current eligibility under its write lock.
+The selected variant and local job text are captured before staging and reused
+for the output; extension metadata remains intact. An omitted slug still derives
+an ID, while empty or incorrectly typed explicit values are rejected. Malformed
+variant YAML errors identify the file without echoing its contents.
+
+Ten initial RED cases proved the late writes/acceptance/fetch failures. Five
+additional RED cases proved silent slug fallback and diagnostic content echo.
+A real-input replacement check confirms that changing the job and variant after
+staging begins does not substitute unvalidated content. The 94 focused checks
+passed. Evidence: `/tmp/cvw-creation-preflight-red.log`,
+`/tmp/cvw-creation-input-contract-red.log`, and
+`/tmp/cvw-creation-input-contract-green.log`.
+
+The real `project new` CLI rejected an unsafe variant with exit 1 and an
+unchanged fixture tree, then succeeded with exit 0, valid JSON, and empty stderr
+after the fixture was corrected. Evidence: `/tmp/cvw-creation-cli-evidence.json`.
+Direct creation requires a source directory; full source-content validation
+remains in guidance/build. Independent file captures and preliminary registry
+checks provide no global snapshot, reservation, or concurrent-write isolation.
+
+Final preflight verification: 666 tests passed, one opt-in integration test was
+skipped, and the five existing dependency warnings remained. All seven isolated
+build/preview/review journey steps passed with empty stderr. Ruff, formatting,
+and pre-commit checks including secret scanning passed. Evidence:
+`/tmp/cvw-creation-preflight-full.log`,
+`/tmp/cvw-creation-preflight-journey.json`, and
+`/tmp/cvw-creation-preflight-hooks.log`.
+
 ### High for local artifact integrity — creation cleanup deleted another directory — fixed
 
 Creation previously removed both staging and final paths after any failure,
@@ -108,10 +150,10 @@ captured settings. Plan-write failure tests remove the config before cleanup,
 verifying that recovery uses the captured generation too.
 
 Source facts, job files, variant definitions, project manifests, and proposal
-files retain independent read lifetimes. Direct creation still stages before
-some registration checks. The subsequent mutation-recovery pass addresses
-ordinary creation and retarget write failures; concurrent isolation remains a
-distinct mutation-contract follow-up.
+files retain independent read lifetimes across the complete guide workflow.
+The subsequent creation-preflight and mutation-recovery passes address late
+validation and ordinary creation/retarget write failures; concurrent isolation
+remains a distinct mutation-contract follow-up.
 
 Four real stable-input comparisons (recommended/explicit selection in JSON/plain
 mode) match the previous guide adapter byte-for-byte. All 65 help screens, seven
@@ -724,8 +766,9 @@ ownership are complete.
 Project identity now has one read owner shared by inspection and execution.
 Guided creation now has a callable workflow, captured settings, and explicit
 recovery. Creation cleanup now tracks directory ownership, and retarget writes
-recover from ordinary I/O failures. Continue with direct creation preflight and
-consistent retarget input reads, then remaining project command orchestration.
+recover from ordinary I/O failures. Direct creation now preflights local inputs
+and captures its job text and variant definition. Continue with consistent
+retarget input reads, then remaining project command orchestration.
 Manifest, creation/retarget, and
 guarded patch responsibilities now have verified owners beneath the project
 package. A complete metadata model

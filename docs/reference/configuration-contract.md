@@ -92,6 +92,11 @@ dots, underscores, or hyphens. Selectors such as `--variant` and promotion IDs
 follow this same contract. They select a file beneath `config/variants/`; an ID
 is not a path.
 
+`load_variant(path)` reads YAML and delegates to `parse_variant(raw)`. Project
+creation and retargeting use that same parser to validate the exact parsed
+definition they will copy. This avoids a separate project-only schema and a
+second variant-file read between validation and serialization.
+
 `variant.output_name` is a filename stem, such as `cv` or `Example Person CV`.
 Omitted/null values use `cv`. Explicit values must be nonempty strings; path
 separators, control characters, reserved filename punctuation (`<>:"|?*`), and

@@ -41,6 +41,19 @@ Cleanup owns the variant file itself or its immediate bundle directory. Shared
 containers such as `var/`, `var/drafts/`, and a project's parent directory are
 not cleanup targets for a nested proposal.
 
+## Registration preflight
+
+`ops.variant_lifecycle.preflight_variant_registration` checks a prospective
+variant/cleanup path pair, registration source, configured lifetime, registry
+structure, and eligibility without creating files or reserving an entry. The
+target files need not exist yet. The lifetime must be a positive integer that
+produces a representable expiration date; booleans are invalid.
+
+Project creation calls this owner before staging. `register_variant` applies
+the same checks, requires the actual artifacts, and rechecks registry eligibility
+under its write lock before saving. Preflight does not establish a transaction
+with subsequent filesystem writes or hold the lock across project creation.
+
 ## Commands
 
 - `uv run cvw variant list`: show configured variants alongside pending lifecycle entries.

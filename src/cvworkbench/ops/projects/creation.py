@@ -36,6 +36,7 @@ from cvworkbench.ops.projects.identity import (
     _project_id_from_url,
     _slugify,
     suggest_project_variant_id,
+    validate_project_id,
 )
 from cvworkbench.ops.projects.manifest import load_project
 from cvworkbench.ops.projects.records import (
@@ -48,9 +49,10 @@ from cvworkbench.ops.projects.records import (
 from cvworkbench.ops.variant_lifecycle import (
     VariantLifecycleError,
     discard_variant,
+    preflight_variant_registration,
     register_variant,
 )
-from cvworkbench.variants import load_variant
+from cvworkbench.variants import load_variant, parse_variant
 
 
 def create_project_from_url(
@@ -65,18 +67,19 @@ def create_project_from_url(
     if not url.strip():
         raise ProjectError("Job URL is required")
     config_path = read_config(config_path)
-    if not sot_path.exists():
-        raise ProjectError(f"SoT path not found: {sot_path}")
+    project_id = _slugify(slug if slug is not None else _project_id_from_url(url))
+    variant_payload = _preflight_project_creation(
+        project_id=project_id,
+        base_variant_id=base_variant_id,
+        config_path=config_path,
+        sot_path=sot_path,
+    )
 
     settings = load_registry_settings(config_path)
     try:
         extract = fetch_and_extract(url, settings.user_agent)
     except IngestError as exc:
         raise ProjectError(str(exc)) from exc
-
-    project_id = _slugify(slug or _project_id_from_url(url))
-    if not project_id:
-        raise ProjectError("Project id could not be derived from URL")
 
     with _project_creation(project_id, config_path) as (final_dir, staging_dir):
         job_dir = staging_dir / "job"
@@ -115,7 +118,7 @@ def create_project_from_url(
             extracted_path=extracted_path,
             raw_path=raw_path,
             signals_path=signals_path,
-            config_path=config_path,
+            variant_payload=variant_payload,
         )
     return _project_paths(final_dir)
 
@@ -131,15 +134,22 @@ def create_project_from_file(
 ) -> ProjectPaths:
     if not job_path.exists():
         raise ProjectError(f"Job file not found: {job_path}")
+    if not job_path.is_file():
+        raise ProjectError(f"Job file must be a regular file: {job_path}")
     if store_raw:
         raise ProjectError("Raw HTML storage is only available for URL ingestion")
     config_path = read_config(config_path)
-    if not sot_path.exists():
-        raise ProjectError(f"SoT path not found: {sot_path}")
-
-    project_id = _slugify(slug or job_path.stem)
-    if not project_id:
-        raise ProjectError("Project id could not be derived from job file")
+    project_id = _slugify(slug if slug is not None else job_path.stem)
+    variant_payload = _preflight_project_creation(
+        project_id=project_id,
+        base_variant_id=base_variant_id,
+        config_path=config_path,
+        sot_path=sot_path,
+    )
+    try:
+        job_text = job_path.read_text(encoding="utf-8").strip() + "\n"
+    except (OSError, UnicodeError) as exc:
+        raise ProjectError(f"Job file must be readable UTF-8 text: {job_path}") from exc
 
     with _project_creation(project_id, config_path) as (final_dir, staging_dir):
         job_dir = staging_dir / "job"
@@ -149,11 +159,11 @@ def create_project_from_file(
         source_path.write_text(str(job_path) + "\n")
 
         extracted_path = job_dir / "extracted.txt"
-        extracted_path.write_text(job_path.read_text().strip() + "\n")
+        extracted_path.write_text(job_text, encoding="utf-8")
 
         signals_path = job_dir / "signals.json"
         signals = build_signals(
-            extracted_path.read_text(),
+            job_text,
             {
                 "type": "file",
                 "value": str(job_path),
@@ -171,7 +181,7 @@ def create_project_from_file(
             extracted_path=extracted_path,
             raw_path=None,
             signals_path=signals_path,
-            config_path=config_path,
+            variant_payload=variant_payload,
         )
     return _project_paths(final_dir)
 
@@ -238,6 +248,40 @@ def discard_project_workspace(*, project_dir: Path, config_path: ConfigSource) -
         raise ProjectError("; ".join(errors))
 
 
+def _preflight_project_creation(
+    *,
+    project_id: str,
+    base_variant_id: str,
+    config_path: ConfigSource,
+    sot_path: Path,
+) -> dict[str, Any]:
+    validate_project_id(project_id)
+    if not sot_path.exists():
+        raise ProjectError(f"SoT path not found: {sot_path}")
+    if not sot_path.is_dir():
+        raise ProjectError(f"SoT path must be a directory: {sot_path}")
+    try:
+        project_dir = resolve_projects_path(config_path) / project_id
+        if project_dir.exists() or project_dir.is_symlink():
+            raise ProjectError(f"Project already exists: {project_dir}")
+        variant_payload = _build_project_variant_payload(
+            base_variant_id=base_variant_id,
+            proposal_variant_id=suggest_project_variant_id(
+                project_id=project_id, config_path=config_path
+            ),
+            config_path=config_path,
+        )
+        preflight_variant_registration(
+            variant_path=project_dir / "proposals/variant.yaml",
+            cleanup_path=project_dir / "proposals",
+            source="project",
+            config_path=config_path,
+        )
+    except (OSError, ValueError, yaml.YAMLError, VariantLifecycleError) as exc:
+        raise ProjectError(f"Project creation preflight failed: {exc}") from exc
+    return variant_payload
+
+
 def _write_project_files(
     *,
     project_dir: Path,
@@ -248,18 +292,12 @@ def _write_project_files(
     extracted_path: Path,
     raw_path: Path | None,
     signals_path: Path,
-    config_path: ConfigSource,
+    variant_payload: dict[str, Any],
 ) -> None:
     proposals_dir = project_dir / "proposals"
     proposals_dir.mkdir(parents=True, exist_ok=True)
 
     variant_path = proposals_dir / "variant.yaml"
-    proposal_variant_id = suggest_project_variant_id(project_id=project_id, config_path=config_path)
-    variant_payload = _build_project_variant_payload(
-        base_variant_id=base_variant_id,
-        proposal_variant_id=proposal_variant_id,
-        config_path=config_path,
-    )
     variant_path.write_text(yaml.safe_dump(variant_payload, sort_keys=False))
 
     patch_path = proposals_dir / "patch.yaml"
@@ -305,12 +343,14 @@ def _build_project_variant_payload(
     variant_source_path = resolve_variant_path(base_variant_id, config_path)
     if not variant_source_path.exists():
         raise ProjectError(f"Base variant not found: {base_variant_id}")
-    raw_variant = yaml.safe_load(variant_source_path.read_text())
-    if not isinstance(raw_variant, dict):
-        raise ProjectError(f"Variant file must be a mapping: {variant_source_path}")
-    variant_data = raw_variant.get("variant")
-    if not isinstance(variant_data, dict):
-        raise ProjectError(f"Variant file is invalid: {variant_source_path}")
+    try:
+        raw_variant = yaml.safe_load(variant_source_path.read_text(encoding="utf-8"))
+    except (UnicodeError, yaml.YAMLError) as exc:
+        raise ProjectError(
+            f"Variant file must contain valid UTF-8 YAML: {variant_source_path}"
+        ) from exc
+    parse_variant(raw_variant)
+    variant_data = raw_variant["variant"]
     variant_data["id"] = proposal_variant_id
     return raw_variant
 
