@@ -121,6 +121,21 @@ review, and person-source locations. It retains its explicit freshness and
 review checks. Workflow descriptions receive the resolved workspace location
 and ordinary config path; constructing commands does not reopen the settings.
 
+## Project guidance
+
+`ops.projects.guide_project` captures one configuration generation for source and
+default selection, creation, retargeting, proposal registration, and failure
+cleanup. It also accepts an explicit snapshot. File-based and URL-based project
+creation preserve a provided snapshot instead of reopening its path. Registry
+registration/discard helpers accept that captured configuration throughout the
+guided operation.
+
+An edit or removal of `workbench.yaml` during guidance does not switch project
+locations or registry settings. The result's ordinary config path supports later
+commands, which independently select settings. Job/source/variant file reads and
+multi-file artifact mutations have their own lifetimes; see the
+[guidance API](project-contract.md#guidance-api) for preflight and recovery limits.
+
 ## Scope and adoption
 
 This snapshot covers `workbench.yaml`, not a transaction across every input
@@ -128,7 +143,7 @@ file or directory. Source facts, active-version pointers, variant files, theme
 assets, publication policy, and site configuration have separate lifetimes.
 Their existing hashes/checks do not establish a global immutable input bundle.
 
-Project command orchestration, publication preparation/sync, lifecycle
+Other project command orchestration, publication preparation/sync, lifecycle
 mutations, and preview controller selection still include path-based resolution
 outside the captured boundaries. Adopt explicit snapshots at those operation
 boundaries with their own behavior tests. Do not infer that accepting
@@ -140,4 +155,5 @@ Verification:
 uv run pytest tests/ops/test_config.py tests/build/test_configuration.py
 uv run pytest tests/build
 uv run pytest tests/workspace tests/ops/publication/test_state.py
+uv run pytest tests/ops/test_project_guide.py
 ```

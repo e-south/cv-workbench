@@ -42,3 +42,6 @@ from cvworkbench.ops.projects.records import ProjectError as ProjectError
 from cvworkbench.ops.projects.records import ProjectPatch as ProjectPatch
 from cvworkbench.ops.projects.records import ProjectPaths as ProjectPaths
 from cvworkbench.ops.projects.records import ProjectSpec as ProjectSpec
+from cvworkbench.ops.projects.workflow import ProjectGuideError as ProjectGuideError
+from cvworkbench.ops.projects.workflow import ProjectGuideResult as ProjectGuideResult
+from cvworkbench.ops.projects.workflow import guide_project as guide_project

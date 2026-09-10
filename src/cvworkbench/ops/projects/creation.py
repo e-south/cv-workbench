@@ -21,7 +21,8 @@ from uuid import uuid4
 import yaml
 
 from cvworkbench.config import (
-    resolve_config_path,
+    ConfigSource,
+    read_config,
     resolve_projects_path,
     resolve_variant_path,
 )
@@ -54,13 +55,13 @@ def create_project_from_url(
     url: str,
     slug: str | None,
     base_variant_id: str,
-    config_path: Path,
+    config_path: ConfigSource,
     sot_path: Path,
     store_raw: bool,
 ) -> ProjectPaths:
     if not url.strip():
         raise ProjectError("Job URL is required")
-    config_path = resolve_config_path(config_path)
+    config_path = read_config(config_path)
     if not sot_path.exists():
         raise ProjectError(f"SoT path not found: {sot_path}")
 
@@ -130,7 +131,7 @@ def create_project_from_file(
     job_path: Path,
     slug: str | None,
     base_variant_id: str,
-    config_path: Path,
+    config_path: ConfigSource,
     sot_path: Path,
     store_raw: bool,
 ) -> ProjectPaths:
@@ -138,7 +139,7 @@ def create_project_from_file(
         raise ProjectError(f"Job file not found: {job_path}")
     if store_raw:
         raise ProjectError("Raw HTML storage is only available for URL ingestion")
-    config_path = resolve_config_path(config_path)
+    config_path = read_config(config_path)
     if not sot_path.exists():
         raise ProjectError(f"SoT path not found: {sot_path}")
 
@@ -194,7 +195,7 @@ def retarget_project_variant(
     *,
     project_dir: Path,
     base_variant_id: str,
-    config_path: Path,
+    config_path: ConfigSource,
 ) -> ProjectSpec:
     spec = load_project(project_dir)
     project_file = project_dir / "project.yaml"
@@ -218,7 +219,7 @@ def retarget_project_variant(
     return load_project(project_dir)
 
 
-def discard_project_workspace(*, project_dir: Path, config_path: Path) -> None:
+def discard_project_workspace(*, project_dir: Path, config_path: ConfigSource) -> None:
     errors: list[str] = []
     try:
         spec = load_project(project_dir)
@@ -253,7 +254,7 @@ def _write_project_files(
     extracted_path: Path,
     raw_path: Path | None,
     signals_path: Path,
-    config_path: Path,
+    config_path: ConfigSource,
 ) -> None:
     proposals_dir = project_dir / "proposals"
     proposals_dir.mkdir(parents=True, exist_ok=True)
@@ -305,7 +306,7 @@ def _build_project_variant_payload(
     *,
     base_variant_id: str,
     proposal_variant_id: str,
-    config_path: Path,
+    config_path: ConfigSource,
 ) -> dict[str, Any]:
     variant_source_path = resolve_variant_path(base_variant_id, config_path)
     if not variant_source_path.exists():
@@ -320,7 +321,7 @@ def _build_project_variant_payload(
     return raw_variant
 
 
-def _prepare_project_dir(project_id: str, config_path: Path) -> tuple[Path, Path]:
+def _prepare_project_dir(project_id: str, config_path: ConfigSource) -> tuple[Path, Path]:
     projects_root = resolve_projects_path(config_path)
     projects_root.mkdir(parents=True, exist_ok=True)
     project_dir = projects_root / project_id
@@ -347,7 +348,7 @@ def _project_paths(project_dir: Path) -> ProjectPaths:
     )
 
 
-def _register_project_variant(*, final_dir: Path, config_path: Path, label: str) -> None:
+def _register_project_variant(*, final_dir: Path, config_path: ConfigSource, label: str) -> None:
     try:
         register_variant(
             variant_path=final_dir / "proposals" / "variant.yaml",

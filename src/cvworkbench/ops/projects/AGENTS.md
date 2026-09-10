@@ -13,6 +13,10 @@
 - `guidance.py` interprets job evidence and ranks variants. It does not select
   terminal output modes or start preview servers. Catalog loading belongs to
   `cvworkbench.variants`; workspace code owns inventory presentation.
+- `workflow.py::guide_project` owns guided creation, preflight, configuration
+  capture, and recovery. The CLI presents its result and optionally opens a
+  preview. Preserve individual source diagnostics and the original failure when
+  cleanup also fails.
 - Verify project operation tests, CLI project journeys, and workspace import
   boundaries. Exercise real local files and negative side effects; public
   function imports remain available through `cvworkbench.ops.projects`.

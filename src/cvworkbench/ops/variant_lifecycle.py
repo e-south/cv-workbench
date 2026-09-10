@@ -107,7 +107,7 @@ def register_variant(
     variant_path: Path,
     cleanup_path: Path,
     source: str,
-    config_path: Path,
+    config_path: ConfigSource,
     label: str | None,
 ) -> VariantRegistryEntry:
     if source not in _ALLOWED_SOURCES:
@@ -206,7 +206,7 @@ def keep_variant(
 def discard_variant(
     *,
     variant_path: Path,
-    config_path: Path,
+    config_path: ConfigSource,
     confirm: bool,
 ) -> VariantDiscardResult:
     with _registry_write_lock(config_path):
@@ -316,7 +316,7 @@ def _load_registry_raw(config_path: ConfigSource) -> dict[str, Any]:
     return raw
 
 
-def _write_registry(config_path: Path, payload: dict[str, Any]) -> None:
+def _write_registry(config_path: ConfigSource, payload: dict[str, Any]) -> None:
     path = _registry_path(config_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(
@@ -335,7 +335,7 @@ def _write_registry(config_path: Path, payload: dict[str, Any]) -> None:
 
 
 @contextmanager
-def _registry_write_lock(config_path: Path):
+def _registry_write_lock(config_path: ConfigSource):
     path = _registry_path(config_path)
     path_key = str(path.resolve())
     with _REGISTRY_MUTEXES_GUARD:
@@ -451,7 +451,7 @@ def _load_variant_id(path: Path) -> str:
     return value.strip()
 
 
-def _remove_path(path: Path, config_path: Path) -> None:
+def _remove_path(path: Path, config_path: ConfigSource) -> None:
     _require_var_path(path, config_path)
     if not path.exists():
         raise VariantLifecycleError(f"Cleanup path not found: {path}")
@@ -464,7 +464,7 @@ def _remove_path(path: Path, config_path: Path) -> None:
     raise VariantLifecycleError(f"Cleanup path is not removable: {path}")
 
 
-def _require_var_path(path: Path, config_path: Path) -> None:
+def _require_var_path(path: Path, config_path: ConfigSource) -> None:
     var_root = resolve_var_root(config_path).resolve()
     resolved = path.resolve()
     if resolved == var_root:
@@ -475,7 +475,7 @@ def _require_var_path(path: Path, config_path: Path) -> None:
         raise VariantLifecycleError(f"Cleanup path is outside var: {resolved}") from exc
 
 
-def _require_variant_cleanup(variant: Path, cleanup: Path, config_path: Path) -> None:
+def _require_variant_cleanup(variant: Path, cleanup: Path, config_path: ConfigSource) -> None:
     _require_var_path(cleanup, config_path)
     if cleanup.resolve() not in {variant.resolve(), variant.resolve().parent}:
         raise VariantLifecycleError(
@@ -483,7 +483,7 @@ def _require_variant_cleanup(variant: Path, cleanup: Path, config_path: Path) ->
         )
 
 
-def _path_for_registry(path: Path, config_path: Path) -> str:
+def _path_for_registry(path: Path, config_path: ConfigSource) -> str:
     root = resolve_project_root(config_path)
     resolved = path.resolve()
     try:

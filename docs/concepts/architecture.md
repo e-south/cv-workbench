@@ -105,8 +105,8 @@ defines the callable API and its error semantics.
 | Setup, build, review, project, and maintenance recipe descriptions | Corresponding modules in `workspace/workflows/` |
 | Step metadata and state-based recommendations | `workspace/workflows/steps.py`, `recommendations.py` |
 
-Dependencies flow from CLI adapters through workspace inspection to operations
-and inputs. Workspace code does not import CLI/preview controllers or terminal
+CLI adapters call workspace inspection or operation APIs, which share lower
+input owners. Workspace code does not import CLI/preview controllers or terminal
 libraries; build and input code do not import operations, workspace inspection,
 or adapters. Operations do not import workspace inspection. Architecture tests
 in `tests/workspace/test_boundaries.py` enforce these import directions, including
@@ -129,7 +129,10 @@ The [project ownership contract](../reference/project-contract.md#python-ownersh
 defines the internal modules. Variant catalog loading lives in `variants.py`,
 so project operations and workspace inventory share it without importing each
 other. These ownership boundaries do not imply that all CLI orchestration has
-already moved into operations.
+already moved into operations. Guided project creation is owned by
+`ops/projects/workflow.py::guide_project`; its adapter owns presentation and
+optional preview launch. The [guidance API](../reference/project-contract.md#guidance-api)
+defines result, error, configuration, and recovery semantics.
 
 ## Command adapters
 

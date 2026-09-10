@@ -104,6 +104,10 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "`[A-Za-z0-9][A-Za-z0-9._-]*`" in contract
     assert "`projects.invalid`" in contract
     assert "without requiring proposal artifacts" in contract
+    assert "cvworkbench.ops.projects.guide_project" in contract
+    assert "`ProjectGuideResult`" in contract
+    assert "`ProjectGuideError`" in contract
+    assert "`errors` tuple" in contract
 
 
 def test_docs_make_bounded_editing_scope_explicit() -> None:

@@ -35,6 +35,54 @@ source of truth.
 
 ## Findings and disposition
 
+### Medium — guidance lived in the CLI and missed cleanup after failures — fixed
+
+The guide adapter coordinated source loading, creation, ranking, retargeting,
+and proposal-plan writes. Invalid catalog entries were loaded after creation;
+a real local fixture failed with a project and proposal already present.
+`ops.projects.guide_project` now owns the workflow and returns a structured
+result without terminal output or preview launch. The CLI adapter presents that
+result and retains its public command surface.
+
+Catalog, selected-variant, and local job-file preflight occurs before project
+creation. Empty/false-valued explicit variants no longer select the default;
+blank URLs and multiple supplied job sources are rejected. Source errors retain
+individual diagnostics in `ProjectGuideError.errors`, including invalid
+URL-registry settings. Guidance/retarget/plan failures discard the partial
+project and active proposal, retaining both diagnostics if cleanup fails.
+Cancellation cleans up and preserves the interrupt. Registry history may retain
+a discarded entry; this is recovery, not a multi-file transaction.
+
+One configuration snapshot now reaches source/default selection, creation,
+retargeting, registration, and cleanup. Real edits/removals of the workbench file
+between reads previously changed destinations or aborted the workflow; supplied
+snapshots were also reduced back to a mutable path. Those cases now retain the
+captured settings. Plan-write failure tests remove the config before cleanup,
+verifying that recovery uses the captured generation too.
+
+Source facts, job files, variant definitions, project manifests, and proposal
+files retain independent read lifetimes. Direct creation still stages before
+some registration checks; direct retargeting is not atomic across variant and
+manifest writes. Those remain distinct mutation-contract follow-ups.
+
+Four real stable-input comparisons (recommended/explicit selection in JSON/plain
+mode) match the previous guide adapter byte-for-byte. All 65 help screens, seven
+workspace snapshots, and 107 other CLI function bodies remain unchanged. New
+API tests cover normal results, individual source errors, configuration drift,
+invalid selection, temporary-directory writes, real plan-write failure, and
+cancellation. Evidence is under `/tmp/cvw-guide-api-*`, with individual red/green
+logs under `/tmp/cvw-guide-*`.
+
+Final verification for guided creation: 131 focused tests and 645 tests in
+default discovery passed, with one opt-in remote skip and the five existing
+PyMuPDF/SWIG deprecation warnings. The isolated seven-step journey passed with
+empty stderr at every step. Ruff, formatting, and all pre-commit hooks including
+secret scanning passed. Commands were `UV_OFFLINE=1 uv run pytest`,
+`UV_OFFLINE=1 uv run python scripts/verify_repo.py --json`, and
+`UV_OFFLINE=1 uv run pre-commit run --all-files`. Live context remained ready
+without issues and with `review_required` publication. Master/candidate hashes
+were unchanged; the site remained clean on `main`, with no sync or push.
+
 ### High for local artifact integrity — project identity escaped run destinations — fixed
 
 Real isolated project builds accepted both `../../outside-runs` and an absolute
@@ -626,9 +674,9 @@ Portability, preview presentation extraction, and publication freshness/review
 contracts, workspace inspection, workflow-family extraction, and CLI command
 ownership are complete.
 Project identity now has one read owner shared by inspection and execution.
-The next project boundary is a callable operation for guide/create/retarget,
-currently coordinated by the CLI. Characterize its validation, rollback, and
-proposal-plan writes before extracting it. Manifest, creation/retarget, and
+Guided creation now has a callable workflow, captured settings, and explicit
+recovery. Continue with direct creation preflight and retarget consistency,
+then remaining project command orchestration. Manifest, creation/retarget, and
 guarded patch responsibilities now have verified owners beneath the project
 package. A complete metadata model
 must keep inventory existence, executable proposals, and review readiness
