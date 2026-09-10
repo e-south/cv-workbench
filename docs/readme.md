@@ -75,6 +75,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [concepts/overview.md](concepts/overview.md): CLI surface, feature lanes, and bounded editing scope
 - [concepts/architecture.md](concepts/architecture.md): repo boundaries and design constraints
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
+- [reference/configuration-contract.md](reference/configuration-contract.md): settings lifetime, explicit snapshots, resolution, and build preflight
 - [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, session semantics, and UI control hooks
 - [reference/verify-contract.md](reference/verify-contract.md): repo-local tracer-bullet verification harness
 - [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, guarded patch application, and proposal visibility rules

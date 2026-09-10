@@ -83,6 +83,9 @@ Required artifact assertions:
   `project.guide`
 - `build`: `cv.md`, `cv.pdf`, `cv.docx`, both manifests, `canonical.md`, and
   `resume.json` exist under the isolated workspace
+  (build manifests additionally record the captured workbench configuration's
+  `configuration.sha256`; its lifetime is covered by the
+  [configuration regression tests](configuration-contract.md#build-and-render-boundaries))
 - `preview --once`: `cv.html` exists, the returned `preview_file` resolves to
   that local HTML path, and no preview session file is written
 - `project guide`: `project.yaml`, `proposals/variant.yaml`, and

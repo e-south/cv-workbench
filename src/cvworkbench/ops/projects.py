@@ -25,7 +25,12 @@ from uuid import uuid4
 
 import yaml
 
-from cvworkbench.config import resolve_config_path, resolve_projects_path, resolve_variant_path
+from cvworkbench.config import (
+    ConfigSource,
+    resolve_config_path,
+    resolve_projects_path,
+    resolve_variant_path,
+)
 from cvworkbench.ingestion.ingest import IngestError, fetch_and_extract
 from cvworkbench.ingestion.registry import load_registry_settings
 from cvworkbench.ingestion.signals import build_signals
@@ -103,7 +108,7 @@ _PROJECT_PATCH_MUTEXES: dict[str, Lock] = {}
 _PROJECT_PATCH_MUTEXES_GUARD = Lock()
 
 
-def resolve_project_dir(project: str, config_path: Path) -> Path:
+def resolve_project_dir(project: str, config_path: ConfigSource) -> Path:
     candidate = Path(project)
     if candidate.is_absolute() or candidate.exists():
         return candidate

@@ -28,6 +28,8 @@ from cvworkbench.build.resume import build_resume, write_resume
 from cvworkbench.build.selection import build_selection
 from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.config import (
+    ConfigSource,
+    read_config,
     resolve_default_theme,
     resolve_default_variant,
     resolve_dist_path,
@@ -56,7 +58,7 @@ class BuildResult:
 def build_documents(
     *,
     sot_path: Path,
-    config_path: Path,
+    config_path: ConfigSource,
     variant_id: str | None,
     formats: list[str] | None,
     theme: str | None = None,
@@ -66,13 +68,15 @@ def build_documents(
     dist_dir: Path | None = None,
     write_audit_artifacts: bool = True,
 ) -> BuildResult:
+    configuration = read_config(config_path)
+    config_path = configuration.path
     if variant_path_override is not None:
         variant_path = variant_path_override
         variant = load_variant(variant_path)
         resolved_variant = variant.id
     else:
-        resolved_variant = variant_id or resolve_default_variant(config_path)
-        variant_path = resolve_variant_path(resolved_variant, config_path)
+        resolved_variant = variant_id or resolve_default_variant(configuration)
+        variant_path = resolve_variant_path(resolved_variant, configuration)
         variant = load_variant(variant_path)
     selected_formats = formats if formats is not None else variant.outputs
     selected_formats = normalize_output_formats(selected_formats)
@@ -84,7 +88,29 @@ def build_documents(
     selection = build_selection(sot, variant)
     selection_payload = json.dumps(selection, indent=2, sort_keys=True) + "\n"
 
-    run_dir = _ensure_run_dir(resolve_runs_path(config_path), run_dir)
+    filters_path = filters_dir()
+    resolved_filter_paths = resolve_filter_paths(filters_path)
+    pdf_engine = resolve_pdf_engine(configuration)
+    theme_id = theme or variant.render_theme or resolve_default_theme(configuration)
+    preset = style_preset or variant.render_style_preset or resolve_style_preset(configuration)
+    theme_root = resolve_themes_dir(configuration)
+    try:
+        theme_obj = resolve_theme(theme_root, theme_id)
+    except ThemeError as exc:
+        raise ValueError(str(exc)) from exc
+
+    render_plans = {
+        fmt: build_render_plan(
+            output_format=fmt,
+            theme=theme_obj,
+            style_preset=preset,
+            pdf_engine=pdf_engine,
+        )
+        for fmt in selected_formats
+    }
+
+    dist_dir = dist_dir or (resolve_dist_path(configuration) / variant.id)
+    run_dir = _ensure_run_dir(resolve_runs_path(configuration), run_dir)
     canonical_path = run_dir / "canonical.md"
     canonical_path.write_text(markdown)
     resume_path: Path | None = None
@@ -95,21 +121,9 @@ def build_documents(
         selection_path = run_dir / "selection.json"
         selection_path.write_text(selection_payload)
 
-    dist_dir = dist_dir or (resolve_dist_path(config_path) / variant.id)
     dist_dir.mkdir(parents=True, exist_ok=True)
     if write_audit_artifacts:
         (dist_dir / "selection.json").write_text(selection_payload)
-
-    filters_path = filters_dir()
-    resolved_filter_paths = resolve_filter_paths(filters_path)
-    pdf_engine = resolve_pdf_engine(config_path)
-    theme_id = theme or variant.render_theme or resolve_default_theme(config_path)
-    preset = style_preset or variant.render_style_preset or resolve_style_preset(config_path)
-    theme_root = resolve_themes_dir(config_path)
-    try:
-        theme_obj = resolve_theme(theme_root, theme_id)
-    except ThemeError as exc:
-        raise ValueError(str(exc)) from exc
 
     output_paths: dict[str, Path] = {}
     render_details: dict[str, dict[str, str | None | list[str]]] = {}
@@ -120,12 +134,7 @@ def build_documents(
 
     for fmt in selected_formats:
         output_file = output_path(dist_dir, variant, fmt)
-        plan = build_render_plan(
-            output_format=fmt,
-            theme=theme_obj,
-            style_preset=preset,
-            pdf_engine=pdf_engine,
-        )
+        plan = render_plans[fmt]
         if fmt == "html":
             plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
         render_requests.append(
@@ -191,6 +200,7 @@ def build_documents(
                 formats=selected_formats,
                 output_paths=output_paths,
                 metadata=metadata_future.result(),
+                configuration_sha256=configuration.sha256,
                 render={
                     "theme": theme_obj.id,
                     "theme_hash": theme_hash,

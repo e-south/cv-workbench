@@ -35,6 +35,27 @@ source of truth.
 
 ## Findings and disposition
 
+### High — default test discovery omitted the build domain — fixed
+
+The installed pytest default `norecursedirs` includes `build`. With no explicit
+override, `uv run pytest` silently omitted all 13 test-bearing files beneath
+`tests/build/`. Before this fix, default-suite counts in this audit describe
+only what pytest collected; the separately reported targeted build checks and
+installed-wheel journey remain distinct evidence.
+
+The repository now declares recursion exclusions explicitly and verifies that
+every test-bearing Python file appears in real default collection. The failing
+regression listed all 13 omitted files before the configuration change.
+This closes a false-green gate; discovery alone is not proof the newly included
+tests pass. Full execution and a repeatable collection check are required.
+
+Harness lane: `autonomy-hardening`, targeting deterministic verification (L2).
+The `architecture-invariants` endpoint requires zero omitted test-bearing files;
+the `knowledge-integrity` endpoint requires accurate verification scope in the
+owning contract and this audit. Failure lists identify the files to restore to
+collection. The source for the dependency behavior was the installed
+`_pytest/main.py` default configuration, verified locally.
+
 ### High — publication policy could be bypassed through the Python API — fixed
 
 [syncing.py](../../src/cvworkbench/ops/syncing.py) accepted a missing policy
@@ -236,6 +257,19 @@ with architecture tests (now enforced). Resolve configuration once per operation
 immutable workspace context; repeated ad hoc reads should not select mixed
 configuration generations during one build.
 
+Implemented configuration follow-up: `ConfigSnapshot` captures raw bytes,
+their digest, and deeply immutable values. Build/render adapters and the build
+engine pass one snapshot through their settings resolution. A file-change
+regression previously selected an absent replacement theme mid-build; it now
+builds with the captured generation and records its hash in both manifests.
+Configurable artifact paths reject empty/non-string values and retention days
+reject booleans. Invalid settings are resolved before build artifact writes;
+the regression suite previously found partial files for invalid theme, preset,
+theme directory, and output-path configuration. The
+[configuration contract](../reference/configuration-contract.md) distinguishes
+these guarantees from remaining workspace, publication/lifecycle, preview
+selection, and other-input snapshot work.
+
 ### Medium — artifact retention is not dependency-aware — partly fixed
 
 A read-only inventory found 25 expired proposal entries. `variant gc --json`
@@ -396,6 +430,27 @@ The seven-step isolated journey passed with empty stderr; its summary is
 `/tmp/cvw-publication-boundary-journey.json`. Canonical master and public
 candidate hashes remained unchanged, and the personal-site checkout was clean.
 
+Configuration/discovery follow-up: the corrected default suite passed 540 tests
+with one opt-in remote integration skip and the same five upstream warnings.
+Default collection omitted zero test-bearing files in three consecutive checks,
+down from 13 omitted build-domain files. The full log is
+`/tmp/cvw-configuration-inclusive-final.log`; collection red/green evidence is in
+`/tmp/cvw-discovery-*.log`. Configuration regressions prove one workbench read
+per build/render invocation, immutable captured values, correct config hashes
+despite file edits, and no build artifacts for invalid render/path settings.
+Their red/green logs are `/tmp/cvw-config-*.log`. Additional cases reject
+malformed source paths and explicit optional render settings with field-specific
+errors. Shared YAML aliases remain compact in both immutable snapshots and
+independent mutable exports; a 25-level alias graph retains 26 containers in
+each representation rather than expanding repeated subtrees.
+
+The seven deterministic context/workflow/bootstrap/status snapshots remained
+byte-identical. The isolated seven-step journey passed with empty stderr;
+its summary is `/tmp/cvw-configuration-journey.json`. Ruff checks and the
+harness-engineering skill audit passed. The site and canonical source remain
+outside this implementation scope; the live publication is still
+`review_required`.
+
 Useful verification commands:
 
 ```bash
@@ -421,8 +476,8 @@ review item. No exploit against an external destination was attempted.
 
 Portability, preview presentation extraction, and publication freshness/review
 contracts, workspace inspection, and workflow-family extraction are complete.
-Next address operation-scoped configuration and the remaining status/project
-command orchestration. Follow with semantic document styles and further
+Next extend explicit configuration snapshots beyond build/render and address
+the remaining status/project command orchestration. Follow with semantic document styles and further
 owner-bounded decomposition, each behind its own behavior tests. Extend retention
 to standalone draft references and inspect historical untracked bundles before
 pruning the workspace. Keep the personal

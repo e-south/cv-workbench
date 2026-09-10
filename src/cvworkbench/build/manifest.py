@@ -79,10 +79,12 @@ def build_manifest(
     formats: list[str],
     output_paths: dict[str, Path],
     metadata: ManifestMetadata,
+    configuration_sha256: str,
     render: dict[str, Any] | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     payload = {
+        "configuration": {"sha256": configuration_sha256},
         "variant": {
             "id": variant.id,
             "document_type": variant.document_type,

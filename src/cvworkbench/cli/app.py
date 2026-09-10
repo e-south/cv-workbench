@@ -41,6 +41,7 @@ from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, res
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
 from cvworkbench.cli.publication import prepare_public_pdf_command, publication_app, sync
 from cvworkbench.config import (
+    read_config,
     resolve_config_path,
     resolve_default_theme,
     resolve_default_variant,
@@ -4207,12 +4208,16 @@ def build(
     ] = False,
 ) -> None:
     configure_output_mode(plain, json_output)
+    try:
+        configuration = read_config(config)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     project_spec = None
     variant_path_override = None
     run_dir = None
     if project:
-        config_path = resolve_config_path(config)
-        project_dir = resolve_project_dir(project, config_path)
+        project_dir = resolve_project_dir(project, configuration)
         try:
             project_spec = load_project(project_dir)
         except ProjectError as exc:
@@ -4229,11 +4234,11 @@ def build(
             raise typer.Exit(code=1) from exc
         if sot_path is not None:
             try:
-                resolved = resolve_sot_path(sot_path, config_path)
+                resolved = resolve_sot_path(sot_path, configuration)
             except (FileNotFoundError, ValueError) as exc:
                 typer.echo(f"ERROR: {exc}", err=True)
                 raise typer.Exit(code=1) from exc
-        runs_root = resolve_runs_path(config_path) / "projects" / project_spec.project_id
+        runs_root = resolve_runs_path(configuration) / "projects" / project_spec.project_id
         runs_root.mkdir(parents=True, exist_ok=True)
         run_dir = create_run_dir(runs_root)
         try:
@@ -4247,7 +4252,7 @@ def build(
             raise typer.Exit(code=1) from exc
     else:
         try:
-            resolved = resolve_sot_path(sot_path, config)
+            resolved = resolve_sot_path(sot_path, configuration)
         except (FileNotFoundError, ValueError) as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc
@@ -4262,7 +4267,7 @@ def build(
     try:
         result = build_documents(
             sot_path=resolved,
-            config_path=config,
+            config_path=configuration,
             variant_id=variant,
             formats=parsed_formats,
             theme=theme,
@@ -4342,15 +4347,15 @@ def render(
         raise typer.Exit(code=1)
 
     try:
-        resolved_variant = variant or resolve_default_variant(config)
-        variant_path = resolve_variant_path(resolved_variant, config)
+        configuration = read_config(config)
+        resolved_variant = variant or resolve_default_variant(configuration)
+        variant_path = resolve_variant_path(resolved_variant, configuration)
         resolved = load_variant(variant_path)
-        dist_dir = resolve_dist_path(config) / resolved.id
-        dist_dir.mkdir(parents=True, exist_ok=True)
-        pdf_engine = resolve_pdf_engine(config)
-        theme_id = theme or resolved.render_theme or resolve_default_theme(config)
-        preset = style_preset or resolved.render_style_preset or resolve_style_preset(config)
-        theme_dir = resolve_themes_dir(config)
+        dist_dir = resolve_dist_path(configuration) / resolved.id
+        pdf_engine = resolve_pdf_engine(configuration)
+        theme_id = theme or resolved.render_theme or resolve_default_theme(configuration)
+        preset = style_preset or resolved.render_style_preset or resolve_style_preset(configuration)
+        theme_dir = resolve_themes_dir(configuration)
         theme_obj = resolve_theme(theme_dir, theme_id)
     except (FileNotFoundError, ValueError, ThemeError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -4362,6 +4367,17 @@ def render(
     if not parsed_formats:
         typer.echo("ERROR: No output formats selected", err=True)
         raise typer.Exit(code=1)
+    try:
+        render_plans = {
+            fmt: build_render_plan(
+                output_format=fmt, theme=theme_obj, style_preset=preset, pdf_engine=pdf_engine
+            )
+            for fmt in parsed_formats
+        }
+    except (RenderError, ThemeError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    dist_dir.mkdir(parents=True, exist_ok=True)
     filters_path = filters_dir()
     resolved_filter_paths = resolve_filter_paths(filters_path)
     render_requests: list[RenderRequest] = []
@@ -4369,12 +4385,7 @@ def render(
     for fmt in parsed_formats:
         output_file = output_path(dist_dir, resolved, fmt)
         try:
-            plan = build_render_plan(
-                output_format=fmt,
-                theme=theme_obj,
-                style_preset=preset,
-                pdf_engine=pdf_engine,
-            )
+            plan = render_plans[fmt]
             if fmt == "html":
                 plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
             render_requests.append(

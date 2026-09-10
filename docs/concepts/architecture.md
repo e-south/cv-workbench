@@ -110,10 +110,13 @@ in `tests/workspace/test_boundaries.py` enforce these import directions, includi
 local and relative imports. Describing a command never executes it.
 
 Inspection reuses each validated source payload for its section/tag summaries.
-This is not a transaction across all configuration and artifact reads. Resolving
-one immutable configuration snapshot per operation remains a separate contract
-improvement. Status and several command adapters also retain orchestration that
-can move behind these owners as their behavior is characterized.
+This is not a transaction across all configuration and artifact reads.
+`config.py::ConfigSnapshot` gives build and render an explicit immutable
+workbench configuration generation, recorded by hash in build manifests. The
+[configuration contract](../reference/configuration-contract.md) defines
+resolution, preflight, and the remaining adoption boundaries. Status and several
+command adapters retain orchestration that can move behind workspace owners as
+their behavior is characterized.
 
 ## Preview presentation boundary
 
