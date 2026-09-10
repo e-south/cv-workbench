@@ -214,4 +214,4 @@ def apply(
     except (ApplyError, ProjectError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    _print_apply_summary(draft, result.patch_path, result.status, result.reason, sot_path)
+    _print_apply_summary(draft, result.patch_path, result.status, result.reason, result.sot_path)

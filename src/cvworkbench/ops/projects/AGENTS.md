@@ -25,6 +25,11 @@
 - Validate inputs before artifact writes. Project creation, retargeting, patch
   application, and proposal registration need explicit failure and recovery
   behavior; moving code does not establish transaction safety.
+- `patches.py::apply_project_patch` resolves and returns the selected source
+  directory before compiling and applying. Route version-pack semantics through
+  `inputs/sot_versions.py`; adapters report the operation's returned directory.
+  Follow `docs/reference/patch-application.md#source-selection` for authority
+  and active-pointer lifetime.
 - `patch_authoring.py` owns proposal append validation, locking, and recoverable
   saves. Use `patches.py::read_project_patch_document` for bytes and parsed data
   from one read; keep compilation and source guards in `patches.py`. Follow

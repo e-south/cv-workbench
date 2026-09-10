@@ -338,6 +338,11 @@ outside the captured boundaries. Adopt explicit snapshots at those operation
 boundaries with their own behavior tests. Do not infer that accepting
 `ConfigSource` alone proves a whole caller uses one generation.
 
+Explicit draft/project application resolves its supplied or recorded source
+once and reports the concrete directory. Its [source-selection contract](patch-application.md#source-selection)
+owns version-pack behavior; this is independent of a workbench configuration
+snapshot or an immutable source-content bundle.
+
 Verification:
 
 ```bash

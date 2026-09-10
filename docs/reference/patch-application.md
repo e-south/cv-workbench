@@ -18,8 +18,8 @@ metadata still owns whether a reviewed edit is eligible to apply. See the
 
 ## Operator behavior
 
-`cvw project apply` and `cvw apply` retain their existing command names and
-selection rules. Preparation for project builds/previews uses the same executor
+`cvw project apply` and `cvw apply` share source-version selection. Preparation
+for project builds/previews uses the same executor
 against an owned source copy. Explicit application changes the selected source;
 building or previewing does not authorize live source changes.
 
@@ -35,6 +35,40 @@ If recovery is incomplete, the error identifies retained backups. Inspect those
 paths before retrying. A successful retry requires reviewing the current source
 and proposed changes again. The executor does not create or clean up source-side
 `.cvw.patch.tmp`, `.orig`, or `.rej` temporary artifacts; unrelated files survive.
+
+## Source selection
+
+`inputs/sot_versions.py::resolve_active_sot_path` owns flat-directory versus
+version-pack resolution. Both application operations resolve the requested
+source once before reading or compiling their patch. A pack root selects the
+directory named by `ACTIVE`; an explicit `versions/<name>` directory stays
+pinned regardless of the pack's active version. Flat source directories remain
+supported. Root-level source files do not override a pack's selected version.
+
+`cvw project apply` uses the recorded project source unless `--sot-path` is
+supplied. `cvw apply` requires that explicit source option. Neither command
+falls back to a different configured source. Application owns this decision,
+so Python and CLI callers follow the same rule:
+
+- `apply_draft(...)` returns the concrete directory in `ApplyResult.sot_path`.
+- `apply_project_patch(...)` returns that directory as a `Path`.
+- CLI summaries report this selected directory in their existing `sot_path`
+  field, including no-op draft results.
+
+Presence of either `ACTIVE` or `versions` reserves the version-pack layout.
+Incomplete packs, unreadable or malformed active selections, missing/non-directory
+versions, and active paths escaping the pack's versions directory are errors.
+They must not silently select leftover files in the parent directory.
+
+Changing `ACTIVE` after resolution does not retarget an in-flight application;
+the next invocation selects again. This pins a directory, not an immutable
+source version. Existing expected-text/byte guards still reject observed source
+conflicts under the recovery limits below. This does not make version activation
+and application a locked transaction.
+
+`tests/ops/test_apply_selection.py` exercises real draft/project application,
+explicit overrides, pinned versions, invalid packs, and an active-pointer change
+after selection. See [version-pack usage](../howto/sot-versions.md).
 
 ## Supported inputs
 

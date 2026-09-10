@@ -223,6 +223,20 @@ def test_patch_application_routes_its_shared_execution_and_recovery_contract() -
         assert "patch-application.md" in (ROOT / relative).read_text()
 
 
+def test_apply_source_selection_routes_one_owner_and_version_usage() -> None:
+    contract = (ROOT / "docs/reference/patch-application.md").read_text()
+    assert "## Source selection" in contract
+    assert "inputs/sot_versions.py::resolve_active_sot_path" in contract
+    assert "ApplyResult.sot_path" in contract
+    assert "tests/ops/test_apply_selection.py" in contract
+    for relative in (
+        "docs/howto/sot-versions.md",
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/projects/AGENTS.md",
+    ):
+        assert "patch-application.md#source-selection" in (ROOT / relative).read_text()
+
+
 def test_proposal_authoring_routes_its_owner_and_recovery_contract() -> None:
     contract = (ROOT / "docs/reference/project-contract.md").read_text()
     rules = (ROOT / "src/cvworkbench/ops/projects/AGENTS.md").read_text()

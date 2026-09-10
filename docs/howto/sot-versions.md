@@ -13,6 +13,11 @@ Use version packs to experiment safely without overwriting your canonical SoT.
 Each version lives under `local/sot/versions/<name>/`, with `local/sot/ACTIVE` selecting the
 current version.
 
+When applying an edit, pass the pack root to select `ACTIVE`, or pass a concrete
+`versions/<name>` directory to keep that edit pinned. The command reports the
+directory it edited. See the [application selection contract](../reference/patch-application.md#source-selection)
+for project defaults, invalid-pack errors, and in-flight selection behavior.
+
 ## List versions
 
 ```bash

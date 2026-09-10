@@ -17,6 +17,7 @@ from typing import Any
 
 import yaml
 
+from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 from cvworkbench.ops.patches import PatchError, apply_patch_text
 from cvworkbench.ops.projects.records import (
     _PROJECT_OP_REPLACE_EXPERIENCE_BULLET,
@@ -77,12 +78,17 @@ def compile_project_patch(*, patch: ProjectPatch, sot_path: Path | None = None) 
     return _compile_project_operations(operations=patch.operations, sot_path=sot_path)
 
 
-def apply_project_patch(*, project_dir: Path, sot_path: Path) -> None:
+def apply_project_patch(*, project_dir: Path, sot_path: Path) -> Path:
+    try:
+        sot_path = resolve_active_sot_path(sot_path)
+    except SotVersionError as exc:
+        raise ProjectError(str(exc)) from exc
     diff = load_project_patch(project_dir, sot_path=sot_path)
     try:
         apply_patch_text(patch_text=diff, cwd=sot_path)
     except PatchError as exc:
         raise ProjectError(str(exc)) from exc
+    return sot_path
 
 
 def _compile_project_operations(

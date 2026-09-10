@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 from cvworkbench.ops.patches import PatchError, apply_patch_file
 from cvworkbench.ops.projects.patches import compile_project_patch, load_project_patch_payload
 from cvworkbench.ops.projects.records import ProjectError
@@ -30,11 +31,16 @@ class ApplyResult:
     patch_path: Path
     status: str
     reason: str
+    sot_path: Path
 
 
 def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
     if not draft_dir.exists():
         raise ApplyError(f"Draft directory not found: {draft_dir}")
+    try:
+        sot_path = resolve_active_sot_path(sot_path)
+    except SotVersionError as exc:
+        raise ApplyError(str(exc)) from exc
     if not sot_path.exists():
         raise ApplyError(f"SoT path not found: {sot_path}")
 
@@ -75,6 +81,7 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
                 patch_path=patch_payload_path,
                 status="no_changes",
                 reason=reason,
+                sot_path=sot_path,
             )
         try:
             from cvworkbench.ops.patches import apply_patch_text
@@ -86,6 +93,7 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
             patch_path=patch_payload_path,
             status="applied",
             reason="mutation_applied",
+            sot_path=sot_path,
         )
 
     if not patch_path.exists():
@@ -96,6 +104,7 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
             patch_path=patch_path,
             status="no_changes",
             reason="empty_patch",
+            sot_path=sot_path,
         )
 
     try:
@@ -106,6 +115,7 @@ def apply_draft(*, draft_dir: Path, sot_path: Path) -> ApplyResult:
         patch_path=patch_path,
         status="applied",
         reason="mutation_applied",
+        sot_path=sot_path,
     )
 
 

@@ -270,16 +270,11 @@ def project_apply(
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    resolved_sot = spec.sot_path
-    if sot_path is not None:
-        try:
-            resolved_sot = resolve_sot_path(sot_path, config_path)
-        except (FileNotFoundError, ValueError) as exc:
-            typer.echo(f"ERROR: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
-
     try:
-        apply_project_patch(project_dir=project_dir, sot_path=resolved_sot)
+        resolved_sot = apply_project_patch(
+            project_dir=project_dir,
+            sot_path=sot_path if sot_path is not None else spec.sot_path,
+        )
     except ProjectError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
