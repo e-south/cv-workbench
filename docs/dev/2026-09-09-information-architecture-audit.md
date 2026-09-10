@@ -171,13 +171,23 @@ the UI contracts, real HTTP boundary, controller behavior, and installed-wheel
 asset availability. Publication command adapters now live in
 `cli/publication.py`; lifecycle code is grouped under `ops/publication/` with
 scoped owner guidance. Publication inspection and workflow description have a
-workspace module shared by context and status. Broader CLI/context decomposition
-below remains open.
+workspace module shared by context and status.
+
+Workspace inspection now lives in `workspace/context.py`, backed by separate
+source, variant, run, project, review, publication, and project-guidance owners.
+`cli/app.py` is 5,163 lines; further command-adapter extraction remains open.
+The recipe catalog selects and orders descriptions from setup, build, review,
+project, and maintenance modules. No recipe body spans the whole product flow.
+The inspection API raises domain exceptions without terminal output; the CLI
+retains its prior messages and exit codes. Seven deterministic before/after CLI
+snapshots match byte-for-byte, including strict failure and explicit source
+selection. Import-direction tests protect workspace/adapter and domain owners.
 
 Proposed extraction order:
 
-1. Move context inspection and recipe construction into workspace modules with
-   typed results; leave CLI parsing and output adapters thin.
+1. Context and recipe extraction is complete. Further reduce status and
+   project-guide orchestration in CLI adapters; give configuration resolution
+   an operation-scoped contract before introducing shared snapshots.
 2. Publication command extraction is complete. Register review, tailoring and
    build commands from their own CLI modules without changing command syntax.
 3. Preview asset extraction is complete. Continue separating server transport
@@ -188,7 +198,7 @@ Proposed extraction order:
 
 AST import inspection found no build-layer imports of CLI, preview, or ops and
 no non-CLI module importing the CLI. Preserve those useful dependency directions
-with architecture tests. Resolve configuration once per operation into an
+with architecture tests (now enforced). Resolve configuration once per operation into an
 immutable workspace context; repeated ad hoc reads should not select mixed
 configuration generations during one build.
 
@@ -326,6 +336,19 @@ suite log is `/tmp/cvw-review-verified-tests.log`. The live workspace still
 reports the public CV as `review_required`; canonical master and site Git state
 were rechecked unchanged. No live review bundle or private run was replaced.
 
+Workspace/recipe extraction follow-up: 415 tests passed, including the installed
+wheel journey, with the same one opt-in remote integration skip and five
+upstream warnings. All seven deterministic CLI snapshots were byte-identical
+after extraction: full, compact, explicit-source, and strict-failure context;
+workflow; bootstrap; and status. The separate seven-step build/review journey
+passed with empty stderr. New API tests verify quiet, repeatable, read-only
+inspection and strict exceptions; architecture tests enforce import direction.
+Existing no-reload tests now observe real source-file reads. An AST comparison
+confirmed equivalent bodies for 167 definitions after owner/name changes,
+excluding the intentional strict-error adapter change and recipe decomposition.
+Evidence: `/tmp/cvw-workspace-full.log`, `/tmp/cvw-workspace-journey.json`, and
+the before/after workspace named by `/tmp/cvw-workspace-contract-root.txt`.
+
 Useful verification commands:
 
 ```bash
@@ -350,8 +373,9 @@ review item. No exploit against an external destination was attempted.
 ## Recommended next increment
 
 Portability, preview presentation extraction, and publication freshness/review
-contracts are complete. Next extract remaining context/workflow decisions from
-the CLI. Follow with semantic document styles and further
+contracts, workspace inspection, and workflow-family extraction are complete.
+Next address operation-scoped configuration and the remaining status/project
+command orchestration. Follow with semantic document styles and further
 owner-bounded decomposition, each behind its own behavior tests. Extend retention
 to standalone draft references and inspect historical untracked bundles before
 pruning the workspace. Keep the personal

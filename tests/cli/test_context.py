@@ -451,7 +451,10 @@ def test_context_compact_limits_run_scan_to_latest(tmp_path: Path, monkeypatch) 
 
     seen: dict[str, int] = {}
 
-    def fake_latest_runs_by_variant(
+    runs_module = importlib.import_module("cvworkbench.workspace.runs")
+    original_latest_runs = runs_module.latest_runs_by_variant
+
+    def track_latest_runs_by_variant(
         config_path: Path,
         *,
         limit: int = 3,
@@ -459,10 +462,11 @@ def test_context_compact_limits_run_scan_to_latest(tmp_path: Path, monkeypatch) 
     ):
         seen["limit"] = limit
         seen["include_project_runs"] = int(include_project_runs)
-        return {}, []
+        return original_latest_runs(
+            config_path, limit=limit, include_project_runs=include_project_runs
+        )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "latest_runs_by_variant", fake_latest_runs_by_variant)
+    monkeypatch.setattr(runs_module, "latest_runs_by_variant", track_latest_runs_by_variant)
 
     runner = CliRunner()
     result = runner.invoke(app, ["context", "--json", "--compact", "--config", str(config_path)])
@@ -482,12 +486,16 @@ def test_context_uses_validated_payload_without_reloading_sot(tmp_path: Path, mo
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    reads: list[Path] = []
+    original_read_text = Path.read_text
+    source_root = (tmp_path / "sot.sample").resolve()
 
-    def fail_load_sot(*_args, **_kwargs):
-        raise AssertionError("context should not reload the SoT after validation")
+    def track_read_text(path, *args, **kwargs):
+        if path.resolve().parent == source_root and path.suffix == ".yaml":
+            reads.append(path.resolve())
+        return original_read_text(path, *args, **kwargs)
 
-    monkeypatch.setattr(app_module, "load_sot", fail_load_sot)
+    monkeypatch.setattr(Path, "read_text", track_read_text)
 
     runner = CliRunner()
     result = runner.invoke(app, ["context", "--json", "--config", str(config_path)])
@@ -495,6 +503,9 @@ def test_context_uses_validated_payload_without_reloading_sot(tmp_path: Path, mo
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["sot"]["status"] == "ready"
+
+    assert set(reads) == {path.resolve() for path in source_root.glob("*.yaml")}
+    assert len(reads) == len(set(reads))
 
 
 def test_status_uses_validated_payload_without_reloading_sot(tmp_path: Path, monkeypatch) -> None:
@@ -507,12 +518,16 @@ def test_status_uses_validated_payload_without_reloading_sot(tmp_path: Path, mon
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    reads: list[Path] = []
+    original_read_text = Path.read_text
+    source_root = (tmp_path / "sot.sample").resolve()
 
-    def fail_load_sot(*_args, **_kwargs):
-        raise AssertionError("status should not reload the SoT after validation")
+    def track_read_text(path, *args, **kwargs):
+        if path.resolve().parent == source_root and path.suffix == ".yaml":
+            reads.append(path.resolve())
+        return original_read_text(path, *args, **kwargs)
 
-    monkeypatch.setattr(app_module, "load_sot", fail_load_sot)
+    monkeypatch.setattr(Path, "read_text", track_read_text)
 
     runner = CliRunner()
     result = runner.invoke(app, ["status", "--json", "--config", str(config_path)])
@@ -520,6 +535,9 @@ def test_status_uses_validated_payload_without_reloading_sot(tmp_path: Path, mon
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["sot"]["path"] == str((tmp_path / "sot.sample").resolve())
+
+    assert set(reads) == {path.resolve() for path in source_root.glob("*.yaml")}
+    assert len(reads) == len(set(reads))
 
 
 def test_context_compact_rejects_plain_output(tmp_path: Path) -> None:
@@ -959,7 +977,7 @@ def test_context_recommended_workflows_ignore_review_ready_nondefault_variants(
 
 
 def test_run_is_review_ready_rejects_outputs_outside_run_dir(tmp_path: Path) -> None:
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    runs_module = importlib.import_module("cvworkbench.workspace.runs")
     run_dir = tmp_path / "var" / "runs" / "2026-03-10T00-00-00Z"
     run_dir.mkdir(parents=True, exist_ok=True)
     outside_dir = tmp_path / "shared"
@@ -969,7 +987,7 @@ def test_run_is_review_ready_rejects_outputs_outside_run_dir(tmp_path: Path) -> 
     (run_dir / "selection.json").write_text('{"items": []}\n')
 
     assert (
-        app_module._run_is_review_ready(
+        runs_module.run_is_review_ready(
             {
                 "path": str(run_dir),
                 "outputs": {"pdf": "../shared/cv.pdf", "docx": "../shared/cv.docx"},

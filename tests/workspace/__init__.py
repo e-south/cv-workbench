@@ -1,9 +1,9 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/workspace/__init__.py
+cv-workbench/tests/workspace/__init__.py
 
-Read-only workspace inspection and workflow guidance.
+Tests workspace inspection and workflow APIs.
 
 Module Author(s): Eric J. South
 --------------------------------------------------------------------------------

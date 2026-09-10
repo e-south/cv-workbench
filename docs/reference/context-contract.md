@@ -44,6 +44,35 @@ Missing inputs are surfaced explicitly in the payload.
 - `recipes` includes an explicit `project.inspect` lane so agents can inspect a
   proposal before previewing, reviewing, or applying it.
 
+## Python inspection API
+
+```python
+from pathlib import Path
+from cvworkbench.workspace.context import inspect_workspace
+
+state = inspect_workspace(
+    config=Path("config/workbench.yaml"),
+    sot_path=None,
+    strict=False,
+    compact=False,
+)
+```
+
+The API returns the context state without a CLI `command` envelope. It performs
+local reads and returns data without printing or writing workspace files. With
+`strict=False`, recoverable inventory problems appear in `issues` and the
+corresponding section. With `strict=True`, the first such problem raises
+`ValueError`. An unreadable or invalid workbench configuration fails in either
+mode. CLI adapters translate these errors into their terminal message and exit
+code; Python callers handle the exception themselves.
+
+`compact=True` limits inventory work (for example, one recent run per variant)
+and omits detailed run/project/review items. The API still returns full recipe
+descriptions. CLI compact presentation additionally reduces source/variant
+details and recipes to the documented summary representation. See the
+[architecture owner map](../concepts/architecture.md#workspace-inspection-and-command-adapters)
+before extending inspection or recipe behavior.
+
 ## Payload (JSON)
 
 Top-level keys:

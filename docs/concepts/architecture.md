@@ -80,6 +80,41 @@ copied themes or configuration takes effect without reinstalling. The
 [distribution test](../reference/verify-contract.md#installed-distribution)
 checks this boundary with checkout imports excluded.
 
+## Workspace inspection and command adapters
+
+`workspace/context.py::inspect_workspace` composes local inventories into the
+context payload. It has no terminal output and performs no workspace writes.
+CLI adapters own command parsing, output formatting, and exception-to-exit-code
+translation. The [context contract](../reference/context-contract.md#python-inspection-api)
+defines the callable API and its error semantics.
+
+| Responsibility | Owner beneath `src/cvworkbench/` |
+| --- | --- |
+| Source files, sections, tags, and version inventory | `workspace/source.py` |
+| Configured variants and proposal inbox | `workspace/variants.py` |
+| Build history and review readiness | `workspace/runs.py` |
+| Project inventory and available project commands | `workspace/projects.py` |
+| Job evidence, variant recommendations, and proposal planning | `workspace/project_guidance.py` |
+| Content-review inventory and source health | `workspace/reviews.py` |
+| Authored publication state and review/sync recipe | `workspace/publication.py` |
+| Command quoting and workspace/source argument propagation | `workspace/commands.py` |
+| Recipe selection and ordering | `workspace/workflows/catalog.py` |
+| Setup, build, review, project, and maintenance recipe descriptions | Corresponding modules in `workspace/workflows/` |
+| Step metadata and state-based recommendations | `workspace/workflows/steps.py`, `recommendations.py` |
+
+Dependencies flow from CLI adapters through workspace inspection to operations
+and inputs. Workspace code does not import CLI/preview controllers or terminal
+libraries; build and input code do not import operations, workspace inspection,
+or adapters. Operations do not import workspace inspection. Architecture tests
+in `tests/workspace/test_boundaries.py` enforce these import directions, including
+local and relative imports. Describing a command never executes it.
+
+Inspection reuses each validated source payload for its section/tag summaries.
+This is not a transaction across all configuration and artifact reads. Resolving
+one immutable configuration snapshot per operation remains a separate contract
+improvement. Status and several command adapters also retain orchestration that
+can move behind these owners as their behavior is characterized.
+
 ## Preview presentation boundary
 
 `dev/preview.py` owns the local controller and server; `dev/preview_http.py`
