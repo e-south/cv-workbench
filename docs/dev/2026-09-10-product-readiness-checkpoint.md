@@ -86,9 +86,20 @@ Remaining document work concerns semantic authored-document styles and tagged
 PDF output. The authored DOCX still has 90 default/direct paragraphs and 31 list
 paragraphs; the authored public PDF has no bookmarks or structure tree. The
 generated DOCX has heading styles, but its PDF also lacks a structure tree.
-Browser inspection also shows that the stacked preview controls consume the
-first screen near the responsive breakpoint; a compact responsive-control pass
-would improve access to the document itself.
+The preview-control follow-up now keeps the document visible before scrolling.
+At 961 × 800, its top moved from 1,067 to 421 pixels; at 500 × 800, from 1,202 to
+413 pixels. Native **Document settings** and **Build details** sections disclose
+secondary information, while project, variant, format, actions, errors, and warnings stay
+visible. The live [preview contract](../reference/preview-contract.md#preview-controls)
+owns this interaction and the presentation-file boundaries.
+
+Browser checks at 320, 375, 500, 961, and 1,440 pixels found no horizontal overflow
+in the shell or inspected HTML document. Keyboard disclosure, shortcut guards,
+the document skip link, real styling rebuilds, and Markdown/PDF switching passed.
+This is a local Chrome check, not a complete assistive-technology or browser
+compatibility assessment. Expanded settings and long warnings can still need
+scrolling. The preview slice passed 1,078 tests (one existing opt-in skip), the
+seven-step CLI harness, and the 82-test preview/documentation regression group.
 
 The contact slice passed 1,060 tests (one existing opt-in skip), the seven CLI
 verification journeys, and real resume/cover-letter link checks across HTML,
@@ -106,8 +117,8 @@ while the remaining acceptance work below stays explicit.
 
 1. **Document quality and workflow clarity.** The generated-document walk and
    edited-DOCX round trip now have direct evidence. Finish the bounded remaining
-   work on authored-document heading semantics, PDF structure, and compact
-   preview controls. Retain an inspectable output and specific acceptance checks;
+   work on authored-document heading semantics and PDF structure. Retain an
+   inspectable output and specific acceptance checks;
    automated fidelity checks alone cannot approve appearance.
 2. **Authority at consequential actions.** Trace the selected source version
    and configuration through apply and publication commands. Change code only

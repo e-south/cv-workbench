@@ -132,6 +132,27 @@ must use one valid `Content-Length`, contain at most 16,384 bytes, arrive in ful
 and decode as UTF-8 JSON. Chunked, malformed, oversized, and truncated bodies
 fail before rebuilding. Socket reads have a 10-second timeout.
 
+## Preview controls
+
+Start with the document: active project, variant selection, format buttons,
+Rebuild, Stop, and current status remain visible. **Document settings** expands
+theme, preset, and automatic PDF option. **Build details** expands the selected
+configuration, project guidance, recent builds, and keyboard shortcuts. Both
+sections start closed and use native keyboard-operable disclosure controls.
+Errors and project warnings stay outside the collapsed sections.
+
+At narrow widths the controls move above the document. The initial view reserves
+space for the document by collapsing secondary information, rather than hiding
+controls behind a custom drawer. A **Skip to document** link is available on
+keyboard focus. Opening details changes layout only; it does not rebuild.
+Build and warning content can increase the controls' height when needed.
+
+`dev/assets/preview/index.html` owns the semantic structure, `layout.css` owns
+spacing, color, and responsive rules, and `controller.js` owns existing state and
+actions. `dev/presentation.py` inlines these package assets; the shell requires
+no external fonts, scripts, or styling requests. The document's own typography
+belongs to its selected theme, separately from the preview controls.
+
 ## UI control selectors (stable)
 
 Browser automation should target the stable `data-cvw-*` hooks:
@@ -189,7 +210,7 @@ content editor.
   tabs for the same `session_id`; the tabs remain open but visibly disabled.
 - Keyboard shortcuts are ignored while focus is inside interactive controls so
   agents/operators do not accidentally rebuild or switch variants while
-  navigating the sidebar.
+  navigating the sidebar. This includes expandable section headings.
 - Browser inactivity auto-stops the preview server after 30 seconds by default.
   Set `CVW_DEV_IDLE_TIMEOUT_SECONDS=0` to disable the idle timeout.
 - If the preview API becomes unreachable, the error status shows a

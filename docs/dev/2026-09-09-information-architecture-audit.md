@@ -1740,6 +1740,61 @@ The site worktree is clean. No push, site sync, publication approval, or remote
 advisory check occurred. The handoff decision is **pass** for entry structure,
 DOCX syntax normalization, and the strengthened no-op verification gate.
 
+### Medium — preview controls displaced the document — fixed with progressive disclosure
+
+The live preview put every settings and diagnostic group above the document at
+narrow widths. At 961 × 800, the document began at 1,066.7 pixels; at 500 × 800,
+it began at 1,202.5 pixels. An initial browser acceptance check requiring 300
+visible document pixels failed with zero. This obstructed the primary task of
+reviewing the generated document.
+
+The existing presentation assets now provide a quieter sidebar and compact
+stacked controls. Active project, variant selection, formats, actions, status,
+errors, and project warnings remain visible. Native closed-by-default disclosures own secondary
+settings and build details; there is no new drawer state or framework. A viewport
+declaration, keyboard skip link, semantic region names, stronger control borders,
+and 44-pixel main controls improve navigation. Stable `data-cvw-*` hooks and the
+rendering API remain intact. The document theme still owns document typography.
+
+Live keyboard testing exposed a related defect after adding disclosure headings:
+pressing `r` on a focused summary caused one render request. Including summaries
+in the existing interactive-control guard reduced that count to zero, while
+Enter still opened and closed the disclosure. Expanding build details preserved
+both the frame URL and build id. Synthetic warning/error checks confirmed that
+messages remain visible with details closed and warning markup remains literal.
+
+Final browser measurements with the modern document preset:
+
+| Viewport | Document top | Initially visible document height |
+| --- | --- | --- |
+| 1,440 × 900 | 24 px | 852 px |
+| 961 × 800 | 421 px | 379 px |
+| 500 × 800 | 413 px | 387 px |
+| 375 × 812, mobile | 413 px | 399 px |
+| 320 × 800, mobile | 413 px | 387 px |
+
+No inspected viewport had horizontal shell or HTML-document overflow. All format
+labels fit on one line. Measured muted-text contrast was 9.17:1; inactive button
+text was 12.38:1 and control borders against their fill were 4.04:1. Real preset
+changes rebuilt successfully; Markdown, PDF, and HTML switching worked. The
+browser reported no warning/error messages or external shell resource requests.
+These observations do not establish complete accessibility, screen-reader
+compatibility, or PDF reflow behavior. Expanded content can require scrolling.
+
+Verification: 34 baseline checks, 82 focused preview/documentation checks, and
+1,078 full-suite tests passed, with one existing opt-in integration skip and five
+upstream warnings. The seven-step isolated CLI harness passed with empty stderr.
+The final project-identity layout refinement passed 50 preview/documentation
+checks and repeated all five viewport measurements. Stop visibly disabled the
+controls and both owned preview processes exited successfully. Commit hooks,
+including the hardcoded-secret scan, passed.
+Evidence: `/tmp/cvw-preview-layout-{baseline,focused,regression,full}.log`,
+`/tmp/cvw-preview-layout-journey.json`, and the isolated fixture's
+`var/runs/preview/compact-controls-review/` screenshots, snapshot, and metrics.
+The original source facts, authored CV, prepared public PDF, and website remain
+unchanged. No publication approval, site sync, remote push, or advisory refresh
+belongs to this slice.
+
 ## Verification and limits
 
 Baseline: 326 tests passed, one opt-in remote PR integration test skipped. The

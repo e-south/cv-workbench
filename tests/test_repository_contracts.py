@@ -173,6 +173,9 @@ def test_preview_ownership_contract_routes_paths_and_retention() -> None:
     verification = (ROOT / "docs/reference/verify-contract.md").read_text()
     assert "## Artifact ownership" in preview
     assert "dev/preview_paths.py" in preview
+    assert "## Preview controls" in preview
+    assert "dev/assets/preview/index.html" in preview
+    assert "dev/presentation.py" in preview
     assert "artifact-retention.md#preview-artifacts" in preview
     assert "## Preview Artifacts" in retention
     assert "preview-contract.md#artifact-ownership" in retention

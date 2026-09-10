@@ -211,7 +211,7 @@ function renderOverlay(data) {
     statusEl.textContent = 'Preview stopped.';
   } else if (passiveController) {
     setControllerState('passive');
-    setControllerPill('passive', 'passive tab');
+    setControllerPill('passive', 'Other tab');
     statusEl.textContent = (
       controllerClaimAvailable ? CONTROLLER_AVAILABLE_MESSAGE : PASSIVE_CONTROLLER_MESSAGE
     ) + '.';
@@ -220,23 +220,23 @@ function renderOverlay(data) {
     return;
   } else if (pendingAction === 'render' && hasQueuedRender()) {
     setControllerState('active');
-    setControllerPill('active', 'active controller');
+    setControllerPill('active', 'Live');
     statusEl.textContent = 'Finishing current rebuild; next change queued...';
   } else if (pendingAction === 'render') {
     setControllerState('active');
-    setControllerPill('active', 'active controller');
+    setControllerPill('active', 'Live');
     statusEl.textContent = 'Rebuilding preview...';
   } else if (pendingAction === 'stop') {
     setControllerState('active');
-    setControllerPill('active', 'active controller');
+    setControllerPill('active', 'Live');
     statusEl.textContent = 'Stopping preview...';
   } else if (hasQueuedRender()) {
     setControllerState('active');
-    setControllerPill('active', 'active controller');
+    setControllerPill('active', 'Live');
     statusEl.textContent = 'Queued rebuild...';
   } else {
     setControllerState('active');
-    setControllerPill('active', 'active controller');
+    setControllerPill('active', 'Live');
     statusEl.textContent = 'Listening for changes...';
   }
   if (lastError) {
@@ -778,8 +778,8 @@ async function handleKey(event) {
   const isInteractive = (element) => {
     if (!element || typeof element.closest !== 'function') return false;
     if (element.isContentEditable) return true;
-    if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(element.tagName)) return true;
-    return Boolean(element.closest('button,select,input,textarea,a,[role="button"],[role="tab"]'));
+    if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A', 'SUMMARY'].includes(element.tagName)) return true;
+    return Boolean(element.closest('button,select,input,textarea,a,summary,[role="button"],[role="tab"]'));
   };
   if (isInteractive(active) || isInteractive(target)) return;
   const key = event.key.toLowerCase();

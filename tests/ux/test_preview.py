@@ -427,14 +427,14 @@ def test_preview_page_html_includes_responsive_layout_breakpoints() -> None:
 
     assert "@media (max-width: 1024px)" in html
     assert "@media (max-width: 640px)" in html
-    assert "grid-template-columns: repeat(2, 1fr);" in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
 
 
 def test_preview_keyboard_shortcuts_ignore_interactive_controls() -> None:
     html = preview_page_html()
 
-    assert "['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A']" in html
-    assert 'button,select,input,textarea,a,[role="button"],[role="tab"]' in html
+    assert "['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A', 'SUMMARY']" in html
+    assert 'button,select,input,textarea,a,summary,[role="button"],[role="tab"]' in html
 
 
 class _StubState:
