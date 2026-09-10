@@ -11,24 +11,19 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import copy
-import shutil
-from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from cvworkbench.build.manifest import build_manifest, collect_manifest_metadata, write_manifest
-from cvworkbench.build.paths import output_path
+from cvworkbench.build.artifacts import artifact_paths, write_build_artifacts
 from cvworkbench.build.planning import BuildPlan, plan_build
-from cvworkbench.build.rendering import RenderRequest, render_documents
-from cvworkbench.build.resume import write_resume
-from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.config import (
     ConfigSource,
     resolve_dist_path,
     resolve_runs_path,
 )
+from cvworkbench.storage import replace_files_atomically
 from cvworkbench.variants import Variant
 
 
@@ -80,129 +75,87 @@ def execute_build(
     dist_dir: Path | None = None,
     write_audit_artifacts: bool = True,
 ) -> BuildResult:
-    """Write and render a request-local plan while its render assets remain available."""
+    """Materialize a complete bundle before recoverable replacement of owned files."""
     configuration = build_plan.configuration
-    variant = build_plan.variant
-    selected_formats = build_plan.formats
-    theme_obj = build_plan.theme
-    preset = build_plan.style_preset
-    selection_payload = build_plan.selection_payload
-    dist_dir = dist_dir or (resolve_dist_path(configuration) / variant.id)
-    run_dir = _ensure_run_dir(resolve_runs_path(configuration), run_dir)
-    canonical_path = run_dir / "canonical.md"
-    canonical_path.write_text(build_plan.markdown)
-    resume_path: Path | None = None
-    if write_audit_artifacts:
-        resume_path = run_dir / "resume.json"
-        write_resume(resume_path, build_plan.resume_payload)
-        selection_path = run_dir / "selection.json"
-        selection_path.write_text(selection_payload)
+    dist_dir = dist_dir or (resolve_dist_path(configuration) / build_plan.variant.id)
+    destinations = artifact_paths(
+        build_plan,
+        run_dir=run_dir,
+        dist_dir=dist_dir,
+        write_audit_artifacts=write_audit_artifacts,
+    )
+    expected: dict[Path, bytes | None] = {}
+    for path in destinations.values():
+        try:
+            expected[path] = path.read_bytes()
+        except FileNotFoundError:
+            expected[path] = None
 
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    if write_audit_artifacts:
-        (dist_dir / "selection.json").write_text(selection_payload)
-
-    output_paths: dict[str, Path] = {}
-    render_details: dict[str, dict[str, str | None | list[str]]] = {}
-    render_requests: list[RenderRequest] = []
-    manifest_metadata_future: Future | None = None
-    manifest_executor: ThreadPoolExecutor | None = None
-
-    for fmt in selected_formats:
-        output_file = output_path(dist_dir, variant, fmt)
-        plan = build_plan.render_plans[fmt]
-        if fmt == "html":
-            plan = prepare_html_style(dist_dir, plan, theme_obj.id, preset)
-        render_requests.append(
-            RenderRequest(
-                input_path=canonical_path,
-                output_path=output_file,
-                variant=variant,
-                filters_dir=build_plan.filters_path,
-                output_format=fmt,
-                pdf_engine=build_plan.pdf_engine,
-                render_plan=plan,
+    with TemporaryDirectory(prefix="cvw-build-") as temporary:
+        stage_root = Path(temporary)
+        stage_run = stage_root / "run"
+        shared = run_dir is not None and run_dir.resolve() == dist_dir.resolve()
+        stage_dist = stage_run if shared else stage_root / "dist"
+        staged = artifact_paths(
+            build_plan,
+            run_dir=stage_run,
+            dist_dir=stage_dist,
+            write_audit_artifacts=write_audit_artifacts,
+        )
+        write_build_artifacts(
+            build_plan,
+            run_dir=stage_run,
+            dist_dir=stage_dist,
+            write_audit_artifacts=write_audit_artifacts,
+        )
+        # Capture completed payloads before reserving a persistent run.
+        contents = {key: path.read_bytes() for key, path in staged.items()}
+        allocated = run_dir is None
+        run_identity = None
+        if run_dir is None:
+            run_dir = create_run_dir(resolve_runs_path(configuration))
+            identity = run_dir.lstat()
+            run_identity = (identity.st_dev, identity.st_ino)
+        try:
+            if allocated:
+                destinations = artifact_paths(
+                    build_plan,
+                    run_dir=run_dir,
+                    dist_dir=dist_dir,
+                    write_audit_artifacts=write_audit_artifacts,
+                )
+                for (scope, _), path in destinations.items():
+                    if scope == "run":
+                        expected[path] = None
+            writes: dict[Path, tuple[Path, bytes]] = {}
+            for key, path in destinations.items():
+                writes[path.resolve()] = (path, contents[key])
+            # Metadata follows document writes; recovery covers the entire group.
+            ordered = sorted(writes.values(), key=lambda write: write[0].name == "manifest.json")
+            replace_files_atomically(
+                ordered,
+                expected_contents={path: expected[path] for path, _ in ordered},
             )
-        )
-
-    def _ensure_manifest_metadata_future() -> Future:
-        nonlocal manifest_executor, manifest_metadata_future
-        if manifest_metadata_future is not None:
-            return manifest_metadata_future
-        if resume_path is None:
-            raise RuntimeError("resume_path must be available when writing audit artifacts")
-        manifest_executor = ThreadPoolExecutor(max_workers=1)
-        manifest_metadata_future = manifest_executor.submit(
-            collect_manifest_metadata,
-            sot_hashes=build_plan.sot_hashes,
-            snippet_hashes=build_plan.snippet_hashes,
-            variant_hash=build_plan.variant_hash,
-            resume_path=resume_path,
-            pdf_engine=build_plan.pdf_engine,
-            repo_root=configuration.path.parent.parent,
-        )
-        return manifest_metadata_future
-
-    def _record_render_success(request: RenderRequest) -> None:
-        if write_audit_artifacts:
-            _ensure_manifest_metadata_future()
-        output_file = request.output_path
-        output_paths[request.output_format] = output_file
-        if write_audit_artifacts:
-            run_output = run_dir / output_file.name
-            if output_file.resolve() != run_output.resolve():
-                shutil.copy2(output_file, run_output)
-            plan = request.render_plan
-            if plan is None:
-                raise RuntimeError("render_plan must be available when writing audit artifacts")
-            render_details[request.output_format] = {
-                "to": plan.to,
-                "template": str(plan.template) if plan.template else None,
-                "pdf_engine": plan.pdf_engine,
-                "defaults": [str(path) for path in plan.defaults],
-                "style_path": str(plan.style_path) if plan.style_path else None,
-                "style_hash": plan.style_hash,
-            }
-
-    try:
-        render_documents(
-            render_requests,
-            filter_paths=build_plan.filter_paths,
-            after_each_success=_record_render_success,
-        )
-        if write_audit_artifacts:
-            metadata_future = _ensure_manifest_metadata_future()
-            dist_manifest = build_manifest(
-                variant=variant,
-                formats=selected_formats,
-                output_paths=output_paths,
-                metadata=metadata_future.result(),
-                configuration_sha256=configuration.sha256,
-                render={
-                    "theme": theme_obj.id,
-                    "theme_hash": build_plan.theme_hash,
-                    "style_preset": preset,
-                    "formats": render_details,
-                },
-            )
-            write_manifest(dist_dir / "manifest.json", dist_manifest)
-
-            # Reuse the deterministic manifest payload so build metadata is computed once.
-            run_manifest = copy.deepcopy(dist_manifest)
-            run_manifest["created_at"] = datetime.now(timezone.utc).isoformat()
-            write_manifest(run_dir / "manifest.json", run_manifest)
-    finally:
-        if manifest_executor is not None:
-            manifest_executor.shutdown(wait=False, cancel_futures=True)
+        except BaseException as exc:
+            if allocated:
+                try:
+                    current = run_dir.lstat()
+                    if (current.st_dev, current.st_ino) == run_identity:
+                        run_dir.rmdir()
+                    else:
+                        exc.add_note(f"Build run replaced during commit; preserved: {run_dir}")
+                except OSError:
+                    exc.add_note(f"Build run retained for inspection: {run_dir}")
+            raise
 
     return BuildResult(
-        variant=variant,
-        formats=selected_formats,
-        canonical_path=canonical_path,
+        variant=build_plan.variant,
+        formats=build_plan.formats,
+        canonical_path=run_dir / "canonical.md",
         dist_dir=dist_dir,
         run_dir=run_dir,
-        theme_id=theme_obj.id,
-        style_preset=preset,
+        theme_id=build_plan.theme.id,
+        style_preset=build_plan.style_preset,
     )
 
 
@@ -220,10 +173,3 @@ def create_run_dir(runs_root: Path) -> Path:
         return run_dir
 
     raise RuntimeError(f"Could not allocate unique run directory for timestamp: {base_timestamp}")
-
-
-def _ensure_run_dir(runs_root: Path, run_dir: Path | None) -> Path:
-    if run_dir is None:
-        return create_run_dir(runs_root)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir

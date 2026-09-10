@@ -18,10 +18,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cvworkbench.config import resolve_project_path, resolve_reviews_path
-from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.record import SOURCE_RECORD_NAME, create_source_record
 from cvworkbench.ops.review.targets import require_run_output, resolve_review_run
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
 
 
 @dataclass(frozen=True)

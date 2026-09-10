@@ -26,11 +26,12 @@ def prepare_html_style(
 ) -> RenderPlan:
     if plan.style_kind != "css" or plan.style_path is None:
         return plan
-    preset_id = preset or "default"
-    styles_dir = dist_dir / "styles"
-    styles_dir.mkdir(parents=True, exist_ok=True)
-    target_name = f"{theme_id}-{preset_id}.css"
-    target_path = styles_dir / target_name
+    relative_path = html_style_path(theme_id, preset)
+    target_path = dist_dir / relative_path
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(plan.style_path, target_path)
-    relative_path = Path("styles") / target_name
     return replace(plan, style_path=relative_path)
+
+
+def html_style_path(theme_id: str, preset: str | None) -> Path:
+    return Path("styles") / f"{theme_id}-{preset or 'default'}.css"

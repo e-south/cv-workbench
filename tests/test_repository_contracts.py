@@ -152,3 +152,16 @@ def test_docs_router_links_to_canonical_configuration_and_sample_sources() -> No
     ):
         assert (router.parent / links[path]).resolve() == (ROOT / path).resolve()
     assert "local/sot/" not in links
+
+
+def test_build_recovery_contract_routes_to_distinct_owners() -> None:
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    contract = (ROOT / "docs/reference/configuration-contract.md").read_text()
+    assert "configuration-contract.md#build-bundle-recovery" in architecture
+    for owner in ("build/planning.py", "build/artifacts.py", "build/pipeline.py", "storage.py"):
+        assert owner in architecture
+        assert (ROOT / "src/cvworkbench" / owner).is_file()
+    assert "### Build bundle recovery" in contract
+    assert "tests/build/test_bundle_recovery.py" in contract
+    assert "tests/test_storage.py" in contract
+    assert "not simultaneous visibility" in contract

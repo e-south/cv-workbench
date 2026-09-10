@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/tests/ops/test_atomic.py
+cv-workbench/tests/test_storage.py
 
 Verifies artifact recovery under staging and rollback failures.
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from cvworkbench.ops import atomic
+from cvworkbench import storage as atomic
 
 
 def test_changed_expected_contents_fail_before_staging(tmp_path):
@@ -129,3 +129,76 @@ def test_failed_backup_staging_leaves_no_temporary_files(tmp_path, monkeypatch):
 
     assert destination.read_bytes() == b"original"
     assert list(tmp_path.iterdir()) == [destination]
+
+
+@pytest.mark.parametrize("timing", ["before", "after"])
+@pytest.mark.parametrize("existing", [True, False])
+def test_interruption_restores_replaced_files(tmp_path, monkeypatch, timing, existing):
+    first, second = tmp_path / "first.txt", tmp_path / "second.txt"
+    if existing:
+        first.write_bytes(b"first original")
+        second.write_bytes(b"second original")
+    original = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    replace = atomic.os.replace
+
+    def interrupt(source, destination):
+        is_target = Path(destination) == second and "cvw-stage" in Path(source).name
+        if is_target and timing == "before":
+            raise KeyboardInterrupt("cancel commit")
+        result = replace(source, destination)
+        if is_target:
+            raise KeyboardInterrupt("cancel commit")
+        return result
+
+    monkeypatch.setattr(atomic.os, "replace", interrupt)
+    with pytest.raises(KeyboardInterrupt, match="cancel commit"):
+        atomic.replace_files_atomically([(first, b"new first"), (second, b"new second")])
+    assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == original
+
+
+def test_alias_destinations_are_rejected_before_writes(tmp_path):
+    directory = tmp_path / "actual"
+    directory.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(directory, target_is_directory=True)
+    with pytest.raises(atomic.AtomicWriteError, match="unique"):
+        atomic.replace_files_atomically(
+            [(directory / "new.txt", b"one"), (alias / "new.txt", b"two")]
+        )
+    assert not list(directory.iterdir())
+
+
+@pytest.mark.parametrize("error", [OSError, KeyboardInterrupt])
+def test_failed_commit_releases_its_empty_parent_directories(tmp_path, monkeypatch, error):
+    existing = tmp_path / "existing.txt"
+    existing.write_bytes(b"original")
+    target = tmp_path / "new/nested/output.txt"
+    replace = atomic.os.replace
+
+    def fail(source, destination):
+        if Path(destination) == existing and "cvw-stage" in Path(source).name:
+            raise error("cancel")
+        return replace(source, destination)
+
+    monkeypatch.setattr(atomic.os, "replace", fail)
+    with pytest.raises(atomic.AtomicWriteError if error is OSError else error):
+        atomic.replace_files_atomically([(target, b"new"), (existing, b"updated")])
+    assert existing.read_bytes() == b"original"
+    assert list(tmp_path.iterdir()) == [existing]
+
+
+@pytest.mark.parametrize("kind", ["symlink", "directory"])
+def test_nonregular_destination_fails_before_creating_other_parents(tmp_path, kind):
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"original")
+    target = tmp_path / "target"
+    if kind == "symlink":
+        target.symlink_to(source)
+    else:
+        target.mkdir()
+    new = tmp_path / "new/output.txt"
+    with pytest.raises(atomic.AtomicWriteError, match="regular files"):
+        atomic.replace_files_atomically([(new, b"new"), (target, b"replacement")])
+    assert source.read_bytes() == b"original"
+    assert target.is_symlink() if kind == "symlink" else target.is_dir()
+    assert not new.parent.exists()

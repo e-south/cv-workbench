@@ -45,6 +45,7 @@ from cvworkbench.ops.projects import (
     ProjectError,
     build_project,
 )
+from cvworkbench.storage import AtomicWriteError
 from cvworkbench.themes import (
     ThemeError,
     build_render_plan,
@@ -201,7 +202,15 @@ def build(
         for error in exc.errors:
             typer.echo(f"ERROR: {error}", err=True)
         raise typer.Exit(code=1) from exc
-    except (OSError, ValueError, ProjectError, SotVersionError, RenderError, ThemeError) as exc:
+    except (
+        OSError,
+        ValueError,
+        ProjectError,
+        SotVersionError,
+        RenderError,
+        ThemeError,
+        AtomicWriteError,
+    ) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _print_build_summary(result)

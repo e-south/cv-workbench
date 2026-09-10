@@ -29,11 +29,11 @@ import yaml
 
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_reviews_path, resolve_variant_path
-from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.publication.manifest import publication_manifest_content
 from cvworkbench.ops.publication.packet import PublicationReviewError, publication_review_files
 from cvworkbench.ops.publication.policy import PublishConfig, load_publish_config
 from cvworkbench.ops.publication.record import preparation_bytes
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
 from cvworkbench.variants import Variant, load_variant
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)

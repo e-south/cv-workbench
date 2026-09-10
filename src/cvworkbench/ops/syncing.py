@@ -23,7 +23,6 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_sot_path, resolve_variant_path
-from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.publication.artifact import (
     PublicArtifact,
     read_public_artifact,
@@ -32,6 +31,7 @@ from cvworkbench.ops.publication.artifact import (
 from cvworkbench.ops.publication.pdf import PublicPdfError, validate_public_pdf_content
 from cvworkbench.ops.publication.policy import PublishConfig, PublishError, load_publish_config
 from cvworkbench.ops.publication.state import inspect_publication
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
 from cvworkbench.variants import load_variant
 
 

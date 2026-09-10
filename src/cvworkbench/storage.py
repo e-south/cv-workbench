@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/ops/atomic.py
+cv-workbench/src/cvworkbench/storage.py
 
 Applies small groups of file replacements as one recoverable transaction.
 
@@ -44,7 +44,7 @@ def replace_files_atomically(
     """
 
     destinations = [destination for destination, _ in writes]
-    if len(destinations) != len(set(destinations)):
+    if len(destinations) != len({path.resolve() for path in destinations}):
         raise AtomicWriteError("Atomic replacement destinations must be unique")
     modes = file_modes or {}
     if not set(modes).issubset(destinations) or any(
@@ -65,10 +65,17 @@ def replace_files_atomically(
     applied: list[_StagedWrite] = []
     temporary_paths: set[Path] = set()
     recovery_backups: set[Path] = set()
+    created_directories: dict[Path, tuple[int, int]] = {}
+    committed = False
     try:
         _check_expected_contents(expected)
+        for destination in destinations:
+            if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+                raise AtomicWriteError(
+                    f"Artifact destinations must be regular files or absent: {destination}"
+                )
         for destination, content in writes:
-            destination.parent.mkdir(parents=True, exist_ok=True)
+            _ensure_parent(destination.parent, created_directories)
             staged = _temporary_sibling(destination, "stage")
             temporary_paths.add(staged)
             staged.write_bytes(content)
@@ -87,12 +94,18 @@ def replace_files_atomically(
 
         _check_expected_contents(expected)
         for staged_write in staged_writes:
-            os.replace(staged_write.staged, staged_write.destination)
+            # Register before replacement: cancellation may arrive after the syscall.
             applied.append(staged_write)
-    except OSError as exc:
+            os.replace(staged_write.staged, staged_write.destination)
+        committed = True
+    except BaseException as exc:
         rollback_errors: list[OSError] = []
         for staged_write in reversed(applied):
             try:
+                # A refused replacement leaves its staged source in place.
+                # A completed syscall consumes it, even if cancellation follows.
+                if staged_write.staged.exists():
+                    continue
                 if staged_write.backup is None:
                     staged_write.destination.unlink(missing_ok=True)
                 else:
@@ -104,13 +117,44 @@ def replace_files_atomically(
         if rollback_errors:
             retained = ", ".join(str(path) for path in sorted(recovery_backups))
             detail = f"; recovery backups retained at: {retained}" if retained else ""
+            message = f"Atomic replacement failed and rollback was incomplete{detail}"
+            if isinstance(exc, OSError):
+                raise AtomicWriteError(message) from exc
+            exc.add_note(message)
+        elif isinstance(exc, OSError):
             raise AtomicWriteError(
-                f"Atomic replacement failed and rollback was incomplete{detail}"
+                "Atomic replacement failed; prior artifacts were restored"
             ) from exc
-        raise AtomicWriteError("Atomic replacement failed; prior artifacts were restored") from exc
+        raise
     finally:
         for path in temporary_paths - recovery_backups:
             path.unlink(missing_ok=True)
+        if not committed:
+            for directory, identity in reversed(created_directories.items()):
+                try:
+                    current = directory.lstat()
+                    if (current.st_dev, current.st_ino) == identity:
+                        directory.rmdir()
+                except OSError:
+                    # Preserve nonempty/replaced directories and any recovery copies.
+                    continue
+
+
+def _ensure_parent(path: Path, created: dict[Path, tuple[int, int]]) -> None:
+    missing = []
+    current = path
+    while not current.exists():
+        missing.append(current)
+        current = current.parent
+    for directory in reversed(missing):
+        try:
+            directory.mkdir()
+        except FileExistsError:
+            if not directory.is_dir():
+                raise
+        else:
+            identity = directory.lstat()
+            created[directory] = (identity.st_dev, identity.st_ino)
 
 
 def _check_expected_contents(expected: Mapping[Path, bytes | None]) -> None:

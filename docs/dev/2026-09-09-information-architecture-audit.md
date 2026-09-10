@@ -35,6 +35,65 @@ source of truth.
 
 ## Findings and disposition
 
+### High for artifact integrity — failed builds mixed output generations — fixed
+
+A real Markdown/HTML build with a Lua filter failing only HTML replaced canonical
+content, selections, Markdown, and CSS before failing. Previous HTML/manifests
+survived beside that new content. Five initial regression cases reproduced this
+across shared/separate destinations and audited/unaudited builds, including a
+new default run left behind (`/tmp/cvw-build-bundle-red.log`). Per-document
+atomic rendering did not establish a coherent build lifecycle.
+
+Bundle membership and temporary generation now belong to `build/artifacts.py`;
+`build/pipeline.py` commits completed payloads through the shared lower-level
+`storage.py`. Build/input layers retain their one-way import boundary. Captured
+resume bytes outlive an abandoned metadata task safely. Default runs are reserved
+after rendering and metadata succeed. Existing output bytes serve as optimistic
+preconditions, and role collisions fail before output writes. Retained HTML runs
+now include their linked CSS. Caller-owned notes and unselected files survive.
+
+Storage now rejects resolved aliases and nonregular destinations, recovers the
+attempted file group on cancellation as well as ordinary I/O errors, and removes
+only empty directories whose recorded ownership still matches. Recovery failures
+retain backups. CLI/preview adapters surface commit failures with their normal
+error semantics; preview preserves the previous build id and document.
+
+Additional red checks reproduced cancellation damage, duplicate aliases, missing
+run CSS, filename collisions, retained empty directories, shared-directory alias
+handling, and uncaught adapter errors. Evidence:
+`/tmp/cvw-build-bundle-extended-red.log`,
+`/tmp/cvw-build-bundle-final-red.log`, and
+`/tmp/cvw-build-bundle-adapter-red.log`. The focused domain suite passed 163 tests;
+the storage/build/adapter/import suite passed 100 tests. A final file-symlink
+alias regression reproduced a deduplication bypass before that path was rejected
+at build preflight (`/tmp/cvw-build-bundle-symlink-red.log`). All 15 bundle cases
+then passed (`/tmp/cvw-build-bundle-final-recovery.log`).
+
+The first inclusive run found two existing operation regressions: a refused
+replacement incorrectly triggered restoration of an unchanged destination and
+retained an unnecessary backup. Recovery now distinguishes an unconsumed staged
+file from a completed replacement, retaining cancellation coverage. The 75
+storage/build/review/project checks passed afterward
+(`/tmp/cvw-build-bundle-rollback-green.log`).
+
+Final verification passed 914 tests with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings in 90 seconds (`/tmp/cvw-build-bundle-final-full.log`). All
+seven isolated CLI journeys passed with empty stderr
+(`/tmp/cvw-build-bundle-final-journey.json`). Ruff and all hooks, including the
+secret scan, passed. The 8,317 protected `local/` and `var/` entries retained their
+inventory and recorded filesystem metadata. Canonical master and public candidate
+hashes were unchanged. Context remained ready with no issues, publication remained
+`review_required`, and the site remained clean. No site sync, publication approval,
+push, remote refresh, or external advisory check occurred.
+
+This change provides recoverable file replacement, not a reader-visible atomic
+snapshot, writer locking, crash durability, or a renderer sandbox. Unaudited
+preview mode does not refresh preexisting audit metadata. Project operations
+still own source/run directories they allocate before entering the pipeline.
+Render-asset capture and that outer project lifecycle remain separate follow-ups.
+The [live contract](../reference/configuration-contract.md#build-bundle-recovery)
+is the authority for current guarantees.
+
 ### High for source preservation — project preparation replaced existing directories — fixed
 
 `prepare_project_sot` removed an existing destination before copying source
@@ -925,7 +984,7 @@ authentication boundary against other processes running as the same OS user.
 
 ### High — rollback cleanup could destroy the recovery copy — fixed
 
-[atomic.py](../../src/cvworkbench/ops/atomic.py) deleted backups even when
+[storage.py](../../src/cvworkbench/storage.py) deleted backups even when
 restoring them failed. It also left temporary files after failed backup staging.
 Injected filesystem failures now prove that incomplete rollback retains the
 original recovery bytes and reports their path, while staging failures leave
@@ -1389,8 +1448,9 @@ when proposals expire or become invalid, and run packaging is independent of
 current source inputs. Project builds now share a callable operation and defer
 persistent run allocation until source/content/render preflight passes. Individual
 render outputs now share staging and ordered promotion, and test execution owns
-temporary workspaces. Continue with render-asset provenance, whole-build recovery,
-and remaining apply/patch orchestration.
+temporary workspaces. Complete build bundles now stage before recoverable file
+replacement. Continue with render-asset provenance, outer project-run recovery,
+preview/audit destination separation, and remaining apply/patch orchestration.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,

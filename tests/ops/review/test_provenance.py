@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-import cvworkbench.ops.atomic as atomic
+import cvworkbench.storage as atomic
 from cvworkbench.cli import app
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.catalog import list_review_summaries

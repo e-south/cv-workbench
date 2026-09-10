@@ -50,6 +50,7 @@ from cvworkbench.ops.projects import (
     load_project,
     prepare_project_sot,
 )
+from cvworkbench.storage import AtomicWriteError
 from cvworkbench.themes import ThemeError, list_themes, resolve_theme
 from cvworkbench.variants import load_variant
 from cvworkbench.workspace.projects import inspect_project_preview
@@ -245,7 +246,7 @@ class PreviewController:
                     dist_dir=run_dir if self._project_dir is not None else None,
                     write_audit_artifacts=False,
                 )
-            except (ValueError, ThemeError) as exc:
+            except (ValueError, ThemeError, AtomicWriteError) as exc:
                 message = str(exc)
                 self._state = self._state or self._new_state()
                 self._state.last_error = message

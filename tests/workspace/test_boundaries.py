@@ -95,6 +95,8 @@ def test_package_imports_respect_workspace_and_adapter_boundaries() -> None:
             forbidden += ["cvworkbench.dev", "typer", "rich"]
         if owner in {"build", "inputs"}:
             forbidden += ["cvworkbench.ops", "cvworkbench.dev", "cvworkbench.workspace"]
+        if owner == "storage.py":
+            forbidden += ["cvworkbench", "typer", "rich"]
         if owner == "ops":
             forbidden += ["cvworkbench.workspace"]
 

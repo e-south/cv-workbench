@@ -782,3 +782,20 @@ def test_project_help_distinguishes_guide_and_new() -> None:
     assert "Create a project workspace directly" in new_output
     assert "Use `project guide`" in new_output
     assert "rank candidate variants" in guide_output
+
+
+def test_build_reports_recoverable_commit_failure(sample_workspace, monkeypatch):
+    from cvworkbench import storage
+
+    replace = storage.os.replace
+
+    def fail_commit(source, destination):
+        if Path(destination).name == "manifest.json" and "cvw-stage" in Path(source).name:
+            raise OSError("commit unavailable")
+        return replace(source, destination)
+
+    monkeypatch.setattr(storage.os, "replace", fail_commit)
+    result = CliRunner().invoke(app, ["build", "--format", "md"])
+    assert result.exit_code == 1
+    assert "ERROR: Atomic replacement failed; prior artifacts were restored" in result.output
+    assert not list((sample_workspace / "var/runs").iterdir())

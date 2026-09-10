@@ -31,8 +31,10 @@
   existing staging directory.
 - `building.py::build_project` owns project build orchestration. Validate prepared
   source and construct the shared build plan before allocating a persistent run.
-  Keep render/content planning in `build/planning.py`, artifact execution in
-  `build/pipeline.py`, and terminal errors/output in the CLI adapter.
+  Keep render/content planning in `build/planning.py`, temporary bundle generation
+  in `build/artifacts.py`, commit orchestration in `build/pipeline.py`, and terminal
+  errors/output in the CLI adapter. Shared file recovery belongs to `storage.py`;
+  build code must not import operations for persistence.
 - `guidance.py` interprets job evidence and ranks variants. It does not select
   terminal output modes or start preview servers. Catalog loading belongs to
   `cvworkbench.variants`; workspace code owns inventory presentation.

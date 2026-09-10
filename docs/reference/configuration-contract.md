@@ -85,7 +85,7 @@ persistent project run.
 request-local `BuildPlan` containing selected content, normalized formats,
 captured configuration, input fingerprints, and resolved render choices.
 Private content is omitted from its representation.
-`build/pipeline.py::execute_build` writes the plan's content and renders artifacts;
+`build/pipeline.py::execute_build` stages and commits the plan's artifacts;
 `build_documents` composes the two. Full source-schema validation remains the
 responsibility of the CLI/preview or project operation before this lower-level
 pipeline. Planning performs source loading and content selection, not a separate
@@ -116,12 +116,62 @@ must not mutate them between planning and execution. Capture is per input, not a
 atomic filesystem snapshot across all files. Filter and theme assets must remain
 available and unchanged during rendering. A project operation retains its prepared
 source before execution and updates the plan's source location without reparsing
-its selected content. Render-asset capture and recovery of complete build bundles
-remain separate contracts.
+its selected content. Render-asset capture remains a separate contract.
 
 Each build run and dist manifest records `configuration.sha256`, identifying
 the workbench config bytes used by that build. It remains the captured hash if
 the file is edited during rendering; the manifest does not re-read the config.
+
+### Build bundle recovery
+
+`build/artifacts.py` defines bundle membership and materializes documents,
+styles, selections, resume data, and manifests in temporary directories.
+`build/pipeline.py` owns destination preflight, temporary lifetime, run allocation,
+and the final recoverable write through `storage.replace_files_atomically`.
+Storage is a lower-level owner shared by builds and operations; it does not import
+either workflow layer or command/preview adapters.
+
+Each artifact has an explicit run/dist location and semantic role. Overlapping
+roles (for example, rendered `canonical.md` over canonical input) fail before
+output writes. Shared run/dist directories, including directory aliases, retain
+one run manifest with `created_at`. Audited retained HTML runs carry their linked
+CSS as well as the document. Unselected formats and unrelated files are preserved.
+An unaudited preview updates only its selected documents, canonical input, and
+styles; preexisting audit metadata is not refreshed by that mode.
+
+Rendering and metadata collection finish before persistent artifacts change.
+The collector receives captured resume bytes, so an abandoned metadata task does
+not reopen temporary files after a render failure releases them. Build failures
+return without waiting for that task to finish. Default run allocation occurs
+only after the completed payloads have been captured; explicit run directories
+remain caller-owned. Project operations still own any prepared source/run they
+allocate before this call.
+
+Existing destination bytes are captured before rendering and checked again
+before and after replacement staging. Observed edits fail closed. Final writes
+replace regular files or absent destinations; file symlinks and directories are
+rejected. Storage rejects duplicate resolved destinations and stages replacement
+payloads beside their targets while preserving existing permission bits. The
+pipeline orders manifest writes after documents. Storage restores the complete
+attempted group after an I/O failure or cancellation. An interrupted call keeps its original exception type.
+If restoration fails, recovery copies remain and the error reports incomplete
+rollback. CLI builds report storage failures as errors; preview retains its
+previous build id/document and records the error.
+
+Failure cleanup removes only empty directories created by the operation whose
+device/inode identities still match. Nonempty directories, replacement
+directories, recovery copies, and caller-owned files survive. A failed default
+run is removed when it is still owned and empty; otherwise its retention is
+reported with the original error.
+
+This is recoverable replacement across files, not simultaneous visibility for
+concurrent readers, writer locking, or crash durability. Readers can observe the
+replacement sequence, and edits after the final byte check remain outside the
+guarantee. Forced termination and repeated interruption during recovery can
+prevent rollback. Templates, defaults, and filters remain trusted execution
+inputs; temporary staging does not sandbox their external side effects. See
+`tests/build/test_bundle_recovery.py` and `tests/test_storage.py` for real-render
+and filesystem failure checks.
 
 ### Render output recovery
 
@@ -139,10 +189,10 @@ previous contents or stay absent. Temporary outputs are removed after dispatched
 workers finish, including when a callback raises `KeyboardInterrupt`. A caller
 cannot infer that the whole batch succeeded from the first callback.
 
-This is an individual-output guarantee. Parent directories and other build
-artifacts, including selections and styles written before rendering, can remain
-after failure. Whole-run/dist rollback, interruption of external processes, and
-recovery after forced process termination are not provided by this contract.
+This is an individual-output guarantee for direct renderer callers. Parent
+directories can remain after failure. Builds add the bundle recovery boundary
+above; direct `render` calls do not. Interruption of external processes and
+recovery after forced process termination are not provided by either contract.
 
 ## Variant and artifact names
 

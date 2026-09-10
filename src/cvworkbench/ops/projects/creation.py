@@ -32,7 +32,6 @@ from cvworkbench.config import (
 from cvworkbench.ingestion.ingest import IngestError, fetch_and_extract
 from cvworkbench.ingestion.registry import load_registry_settings
 from cvworkbench.ingestion.signals import build_signals
-from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.projects.identity import (
     _project_id_from_url,
     _slugify,
@@ -53,6 +52,7 @@ from cvworkbench.ops.variant_lifecycle import (
     preflight_variant_registration,
     register_variant,
 )
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
 from cvworkbench.variants import parse_variant
 
 

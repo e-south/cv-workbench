@@ -41,13 +41,13 @@ def collect_manifest_metadata(
     sot_hashes: Mapping[str, str],
     snippet_hashes: Mapping[str, str],
     variant_hash: str,
-    resume_path: Path,
+    resume_name: str,
+    resume_content: bytes,
     pdf_engine: str | None,
     repo_root: Path,
 ) -> ManifestMetadata:
-    task_count = 4 if pdf_engine else 3
+    task_count = 3 if pdf_engine else 2
     with ThreadPoolExecutor(max_workers=task_count) as executor:
-        resume_hash_future = executor.submit(_hash_file, resume_path)
         git_commit_future = executor.submit(_git_commit, repo_root)
         pandoc_version_future = executor.submit(_tool_version, ["pandoc", "--version"])
         pdf_engine_version_future = (
@@ -55,8 +55,8 @@ def collect_manifest_metadata(
         )
 
     return ManifestMetadata(
-        resume_name=resume_path.name,
-        resume_hash=resume_hash_future.result(),
+        resume_name=resume_name,
+        resume_hash=hashlib.sha256(resume_content).hexdigest(),
         sot_hashes=dict(sot_hashes),
         snippet_hashes=dict(snippet_hashes),
         variant_hash=variant_hash,

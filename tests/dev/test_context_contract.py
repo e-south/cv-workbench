@@ -110,7 +110,7 @@ def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
     assert "`errors` tuple" in contract
     assert "## Mutation recovery" in contract
     assert "original staging directory" in contract
-    assert "ops.atomic.replace_files_atomically" in contract
+    assert "storage.replace_files_atomically" in contract
     assert "concurrent writers" in contract
     assert "## Creation preflight" in contract
     assert "before\nfetching" in contract

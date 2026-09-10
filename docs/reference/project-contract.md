@@ -333,7 +333,7 @@ possibly newer metadata after completion. Malformed proposal YAML/encoding and
 variant-schema failures surface as `ProjectError` without YAML source snippets.
 
 The operation stages proposal and manifest writes together using
-`ops.atomic.replace_files_atomically`, passing their original bytes through
+`storage.replace_files_atomically`, passing their original bytes through
 `expected_contents`. The helper checks those bytes before staging and again
 before the first replacement. An observed edit or deletion aborts replacement
 and preserves the editor's files. In the shared helper, an expected value of
@@ -344,9 +344,11 @@ An ordinary I/O failure during replacement restores the prior files. If
 restoration fails, the error reports incomplete rollback and retained
 recovery-backup paths. Replacement failures retain their cause through
 `ProjectError`. Byte checks do not lock out concurrent writers or provide
-simultaneous multi-file visibility. Edits after the final check, cancellation,
-process termination, and a snapshot across all source files remain outside
-this recovery contract.
+simultaneous multi-file visibility. Cancellation during replacement also attempts
+rollback and retains its original exception type; incomplete recovery is attached
+as an exception note. Edits after the final check, forced process termination,
+repeated interruption during recovery, and a snapshot across all source files
+remain outside this recovery contract.
 
 ## Apply semantics
 

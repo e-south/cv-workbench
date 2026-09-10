@@ -20,8 +20,8 @@ import pymupdf
 import pytest
 from typer.testing import CliRunner
 
+from cvworkbench import storage as atomic
 from cvworkbench.cli import app
-from cvworkbench.ops import atomic
 from cvworkbench.ops.publication.pdf import (
     PHONE_CANDIDATE_PATTERN,
     PublicPdfError,

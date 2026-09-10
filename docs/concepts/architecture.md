@@ -52,6 +52,19 @@ Configuration lives in the root `config/` tree, sample inputs in `sot.sample/`,
 and theme assets in `build/themes/`. Documentation links to these owners rather
 than maintaining executable copies beneath `docs/`.
 
+## Build ownership
+
+| Responsibility | Owner beneath `src/cvworkbench/` |
+| --- | --- |
+| Read-only content and render planning | `build/planning.py` |
+| Bundle membership and temporary artifact generation | `build/artifacts.py` |
+| Build lifetime, persistent run allocation, and commit orchestration | `build/pipeline.py` |
+| Recoverable file replacements shared by workflows | `storage.py` |
+
+The [build recovery contract](../reference/configuration-contract.md#build-bundle-recovery)
+defines staging, captured output preconditions, rollback, and concurrency limits.
+Build code must not depend on operations merely to reuse file persistence.
+
 ## Distribution and workspace ownership
 
 The wheel's `cvworkbench_data` package contains immutable rendering filters and

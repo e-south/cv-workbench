@@ -163,3 +163,39 @@ def test_preview_page_html_renders_summary_with_safe_text_nodes() -> None:
     assert "appendSummaryField" in html
     assert "strong.textContent = value;" in html
     assert "line.innerHTML" not in html
+
+
+def test_preview_reports_commit_failure_and_preserves_completed_state(
+    sample_workspace, monkeypatch
+):
+    from pathlib import Path
+
+    import pytest
+
+    from cvworkbench import storage
+    from cvworkbench.dev.preview import PreviewController, PreviewError
+
+    controller = PreviewController(
+        sot_base=sample_workspace / "sot.sample",
+        config_path=sample_workspace / "config/workbench.yaml",
+        variant_id="base",
+        theme_id="default",
+        style_preset="modern",
+        auto_pdf=False,
+    )
+    previous = controller.rebuild()
+    output = previous.output_files["html"]
+    content = output.read_bytes()
+    replace = storage.os.replace
+
+    def fail_commit(source, destination):
+        if Path(destination) == output and "cvw-stage" in Path(source).name:
+            raise OSError("commit unavailable")
+        return replace(source, destination)
+
+    monkeypatch.setattr(storage.os, "replace", fail_commit)
+    with pytest.raises(PreviewError, match="prior artifacts were restored"):
+        controller.rebuild()
+    assert controller.state().build_id == previous.build_id
+    assert controller.state().last_error
+    assert output.read_bytes() == content
