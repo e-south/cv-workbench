@@ -35,6 +35,75 @@ source of truth.
 
 ## Findings and disposition
 
+### Medium — retained project history depended on ephemeral proposal files — fixed
+
+Detailed inspection required the executable-project loader. Discarded proposal
+files, invalid YAML, or an unsupported patch format therefore hid retained job
+context, guidance, and run history. Inspection also followed proposal symlinks
+outside the project and attempted to open non-regular inputs.
+
+`load_project_details` now separates validated recorded information from
+proposal availability. It reports typed per-input issues (`missing`, `unreadable`,
+or `invalid`), checks project ownership and regular-file kind before proposal
+reads, and represents unavailable fields as unknown rather than empty. Full
+inspection preserves retained observations and omits commands requiring live
+proposals. CLI and preview share the warning; the
+[inspection contract](../reference/project-inspection.md) owns these semantics.
+Build/apply retain their executable-input prerequisites.
+
+Review bundle creation had the same coupling through its shared import target
+resolver. `resolve_review_run` now selects only the retained run and destination;
+`resolve_review_target` adds current source/proposal inputs for import. Packaging
+can therefore copy and record immutable run artifacts after proposal expiration,
+while import still requires the inputs needed to interpret edits. Run-only
+packaging retains the project review namespace even if current project inputs
+are missing.
+
+Fifteen initial tests reproduced unavailable-history, proposal-read boundary,
+and retained-review failures (`/tmp/cvw-project-history-red.log`). Additional
+real-build cases package both explicit-project and run-only selections after
+removing live proposals, configured variant, and source location. They validate
+the bundle's source record and copied bytes; build/apply rejection and inspection
+read-only behavior are also checked. No historical proposals were migrated.
+
+Live read-only inspection now succeeds for all 25 projects: 18 have available
+proposal inputs, and seven report an invalid patch format while retaining their
+history. Evidence: `/tmp/cvw-project-history-live.json`. Local browser component
+verification rendered actual inspector output for a missing proposal patch:
+the warning was absent before the presentation fix and visible afterward, with
+no horizontal overflow or console errors. The browser check deliberately supplied
+the captured inspection payload to the existing preview component; it does not
+claim that a failed build refreshes the controller's last-successful observations.
+Evidence is under `var/runs/preview/history-inspection-audit/`, with fixture
+location in `/tmp/cvw-project-history-preview.json`. The tab and server were closed.
+
+### Medium — import target resolution lost project identity — fixed for missing and mismatched projects
+
+Run-only import swallowed project-loading errors and continued through configured
+variant resolution. It also accepted a current project whose manifest identity
+no longer matched the project named by the source run. This conflated retained
+run review with the mutable inputs needed for guarded patch construction.
+
+Project-scoped import now preserves loading failures and rejects mismatched
+project identity before conversion or draft writes. Two real-build
+tests reproduced the unrelated variant-resolution path, and one test reproduced
+acceptance of the mismatched identity. Their failing evidence is in
+`/tmp/cvw-project-history-import-red.log` and
+`/tmp/cvw-project-history-identity-red.log`. The
+[review contract](../reference/review-contract.md) defines the packaging/import
+boundary. Input files still have separate lifetimes; these checks do not prove
+one immutable source/variant/patch bundle or protect against every concurrent edit.
+
+Verification for the retained-history and import-boundary changes: the final
+inclusive suite passed 800 tests with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings. The 125 focused checks and seven-step isolated journey
+also passed; journey stderr was empty. Evidence:
+`/tmp/cvw-project-history-final-full.log`,
+`/tmp/cvw-project-history-final-focused.log`, and
+`/tmp/cvw-project-history-journey.json`. Canonical master and public candidate
+hashes remained unchanged, and the personal-site tree remained clean. This pass
+did not modify historical proposals, approve publication, sync the site, or push.
+
 ### Medium — project inspection mixed settings and duplicated adapter decisions — fixed
 
 CLI show and preview separately loaded project details, optional plans, artifact
@@ -1044,8 +1113,10 @@ single parser, inventory preserves partial/invalid descriptions, and saved-plan
 reads enforce project ownership. Stored job-file comparisons now expose missing,
 changed, or unreadable artifacts independently of run review readiness. Shared
 project inspection now supplies CLI and preview observations with explicit
-configuration capture for full inspection. Continue with remaining project
-command orchestration and historical/partial inspection. New guidance
+configuration capture for full inspection. Retained history remains inspectable
+when proposals expire or become invalid, and run packaging is independent of
+current source inputs. Continue with remaining project command orchestration.
+New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,
 executable proposals, recorded metadata, current artifact observations, and

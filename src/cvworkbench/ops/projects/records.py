@@ -112,6 +112,13 @@ class GuidanceInputCheck:
 
 
 @dataclass(frozen=True)
+class ProjectProposalIssue:
+    artifact: Literal["variant", "patch"]
+    state: Literal["missing", "unreadable", "invalid"]
+    error: str
+
+
+@dataclass(frozen=True)
 class ProjectDetails:
     spec: ProjectSpec
     created_at: str
@@ -121,13 +128,22 @@ class ProjectDetails:
     raw_path: Path | None
     signals_path: Path
     signals_hash: str
-    proposal_variant_id: str
-    proposal_document_type: str
-    patch_format: str
-    patch_is_empty: bool
-    patch_line_count: int
-    patch_operations: tuple[str, ...]
+    proposal_variant_id: str | None
+    proposal_document_type: str | None
+    patch_format: str | None
+    patch_is_empty: bool | None
+    patch_line_count: int | None
+    patch_operations: tuple[str, ...] | None
     artifact_checks: tuple[ProjectArtifactCheck, ...] = ()
+    proposal_issues: tuple[ProjectProposalIssue, ...] = ()
+
+    @property
+    def proposal_available(self) -> bool:
+        return (
+            self.proposal_variant_id is not None
+            and self.patch_format is not None
+            and not self.proposal_issues
+        )
 
 
 @dataclass(frozen=True)

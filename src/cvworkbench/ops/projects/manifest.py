@@ -116,16 +116,22 @@ def _source_summary(value: Any, errors: list[str]) -> str | None:
 
 
 def _project_spec(project_dir: Path, project_data: dict[str, Any]) -> ProjectSpec:
+    spec = _project_reference(project_dir, project_data)
+    if not spec.variant_path.exists():
+        raise ProjectError(f"Project variant not found: {spec.variant_path}")
+    if not spec.patch_path.exists():
+        raise ProjectError(f"Project patch not found: {spec.patch_path}")
+    return spec
+
+
+def _project_reference(project_dir: Path, project_data: dict[str, Any]) -> ProjectSpec:
+    """Resolve recorded identity and locations without requiring proposal files."""
     sot_path_value = project_data.get("sot_path")
     if not isinstance(sot_path_value, str) or not sot_path_value.strip():
         raise ProjectError("Project sot_path is required")
     sot_path = Path(sot_path_value)
     variant_path = project_dir / "proposals" / "variant.yaml"
     patch_path = project_dir / "proposals" / "patch.yaml"
-    if not variant_path.exists():
-        raise ProjectError(f"Project variant not found: {variant_path}")
-    if not patch_path.exists():
-        raise ProjectError(f"Project patch not found: {patch_path}")
     return ProjectSpec(
         project_id=project_data["id"],
         project_dir=project_dir,

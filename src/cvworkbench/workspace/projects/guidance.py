@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from cvworkbench.ops.projects import GuidanceInputCheck, ProjectArtifactCheck
+from cvworkbench.ops.projects import GuidanceInputCheck, ProjectArtifactCheck, ProjectProposalIssue
 from cvworkbench.variants import validate_variant_id
 
 _INPUT_LABELS = {
@@ -23,6 +23,15 @@ _INPUT_LABELS = {
     "variant_catalog": "variant catalog",
     "default_variant": "default variant",
 }
+
+
+def proposal_input_warning(issues: tuple[ProjectProposalIssue, ...]) -> str | None:
+    if not issues:
+        return None
+    return " ".join(issue.error for issue in issues) + (
+        " Restore valid proposal files before previewing, building, applying, or keeping the proposal."
+        " Retained job context and run history remain inspectable."
+    )
 
 
 def guidance_input_context(check: GuidanceInputCheck) -> dict[str, Any]:

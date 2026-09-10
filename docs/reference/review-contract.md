@@ -33,6 +33,14 @@ By default, variant bundles live at `var/reviews/<variant>/` and project bundles
 at `var/reviews/projects/<project>/`, beneath the configured reviews root.
 Output filenames follow the selected run's manifest; they need not be `cv.*`.
 
+Packaging reads the selected run's artifacts without requiring current source,
+configured variant definitions, or live proposal files. An explicit `--project`
+requires valid manifest identity and constrains the run to that project.
+With `--run`, project ownership comes from the run's project-scoped ID; a missing
+current project does not move its bundle into the variant review directory.
+Run variant and project identifiers are validated before deriving a destination.
+This allows reviewing retained artifacts after proposal discard or expiration.
+
 Keep `review-source.json` beside the edited DOCX. Import uses its source run even
 when newer builds exist. An optional `--variant` or `--project` constrains that
 selection. An explicit `--run` must agree with the recorded source. Relative
@@ -42,6 +50,14 @@ For a standalone DOCX or a historical bundle without a source record, import
 requires an explicit `--run`. It does not infer a baseline from the newest
 variant/project build. Copying a DOCX elsewhere without its record therefore
 requires naming the baseline deliberately.
+
+Import constructs a patch against current source inputs and therefore retains
+stricter prerequisites. A project-scoped source run requires its current project,
+proposal variant, and patch. Missing project inputs fail before DOCX conversion
+or draft writes; import does not reinterpret the run as a configured variant.
+The current project manifest identity must match the selected run's project ID.
+Restore those inputs before importing edits. Packaging availability alone does
+not establish import or application readiness.
 
 ## Provenance and Health
 
@@ -104,3 +120,8 @@ source runs, `patches` interprets edits, `record` owns provenance validation,
 and `catalog` owns discovery and source health. `ReviewError` is the shared
 operation error. The CLI adapts these operations; patch interpretation does
 not depend on command parsing.
+
+`targets.resolve_review_run` selects a retained run and review destination for
+packaging. `targets.resolve_review_target` adds current source, variant, and
+project-patch resolution for import. The latter reuses the run selector rather
+than making bundle creation depend on mutable source inputs.

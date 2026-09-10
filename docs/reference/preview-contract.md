@@ -55,12 +55,17 @@ instead of following `ACTIVE`.
 - `themes`, `presets`, `variants`, `projects`, `project`
 - `format`, `auto_pdf`, `build_id`, `last_error`
 - `project_context` (when preview was started with `--project`):
-  `proposal_document_type`, `patch_status`, `patch_operations`,
+  `proposal_status`, `proposal_document_type`, `patch_status`, `patch_operations`,
   `render_warning`, plus any `proposal-plan.json` guidance fields that were
   available (`recommended_variant`, `recommendation_status`,
   `recommendation_summary`, `job_keywords_missing`, `steps`). If preview can
   still render the project patch but detailed project metadata is incomplete,
   `project_context_error` is returned instead of silently omitting the failure.
+  Unavailable proposal files instead produce `proposal_status: unavailable`,
+  null fields for the unavailable input, and `proposal_warning`, while retaining
+  job and guidance observations. The sidebar displays that warning as text.
+  These are observations at the last successful build, not permission to render
+  an incomplete proposal; startup and rebuild keep their execution requirements.
   Optional `proposal_plan_error` and `proposal_plan_warning` identify unreadable
   guidance or a changed/unverifiable recorded selection; see the
   [saved-guidance contract](project-contract.md#saved-guidance). Both appear in

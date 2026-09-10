@@ -109,15 +109,17 @@ instead of aborting the inventory. Explicit project loading raises `ProjectError
 with an actionable message; parser diagnostics do not echo manifest contents.
 
 Executable project loading additionally requires `sot_path` and the proposal
-variant and patch files. Detailed inspection uses one manifest read for both
-identity and descriptive metadata. This does not snapshot proposal files.
+variant and patch files. Detailed inspection resolves their recorded locations
+without requiring those files, then reports proposal availability separately.
+It uses one manifest read for both identity and descriptive metadata. This does
+not snapshot proposal files.
 Descriptive fields follow the contract below; successful identity inspection
 alone does not establish build or review readiness.
 
 ### Descriptive metadata
 
 Detailed inspection parses descriptive fields into typed records owned by
-`manifest.py` and `records.py`, then combines them with proposal/patch state.
+`manifest.py` and `records.py`, then combines them with independently observed proposal/patch state.
 It requires:
 
 - `created_at`: an ISO 8601 timestamp with a timezone. Quoted strings and native
@@ -148,6 +150,14 @@ field-specific `metadata_errors`; the project remains visible. Full inventory
 items carry these diagnostics, and full/compact context includes
 `metadata_error_count` when they exist. This count concerns displayed metadata,
 not complete project validation or review readiness.
+
+`load_project_details` requires the descriptive record, but it does not require
+available proposal files. Its `ProjectDetails.proposal_issues` contains typed
+`ProjectProposalIssue` records, and unavailable proposal values are `None`.
+`proposal_available` means both files could be loaded under their existing
+schemas; it does not validate patch targets against current source content.
+See [project inspection](project-inspection.md#proposal-availability-and-retained-history)
+for output fields, diagnostics, and conditional command descriptions.
 
 ### Artifact inspection
 
@@ -442,8 +452,9 @@ Other project adapters retain their own extraction boundaries.
 `cvworkbench.ops.projects.load_project_metadata` owns manifest reading and
 delegates project identity validation to `identity.py`.
 `load_project_summary` adapts that read into the partial inventory contract;
-`load_project` adds executable-project prerequisites, and `load_project_details`
-adds typed descriptive and proposal information from the same manifest generation.
+`load_project` adds executable-project prerequisites. `load_project_details`
+instead combines typed descriptive information with proposal availability from
+the same manifest generation, preserving retained history when proposals expire.
 Artifact observation is callable independently through `inspect_project_artifacts`;
 the same owner supplies `ProjectDetails.artifact_checks`.
 `load_project_plan` reads optional saved guidance from those details, returning

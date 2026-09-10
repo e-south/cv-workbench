@@ -8,7 +8,9 @@
 - Keep inventory identity separate from executable-project prerequisites and
   review readiness. Preserve retained projects when proposal artifacts expire.
 - Use `load_project_summary` for partial inventory descriptions and
-  `load_project_details` for validated descriptive/proposal state. Metadata
+  `load_project_details` for validated descriptions and observed proposal
+  availability. Missing/invalid proposals become typed issues and unknown fields;
+  `load_project` retains execution prerequisites. Metadata
   parsing belongs in `manifest.py`; do not stringify malformed YAML values in
   presentation code or treat recorded digests as proof of current contents.
 - Read optional saved guidance through `load_project_plan`; consumers must not

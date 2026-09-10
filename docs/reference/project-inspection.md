@@ -35,12 +35,36 @@ also accepts an explicit `ConfigSnapshot`. A later path-based call captures
 updated settings. This does not capture all project, source, variant, or run
 files atomically; see [configuration lifetime](configuration-contract.md).
 
-Invalid project metadata or unavailable executable proposal inputs raise
-`ProjectError`. Configuration failures remain filesystem errors or `ValueError`
-for Python callers. The CLI reports these errors on stderr, exits with code 1,
-and emits no partial JSON. Malformed optional saved guidance appears as a
+Invalid project metadata raises `ProjectError`. Configuration failures remain
+filesystem errors or `ValueError` for Python callers. The CLI reports these
+errors on stderr, exits with code 1, and emits no partial JSON. Malformed optional
+saved guidance appears as a
 diagnostic in an otherwise available inspection. An absent plan leaves the
 remaining observations available without a plan diagnostic.
+
+### Proposal availability and retained history
+
+Proposal files are ephemeral; retained project metadata, job context, saved
+guidance, and run history do not depend on their presence. `proposal.status` is
+`available` when both proposal files can be loaded, or `unavailable` otherwise.
+`proposal.issues` records each affected `artifact` (`variant` or `patch`), its
+`state` (`missing`, `unreadable`, or `invalid`), and an `error` without parser
+source excerpts. `proposal_warning` explains which actions require restoration.
+Inspection checks that each input is a regular file inside its project before
+reading it. This check does not lock out concurrent filesystem changes.
+
+Unavailable variant fields are null. An unavailable patch has null `format`,
+`is_empty`, `line_count`, and `operations`, with `status: unavailable`; it is
+never described as an empty patch. Available fields, job-file observations, and
+saved-plan comparisons remain visible when another proposal input is unavailable.
+Availability establishes parseable proposal inputs, not source compatibility,
+successful compilation, or human approval.
+
+An unavailable proposal's `commands` contains `show` and, when a retained run
+has review inputs, its pinned `reviewpack`. It omits preview, build, apply, keep,
+and discard suggestions. `review.next_command` is null when neither building
+nor reviewing is available. The [content-review contract](review-contract.md)
+separates packaging a retained run from importing edits against current inputs.
 
 ## Preview inspection
 
@@ -60,7 +84,11 @@ artifact status, and saved-guidance observations into compact preview fields.
 It omits detailed job-file records, command descriptions, and run review state;
 it does not scan run history or allocate a suggested proposal identity.
 
-Unavailable project details produce `project_id` and `project_context_error`.
+Invalid project metadata produces `project_id` and `project_context_error`.
+Unavailable proposal inputs retain the remaining observations, with
+`proposal_status` and `proposal_warning`. The warning appears as text in the
+preview's project warning area. Preview startup and rebuild still enforce
+executable inputs; these observations do not enable an unavailable build.
 Unavailable configuration leaves the other observations visible and records
 unverifiable guidance inputs. Missing optional guidance is distinct from invalid
 guidance. The preview controller caches these observations at its last successful

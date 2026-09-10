@@ -32,6 +32,7 @@ from cvworkbench.workspace.projects.commands import project_commands
 from cvworkbench.workspace.projects.guidance import (
     guidance_input_context,
     project_artifact_context,
+    proposal_input_warning,
     proposal_plan_selection_warning,
 )
 from cvworkbench.workspace.runs import run_is_review_ready
@@ -61,6 +62,9 @@ def _read_project_inspection(
     )
     plan, plan_error = load_project_plan(details)
     observations = project_artifact_context(details.artifact_checks, include_details=True)
+    proposal_warning = proposal_input_warning(details.proposal_issues)
+    if proposal_warning is not None:
+        observations["proposal_warning"] = proposal_warning
     if plan is not None:
         observations.update(
             guidance_input_context(
@@ -89,8 +93,9 @@ def inspect_project(project: str | Path, *, config: ConfigSource) -> dict[str, A
         config_path=configuration,
         variant_id=details.proposal_variant_id,
         review_run_id=review["run_id"] if review["review_ready"] else None,
+        proposal_available=details.proposal_available,
     )
-    review["next_command"] = commands.get("reviewpack", commands["build"])
+    review["next_command"] = commands.get("reviewpack", commands.get("build"))
     summary = {
         "project": {
             "project_id": details.spec.project_id,
@@ -100,6 +105,11 @@ def inspect_project(project: str | Path, *, config: ConfigSource) -> dict[str, A
             "sot_path": str(details.spec.sot_path),
         },
         "proposal": {
+            "status": "available" if details.proposal_available else "unavailable",
+            "issues": [
+                {"artifact": issue.artifact, "state": issue.state, "error": issue.error}
+                for issue in details.proposal_issues
+            ],
             "variant_id": details.proposal_variant_id,
             "variant_path": str(details.spec.variant_path),
             "document_type": details.proposal_document_type,
@@ -116,7 +126,9 @@ def inspect_project(project: str | Path, *, config: ConfigSource) -> dict[str, A
             "format": details.patch_format,
             "is_empty": details.patch_is_empty,
             "line_count": details.patch_line_count,
-            "operations": list(details.patch_operations),
+            "operations": list(details.patch_operations)
+            if details.patch_operations is not None
+            else None,
             "render_warning": state.render_warning,
             "status": state.patch_status,
         },
@@ -149,9 +161,12 @@ def inspect_project_preview(
     details = state.details
     payload: dict[str, Any] = {
         "project_id": details.spec.project_id,
+        "proposal_status": "available" if details.proposal_available else "unavailable",
         "proposal_document_type": details.proposal_document_type,
         "patch_status": state.patch_status,
-        "patch_operations": list(details.patch_operations),
+        "patch_operations": list(details.patch_operations)
+        if details.patch_operations is not None
+        else None,
         "render_warning": state.render_warning,
         **{key: value for key, value in state.observations.items() if key != "job_artifacts"},
     }

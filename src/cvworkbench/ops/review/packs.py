@@ -21,7 +21,7 @@ from cvworkbench.config import resolve_project_path, resolve_reviews_path
 from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.record import SOURCE_RECORD_NAME, create_source_record
-from cvworkbench.ops.review.targets import require_run_output, resolve_review_target
+from cvworkbench.ops.review.targets import require_run_output, resolve_review_run
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ def build_review_pack(
     out_dir: Path | None = None,
     force: bool = False,
 ) -> ReviewPack:
-    resolution = resolve_review_target(
+    resolution = resolve_review_run(
         config_path=config_path,
         run=run,
         variant_id=variant_id,
@@ -115,7 +115,7 @@ def build_review_pack(
         docx_path=docx_target,
         pdf_path=pdf_target,
         review_path=review_path,
-        run_id=resolution.run_id,
+        run_id=resolution.run.run_id,
         source_record_path=source_record_path,
     )
 

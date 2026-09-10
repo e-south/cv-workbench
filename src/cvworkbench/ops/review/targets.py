@@ -13,17 +13,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from cvworkbench.config import resolve_runs_path, resolve_sot_path, resolve_variant_path
 from cvworkbench.inputs.sot_versions import resolve_active_sot_path
 from cvworkbench.ops.projects import (
     ProjectError,
     ProjectPatch,
+    ProjectSpec,
     load_project,
+    load_project_metadata,
     load_project_patch_payload,
     resolve_project_dir,
 )
+from cvworkbench.ops.projects.identity import validate_project_id
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.runs import (
     RunError,
@@ -32,7 +34,13 @@ from cvworkbench.ops.runs import (
     resolve_latest_run,
     resolve_run,
 )
-from cvworkbench.variants import Variant, load_variant
+from cvworkbench.variants import Variant, load_variant, validate_variant_id
+
+
+@dataclass(frozen=True)
+class ReviewRun:
+    run: RunInfo
+    review_dir: Path
 
 
 @dataclass(frozen=True)
@@ -45,29 +53,26 @@ class ReviewTarget:
     project_patch: ProjectPatch | None
 
 
-def resolve_review_target(
+def resolve_review_run(
     *,
     config_path: Path,
     run: str | None,
     variant_id: str | None,
     project_dir: Path | None,
-) -> ReviewTarget:
+) -> ReviewRun:
     if project_dir is not None and variant_id is not None:
         raise ReviewError("--project cannot be combined with --variant")
 
-    project = None
-    project_patch: ProjectPatch | None = None
     if project_dir is not None:
         try:
-            project = load_project(project_dir)
-            project_patch = load_project_patch_payload(project.patch_path)
+            project_id = load_project_metadata(project_dir)["id"]
         except ProjectError as exc:
             raise ReviewError(str(exc)) from exc
         try:
             run_info = (
-                _resolve_project_run(config_path, project.project_id, run)
+                _resolve_project_run(config_path, project_id, run)
                 if run
-                else resolve_latest_project_run(config_path, project.project_id)
+                else resolve_latest_project_run(config_path, project_id)
             )
         except RunError as exc:
             raise ReviewError(str(exc)) from exc
@@ -76,12 +81,6 @@ def resolve_review_target(
             run_info = resolve_run(config_path, run)
         except RunError as exc:
             raise ReviewError(str(exc)) from exc
-        project = _load_project_for_run(config_path, run_info.run_id)
-        if project is not None:
-            try:
-                project_patch = load_project_patch_payload(project.patch_path)
-            except ProjectError as exc:
-                raise ReviewError(str(exc)) from exc
     else:
         try:
             run_info = resolve_latest_run(
@@ -92,23 +91,56 @@ def resolve_review_target(
         except RunError as exc:
             raise ReviewError(str(exc)) from exc
 
+    try:
+        validate_variant_id(run_info.variant_id)
+        parts = Path(run_info.run_id).parts
+        if len(parts) >= 3 and parts[0] == "projects":
+            validate_project_id(parts[1])
+            review_dir = Path("projects") / parts[1]
+        else:
+            review_dir = Path(run_info.variant_id)
+    except (ValueError, ProjectError) as exc:
+        raise ReviewError(str(exc)) from exc
+    return ReviewRun(run=run_info, review_dir=review_dir)
+
+
+def resolve_review_target(
+    *,
+    config_path: Path,
+    run: str | None,
+    variant_id: str | None,
+    project_dir: Path | None,
+) -> ReviewTarget:
+    selection = resolve_review_run(
+        config_path=config_path, run=run, variant_id=variant_id, project_dir=project_dir
+    )
+    run_info = selection.run
+    try:
+        project = (
+            load_project(project_dir)
+            if project_dir is not None
+            else _load_project_for_run(config_path, run_info.run_id)
+        )
+        project_patch = (
+            load_project_patch_payload(project.patch_path) if project is not None else None
+        )
+    except ProjectError as exc:
+        raise ReviewError(str(exc)) from exc
     if project is not None:
         variant = load_variant(project.variant_path)
-        review_dir = Path("projects") / project.project_id
         sot_path = resolve_active_sot_path(project.sot_path)
     else:
         variant_path = resolve_variant_path(run_info.variant_id, config_path)
         if not variant_path.exists():
             raise ReviewError(f"Variant not found: {run_info.variant_id}")
         variant = load_variant(variant_path)
-        review_dir = Path(variant.id)
         sot_path = resolve_sot_path(None, config_path)
 
     return ReviewTarget(
         run_id=run_info.run_id,
         run=run_info,
         variant=variant,
-        review_dir=review_dir,
+        review_dir=selection.review_dir,
         sot_path=sot_path,
         project_patch=project_patch,
     )
@@ -152,13 +184,13 @@ def _resolve_project_run(config_path: Path, project_id: str, run: str) -> RunInf
     return resolved
 
 
-def _load_project_for_run(config_path: Path, run_id: str) -> Any | None:
+def _load_project_for_run(config_path: Path, run_id: str) -> ProjectSpec | None:
     parts = Path(run_id).parts
     if len(parts) < 3 or parts[0] != "projects":
         return None
     project_id = parts[1]
     project_dir = resolve_project_dir(project_id, config_path)
-    try:
-        return load_project(project_dir)
-    except ProjectError:
-        return None
+    project = load_project(project_dir)
+    if project.project_id != project_id:
+        raise ProjectError(f"Project identity does not match selected run: {run_id}")
+    return project

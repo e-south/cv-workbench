@@ -148,20 +148,33 @@ def _print_project_show_summary(summary: dict[str, Any]) -> None:
         ("project_dir", summary["project"]["project_dir"]),
         ("created_at", summary["project"]["created_at"]),
         ("base_variant", summary["project"]["base_variant"]),
-        ("proposal_variant", summary["proposal"]["variant_id"]),
-        ("proposal_document_type", summary["proposal"]["document_type"]),
+        ("proposal_status", summary["proposal"]["status"]),
+        ("proposal_variant", summary["proposal"]["variant_id"] or "unavailable"),
+        ("proposal_document_type", summary["proposal"]["document_type"] or "unavailable"),
         ("patch_status", summary["patch"]["status"]),
-        ("patch_ops", ",".join(summary["patch"]["operations"]) or "none"),
+        (
+            "patch_ops",
+            (",".join(summary["patch"]["operations"]) or "none")
+            if summary["patch"]["operations"] is not None
+            else "unavailable",
+        ),
         ("job_source", summary["job"]["source"]),
         ("job_files", summary["job_artifact_status"]),
-        ("next_step", summary["commands"]["preview"]),
-        ("build_step", summary["commands"]["build"]),
         ("review_status", summary["review"]["status"]),
-        ("review_step", summary["review"]["next_command"]),
-        ("apply_step", summary["commands"]["apply"]),
-        ("keep_step", summary["commands"]["keep"]),
-        ("discard_step", summary["commands"]["discard"]),
     ]
+    for label, command in (
+        ("next_step", "preview"),
+        ("build_step", "build"),
+        ("apply_step", "apply"),
+        ("keep_step", "keep"),
+        ("discard_step", "discard"),
+    ):
+        if command in summary["commands"]:
+            rows.append((label, summary["commands"][command]))
+    if summary["review"]["next_command"] is not None:
+        rows.append(("review_step", summary["review"]["next_command"]))
+    if "proposal_warning" in summary:
+        rows.append(("proposal_warning", summary["proposal_warning"]))
     rows.extend(_proposal_plan_summary_rows(summary.get("proposal_plan")))
     if "guidance_input_status" in summary:
         rows.append(("guidance_inputs", summary["guidance_input_status"]))

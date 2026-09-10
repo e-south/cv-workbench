@@ -49,6 +49,7 @@ from cvworkbench.ops.projects.records import ProjectDetails as ProjectDetails
 from cvworkbench.ops.projects.records import ProjectError as ProjectError
 from cvworkbench.ops.projects.records import ProjectPatch as ProjectPatch
 from cvworkbench.ops.projects.records import ProjectPaths as ProjectPaths
+from cvworkbench.ops.projects.records import ProjectProposalIssue as ProjectProposalIssue
 from cvworkbench.ops.projects.records import ProjectSpec as ProjectSpec
 from cvworkbench.ops.projects.records import ProjectSummary as ProjectSummary
 from cvworkbench.ops.projects.workflow import ProjectGuideError as ProjectGuideError

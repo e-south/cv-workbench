@@ -301,6 +301,7 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
     assert payload["project"] == "job"
     assert payload["project_context"] == {
         "project_id": "job",
+        "proposal_status": "available",
         "job_artifact_status": "match saved record",
         "guidance_inputs": {
             "state": "unverifiable",

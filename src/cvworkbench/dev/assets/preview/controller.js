@@ -381,6 +381,7 @@ function renderProjectGuidance(data) {
     projectGuidanceEl.appendChild(line);
   });
   const warnings = [];
+  if (context.proposal_warning) warnings.push(context.proposal_warning);
   if (context.render_warning) warnings.push(context.render_warning);
   if (context.proposal_plan_error) warnings.push(context.proposal_plan_error);
   if (context.proposal_plan_warning) warnings.push(context.proposal_plan_warning);
