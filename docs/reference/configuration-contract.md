@@ -76,8 +76,7 @@ Build preflight resolves destinations, filters, themes, and all requested
 format plans before the pipeline creates its run or output artifacts. Invalid
 theme/style/path configuration therefore cannot leave a partial build behind.
 The standalone render command validates its settings and format plans before
-creating its destination directory. Rendering/tool failures after preflight
-retain their existing artifact/error behavior. Project builds use the
+creating its destination directory. Project builds use the
 [project build operation](project-contract.md#project-build-api) to validate
 temporary source preparation and complete build planning before allocating a
 persistent project run.
@@ -117,12 +116,33 @@ must not mutate them between planning and execution. Capture is per input, not a
 atomic filesystem snapshot across all files. Filter and theme assets must remain
 available and unchanged during rendering. A project operation retains its prepared
 source before execution and updates the plan's source location without reparsing
-its selected content. Render-asset capture and post-preflight artifact recovery
+its selected content. Render-asset capture and recovery of complete build bundles
 remain separate contracts.
 
 Each build run and dist manifest records `configuration.sha256`, identifying
 the workbench config bytes used by that build. It remains the captured hash if
 the file is edited during rendering; the manifest does not re-read the config.
+
+### Render output recovery
+
+`render_document` delegates to `render_documents`, which owns staging and output
+promotion for single, sequential, and parallel rendering. Requests must have
+distinct resolved output paths; duplicates and path aliases are rejected before
+creating output directories. Each render writes inside a temporary directory
+beneath its destination's parent, retaining the requested filename and extension.
+That directory is private to the render operation. A successful output replaces
+its destination atomically before its success callback runs.
+
+Outputs are promoted in request order. If rendering, promotion, or a callback
+raises, already promoted outputs remain and unpromoted outputs retain their
+previous contents or stay absent. Temporary outputs are removed after dispatched
+workers finish, including when a callback raises `KeyboardInterrupt`. A caller
+cannot infer that the whole batch succeeded from the first callback.
+
+This is an individual-output guarantee. Parent directories and other build
+artifacts, including selections and styles written before rendering, can remain
+after failure. Whole-run/dist rollback, interruption of external processes, and
+recovery after forced process termination are not provided by this contract.
 
 ## Variant and artifact names
 

@@ -14,11 +14,11 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from types import TracebackType
 from typing import Callable, Sequence
 
 from cvworkbench.themes import RenderPlan
@@ -43,6 +43,36 @@ class RenderRequest:
 
 
 def render_document(
+    input_path: Path,
+    output_path: Path,
+    variant: Variant,
+    filters_dir: Path,
+    output_format: str,
+    pdf_engine: str | None,
+    render_plan: RenderPlan | None = None,
+    *,
+    pandoc_path: str | None = None,
+    filter_paths: Sequence[Path] | None = None,
+) -> None:
+    """Render one document, replacing its destination only after successful completion."""
+    render_documents(
+        [
+            RenderRequest(
+                input_path,
+                output_path,
+                variant,
+                filters_dir,
+                output_format,
+                pdf_engine,
+                render_plan,
+            )
+        ],
+        pandoc_path=pandoc_path,
+        filter_paths=filter_paths,
+    )
+
+
+def _render_document(
     input_path: Path,
     output_path: Path,
     variant: Variant,
@@ -127,9 +157,13 @@ def render_documents(
     max_workers: int | None = None,
     after_each_success: Callable[[RenderRequest], None] | None = None,
 ) -> None:
+    """Stage renders and publish each completed output in request order."""
     request_list = tuple(requests)
     if not request_list:
         return
+    destinations = [request.output_path.resolve() for request in request_list]
+    if len(set(destinations)) != len(destinations):
+        raise RenderError("Render requests must have distinct output paths")
 
     resolved_pandoc_path = pandoc_path or _which("pandoc")
     if resolved_pandoc_path is None:
@@ -137,54 +171,43 @@ def render_documents(
     resolved_filter_paths = tuple(filter_paths) if filter_paths is not None else None
 
     worker_limit = max_workers or min(len(request_list), max(os.cpu_count() or 1, 1))
-    if worker_limit <= 1 or len(request_list) == 1:
+    with ExitStack() as staged_outputs:
+        scheduled_requests = []
         for request in request_list:
-            _render_request(
-                request,
-                pandoc_path=resolved_pandoc_path,
-                filter_paths=resolved_filter_paths,
-                output_path=request.output_path,
+            request.output_path.parent.mkdir(parents=True, exist_ok=True)
+            staging_dir = staged_outputs.enter_context(
+                tempfile.TemporaryDirectory(
+                    prefix=f".{request.output_path.stem}.", dir=request.output_path.parent
+                )
             )
-            if after_each_success is not None:
-                after_each_success(request)
-        return
+            temp_output_path = Path(staging_dir) / request.output_path.name
+            scheduled_requests.append(_ScheduledRenderRequest(request, temp_output_path))
 
-    scheduled_requests = [
-        _ScheduledRenderRequest(
-            request=request,
-            temp_output_path=_allocate_temp_output_path(request.output_path),
-            future=None,
-        )
-        for request in request_list
-    ]
-    error: Exception | None = None
-    error_traceback: TracebackType | None = None
-    try:
-        with ThreadPoolExecutor(max_workers=worker_limit) as executor:
+        if worker_limit <= 1 or len(request_list) == 1:
             for scheduled in scheduled_requests:
-                scheduled.future = executor.submit(
+                _render_request(
+                    scheduled.request,
+                    pandoc_path=resolved_pandoc_path,
+                    filter_paths=resolved_filter_paths,
+                    output_path=scheduled.temp_output_path,
+                )
+                _publish_output(scheduled, after_each_success)
+            return
+
+        with ThreadPoolExecutor(max_workers=worker_limit) as executor:
+            futures = [
+                executor.submit(
                     _render_request,
                     scheduled.request,
                     pandoc_path=resolved_pandoc_path,
                     filter_paths=resolved_filter_paths,
                     output_path=scheduled.temp_output_path,
                 )
-            for scheduled in scheduled_requests:
-                future = scheduled.future
-                if future is None:
-                    raise RuntimeError("render dispatch future was not initialized")
+                for scheduled in scheduled_requests
+            ]
+            for scheduled, future in zip(scheduled_requests, futures, strict=True):
                 future.result()
-                scheduled.temp_output_path.replace(scheduled.request.output_path)
-                if after_each_success is not None:
-                    after_each_success(scheduled.request)
-    except Exception as exc:  # pragma: no cover - exercised via callback-visible behavior
-        error = exc
-        error_traceback = exc.__traceback__
-    finally:
-        for scheduled in scheduled_requests:
-            scheduled.temp_output_path.unlink(missing_ok=True)
-    if error is not None:
-        raise error.with_traceback(error_traceback)
+                _publish_output(scheduled, after_each_success)
 
 
 def _run(args: list[str]) -> None:
@@ -216,24 +239,19 @@ def _which(command: str) -> str | None:
     return result.stdout.strip()
 
 
-@dataclass
+@dataclass(frozen=True)
 class _ScheduledRenderRequest:
     request: RenderRequest
     temp_output_path: Path
-    future: Future[None] | None
 
 
-def _allocate_temp_output_path(output_path: Path) -> Path:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, raw_path = tempfile.mkstemp(
-        prefix=f".{output_path.stem}.",
-        suffix=output_path.suffix or ".tmp",
-        dir=output_path.parent,
-    )
-    os.close(fd)
-    temp_path = Path(raw_path)
-    temp_path.unlink(missing_ok=True)
-    return temp_path
+def _publish_output(
+    scheduled: _ScheduledRenderRequest,
+    after_each_success: Callable[[RenderRequest], None] | None,
+) -> None:
+    scheduled.temp_output_path.replace(scheduled.request.output_path)
+    if after_each_success is not None:
+        after_each_success(scheduled.request)
 
 
 def _render_request(
@@ -243,7 +261,7 @@ def _render_request(
     filter_paths: Sequence[Path] | None,
     output_path: Path,
 ) -> None:
-    render_document(
+    _render_document(
         request.input_path,
         output_path,
         request.variant,

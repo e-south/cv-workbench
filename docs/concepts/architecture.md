@@ -151,7 +151,9 @@ defines result, error, configuration, and recovery semantics.
 parse. The plan carries those fingerprints to `build/manifest.py`, so manifest
 collection does not acquire a different generation of source or variant files.
 `build/pipeline.py` executes the resulting request-local plan; `build_documents`
-composes those phases for ordinary callers. `ops/projects/building.py` combines
+composes those phases for ordinary callers. `build/rendering.py` owns staged
+output promotion for both individual and batch renders; callback ordering and
+failure recovery share that boundary. `ops/projects/building.py` combines
 temporary source preparation, schema validation, and that same plan before
 allocating a retained project run. Its CLI adapter delegates to `build_project`
 and presents the result. The [project build API](../reference/project-contract.md#project-build-api)

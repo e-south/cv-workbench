@@ -156,6 +156,64 @@ candidate hashes remained unchanged. Context reported ready source, no issues,
 and publication still requiring review. The site remained clean; no network
 refresh, publication approval, sync, or push occurred.
 
+### Medium — failed renders could overwrite completed documents — fixed
+
+A real Pandoc Lua filter wrote incomplete content to the requested output and
+then raised an error. Direct, single-request, and sequential rendering left those
+bytes at the final destination, replacing a previous document or creating a
+failed export. Six regressions reproduced the preservation failure; the existing
+parallel path passed the same checks (`/tmp/cvw-render-recovery-red.log`). Two
+additional regressions showed that duplicate and aliased destinations were
+accepted (`/tmp/cvw-render-destinations-red.log`). The failed criteria were
+preserving completed outputs on render failure and assigning one request per
+destination.
+
+`render_document` now delegates to the batch rendering owner. Both sequential and
+parallel execution stage each output in an operation-owned temporary directory,
+preserve its filename/extension, and promote completed files in request order.
+Duplicate resolved targets are rejected before output-directory writes. Success
+callbacks observe promoted files; callback errors and cancellation retain that
+completed prefix and clean unpromoted staging after workers finish. The
+[render recovery contract](../reference/configuration-contract.md#render-output-recovery)
+distinguishes individual-output preservation from whole-build rollback and forced
+process termination.
+
+The focused suite passed 19 checks, including real Pandoc failures, destination
+conflicts, callback errors and `KeyboardInterrupt`, and a real PDF signature
+check (`/tmp/cvw-render-recovery-final-focused.log`). The concurrency test now
+observes real renderer calls, and its failure test runs a real Lua filter instead
+of substituting document output. The repository-relative CLI test was included
+in the broader isolated-checkout run rather than rerun against live output paths.
+All seven isolated CLI journey steps passed with empty stderr
+(`/tmp/cvw-render-recovery-journey.json`).
+
+The isolated full suite passed 884 tests with one opt-in remote skip and five
+existing PyMuPDF/SWIG warnings (`/tmp/cvw-render-recovery-full.log`). Tested source
+and test files matched the working tree byte-for-byte. The 13 documentation and
+import-boundary checks passed. All pre-commit hooks, including the secret scan,
+passed (`/tmp/cvw-render-recovery-hooks.log`). Canonical-master and public-candidate hashes stayed
+unchanged; context reported a ready source, no issues, and publication still
+requiring review. The site remained clean. No network refresh, publication
+approval, site sync, or push occurred.
+
+### Medium — some tests write to the current workspace — open
+
+`tests/build/test_build.py`, `test_render.py`, and `test_render_formats.py` include
+tests that unlink/write `var/dist/base` using the current directory and default
+configuration. Running these tests from an operator's checkout can replace
+generated outputs and allocate live run directories. The ordinary suite has no
+shared workspace-isolation fixture. The immediate verification boundary is a
+temporary local checkout with current edits copied into it; durable remediation
+is to make these tests own explicit temporary workspaces and verify that default
+test execution preserves the operator's artifacts.
+
+Fresh environment setup in the temporary checkout could not complete offline:
+the locked PyMuPDF wheel was absent from the package cache
+(`/tmp/cvw-render-recovery-checkout-sync.log`). Broader verification therefore
+uses the existing installed dependencies with the temporary checkout's source
+selected through `PYTHONPATH`; it does not prove a fresh offline installation.
+The installed-wheel test retains its separate dependency-reuse contract.
+
 ### High — suggested project commands could mutate a different copy — fixed
 
 Project command descriptions retained only the manifest ID after inspecting an
@@ -1288,8 +1346,9 @@ project inspection now supplies CLI and preview observations with explicit
 configuration capture for full inspection. Retained history remains inspectable
 when proposals expire or become invalid, and run packaging is independent of
 current source inputs. Project builds now share a callable operation and defer
-persistent run allocation until source/content/render preflight passes. Continue
-with render-asset provenance, artifact recovery, and remaining apply/patch orchestration.
+persistent run allocation until source/content/render preflight passes. Individual
+render outputs now share staging and ordered promotion. Continue with test-workspace
+isolation, render-asset provenance, whole-build recovery, and remaining apply/patch orchestration.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,

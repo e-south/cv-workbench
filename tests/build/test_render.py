@@ -12,7 +12,6 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -22,7 +21,7 @@ import cvworkbench.build.rendering as rendering_module
 from cvworkbench.build.rendering import (
     RenderError,
     RenderRequest,
-    _allocate_temp_output_path,
+    render_document,
     render_documents,
 )
 from cvworkbench.cli import app
@@ -86,28 +85,32 @@ def test_render_documents_parallelizes_distinct_outputs(tmp_path: Path, monkeypa
     max_active = 0
     lock = threading.Lock()
 
-    def fake_render_document(*args, **kwargs) -> None:
+    render = rendering_module._render_document
+    started = threading.Barrier(2, timeout=5)
+
+    def observe_render(*args, **kwargs) -> None:
         nonlocal active, max_active
-        output_path = args[1]
         with lock:
             active += 1
             max_active = max(max_active, active)
-        time.sleep(0.05)
-        output_path.write_text(str(args[4]))
-        with lock:
-            active -= 1
+        try:
+            started.wait()
+            render(*args, **kwargs)
+        finally:
+            with lock:
+                active -= 1
 
-    monkeypatch.setattr(rendering_module, "render_document", fake_render_document)
+    monkeypatch.setattr(rendering_module, "_render_document", observe_render)
 
-    render_documents(requests, pandoc_path="/usr/bin/pandoc", max_workers=2)
+    render_documents(requests, max_workers=2)
 
     assert max_active > 1
-    assert (tmp_path / "cv.md").read_text() == "md"
-    assert (tmp_path / "cv.docx").read_text() == "docx"
-    assert not list(tmp_path.glob(".*.tmp"))
+    assert "Sample" in (tmp_path / "cv.md").read_text()
+    assert (tmp_path / "cv.docx").read_bytes().startswith(b"PK")
+    assert not list(tmp_path.glob(".cv.*"))
 
 
-def test_render_documents_cleans_up_temp_outputs_on_failure(tmp_path: Path, monkeypatch) -> None:
+def test_render_documents_cleans_up_temp_outputs_on_failure(tmp_path: Path) -> None:
     canonical_path = tmp_path / "canonical.md"
     canonical_path.write_text("# Sample\n")
     variant = _sample_variant(["md", "docx"])
@@ -130,29 +133,30 @@ def test_render_documents_cleans_up_temp_outputs_on_failure(tmp_path: Path, monk
         ),
     ]
 
-    def fake_render_document(*args, **kwargs) -> None:
-        output_path = args[1]
-        output_format = args[4]
-        if output_format == "md":
-            time.sleep(0.02)
-            raise RenderError("md failed")
-        time.sleep(0.05)
-        output_path.write_text("docx")
-
-    monkeypatch.setattr(rendering_module, "render_document", fake_render_document)
+    filter_path = tmp_path / "failure.lua"
+    filter_path.write_text(
+        "function Pandoc(doc)\n"
+        '  if FORMAT == "markdown" then error("md failed") end\n'
+        "  return doc\n"
+        "end\n"
+    )
 
     with pytest.raises(RenderError, match="md failed"):
-        render_documents(requests, pandoc_path="/usr/bin/pandoc", max_workers=2)
+        render_documents(requests, filter_paths=[filter_path], max_workers=2)
 
     assert not (tmp_path / "cv.md").exists()
     assert not (tmp_path / "cv.docx").exists()
-    assert not list(tmp_path.glob(".*.tmp"))
+    assert not list(tmp_path.glob(".cv.*"))
 
 
 def test_atomic_render_preserves_pdf_output_extension(tmp_path: Path) -> None:
-    temp_path = _allocate_temp_output_path(tmp_path / "cv.pdf")
+    source = tmp_path / "canonical.md"
+    source.write_text("# Sample\n")
+    output = tmp_path / "cv.pdf"
+    render_document(source, output, _sample_variant(["pdf"]), tmp_path, "pdf", "xelatex")
 
-    assert temp_path.suffix == ".pdf"
+    assert output.read_bytes().startswith(b"%PDF-")
+    assert {path.name for path in tmp_path.iterdir()} == {"canonical.md", "cv.pdf"}
 
 
 def _sample_variant(outputs: list[str]) -> Variant:

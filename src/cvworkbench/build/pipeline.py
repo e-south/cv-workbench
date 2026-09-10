@@ -80,7 +80,7 @@ def execute_build(
     dist_dir: Path | None = None,
     write_audit_artifacts: bool = True,
 ) -> BuildResult:
-    """Write and render a request-local plan while its source and render inputs remain available."""
+    """Write and render a request-local plan while its render assets remain available."""
     configuration = build_plan.configuration
     variant = build_plan.variant
     selected_formats = build_plan.formats
