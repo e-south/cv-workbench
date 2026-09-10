@@ -26,9 +26,9 @@ the run store, including 198 preview files totaling 12.6 MB. Reviews contain
 store has 37 legacy directories plus loose evidence/log files. These figures
 describe this inventory only; filesystem age is not a deletion decision.
 
-With two latest runs retained per scope, current GC lists 1,138 valid candidates,
+Before the dependency guard, with two latest runs retained per scope, GC listed 1,138 valid candidates,
 23 retained runs, and 71 invalid directories. The single recorded import draft
-has a present source and is currently retained by recency. Older review bundles
+had a present source and was retained by recency. Older review bundles
 have no `review-source.json` records, so their dependencies cannot be inferred.
 All five current authored-publication dependencies exist outside the system
 temporary directory. Publication artifacts remain separate from run GC.
@@ -139,6 +139,27 @@ Evidence is retained in `/tmp/cvw-draft-retention-red.log`,
 `/tmp/cvw-draft-retention-import-journey.json`. The live
 [import-draft retention contract](../reference/artifact-retention.md#import-draft-dependencies)
 owns behavior and recovery guidance.
+
+## Legacy preservation proposal
+
+A subsequent read-only inventory found 20 legacy imports containing 60 files,
+349,723 bytes in total. Every import has one canonical-path hint in `notes.md`;
+those hints identify 12 distinct baseline files, all currently present. They are
+historical clues, not proof of original source bytes. Three groups share identical
+imported Markdown, but that does not establish equivalent editing histories.
+
+**Keep the legacy imports and current run store unchanged.** The entire run store,
+including previews, is only 36.2 MB. Recovering space does not justify guessing
+dependencies or adding a migration subsystem now. The guard continues to block
+run GC; `--keep` alone does not make missing draft metadata valid.
+
+The private observation inventory and proposed archive acceptance criteria are
+in the workspace named by `/tmp/cvw-release-review-workspace.json`. Current
+hashes are labeled observations, not reconstructed provenance. A future archive
+decision must preserve drafts and all plausible baseline evidence together
+outside cleanup-managed stores, verify copied inventory and hashes, and only
+then consider removing originals. No archive, metadata repair, or deletion was
+performed. This decision defers cleanup without blocking document review.
 
 ## Preview follow-up threshold
 

@@ -72,68 +72,70 @@ defines what publication checks inspect and their limits. They cover decoded
 PDF object strings and bookmark actions; opaque streams and general malware
 assessment remain outside that claim.
 
-## Consequential-action authority
+## How the recent fixes support the product
 
-Application could edit leftover root files while a build selected the active
-version. Draft and project application now share one selection owner and report
-the concrete edited directory. Incomplete packs and escaping active paths are
-errors; explicit versions remain pinned. The
-[application contract](../reference/patch-application.md#source-selection) owns
-selection and concurrency limits. The source-selection slice passed 1,123 tests
-and seven isolated CLI harness steps; its evidence remains in
-`/tmp/cvw-apply-authority-*.log`.
+| Change | User value | Owning contract |
+| --- | --- | --- |
+| Apply to the selected source version | The document being reviewed and the source being edited refer to the same selected directory | [Source selection](../reference/patch-application.md#source-selection) |
+| Capture preparation inputs and action settings | Validation and provenance describe the bytes actually processed; changed originals reject preparation before replacement | [Input lifetime](../reference/publication-contract.md#input-lifetime) |
+| Retain import baselines independently of recency | Building a newer document cannot silently remove an outstanding edit's comparison source | [Draft dependencies](../reference/artifact-retention.md#import-draft-dependencies) |
 
-Publication preparation and sync could combine different workbench settings
-within one command. Preparation also checked DOCX/PDF correspondence before
-capturing source hashes, and recorded policy/person/variant hashes after use.
-A reproduced export change could therefore inherit an earlier correspondence
-result. Configuration edits/removal produced eight failing API/CLI cases;
-changes to the five preparation inputs produced five more failures.
+The latest code baseline passed 1,165 tests with one existing opt-in integration
+skip and five upstream warnings, plus the seven-step isolated CLI harness and
+repository hooks. A real import/new-build/retention journey kept its baseline
+solely through its draft dependency. A separate preparation from real authored
+inputs produced a public PDF byte-identical to the live candidate in an isolated
+workspace. Evidence: `/tmp/cvw-draft-retention-full.log`,
+`/tmp/cvw-draft-retention-import-journey.json`, and
+`/tmp/cvw-publication-authority-real-journey.json`. Contract-specific concurrency
+and recovery limits remain explicit; local checks are not remote advisory evidence.
 
-Preparation and sync now use one workbench snapshot. A dedicated input owner
-captures five files into private temporary copies for preparation; provenance
-records their original identities and captured-byte hashes. Changes to original
-inputs reject preparation before output replacement. Permissions and cleanup
-on success/cancellation were verified. The
-[input-lifetime contract](../reference/publication-contract.md#input-lifetime)
-owns these boundaries. It does not claim a simultaneous filesystem snapshot,
-writer locking, crash durability, or automatic human review.
+## Current public artifact review
 
-A fresh CLI preparation from the real configured DOCX/PDF pair, with output
-restricted to a new temporary workspace, produced a public PDF byte-identical
-to the existing candidate. All original inputs and the live candidate were
-unchanged. The isolated result remains `review_required`, with no review receipt.
-Evidence is in `/tmp/cvw-publication-authority-real-journey.json`.
+A fresh inspection of the exact public candidate confirms three pages, three
+contact links, and the corrected left-aligned header with concise link labels.
+The local Chrome packet loaded all three page images without horizontal overflow
+at 961 × 907 or console warnings/errors. Visual inspection found no clipping.
+This is a layout observation, not approval of the CV's facts or audience fit.
 
-The focused publication, sync, CLI, and documentation regression passed 168
-tests. Failure and passing evidence is retained in
-`/tmp/cvw-publication-authority-config-red.log`,
-`/tmp/cvw-publication-authority-input-red.log`, and
-`/tmp/cvw-publication-authority-targeted.log`. The final suite passed 1,139 tests
-with one existing opt-in integration skip and five upstream warnings. All seven
-isolated CLI harness steps, lint/format checks, and repository hooks passed.
-The live context remains ready with no reported issues, the same source selection,
-and publication state `review_required`. Full evidence is in
-`/tmp/cvw-publication-authority-full.log`,
-`/tmp/cvw-publication-authority-journey.json`, and
-`/tmp/cvw-publication-authority-hooks.log`. These are local checks, not remote
-advisory evidence.
+Content review should confirm current roles, dates, and achievements, and decide
+whether to change the heading “Honors and Rewards” to “Honors and Awards.” The
+short standalone rule below the last section on page three is also an editorial
+choice to inspect in the authored source. These are review notes, not source edits.
+
+The public PDF has no bookmarks, document language, or structure tree. The
+installed Word AppleScript dictionary exposes no tagging/accessibility option
+for `save as`. A tagged export that retains the authored layout has therefore
+not been established with this local path. Do not equate a successful export or
+heading-style changes with an accessible PDF. Choose a supported export path
+and verify reading order, tags, disclosure, and layout before claiming that outcome.
+
+An isolated review packet, preservation proposal, PDF observations, and browser
+evidence are located by `/tmp/cvw-release-review-workspace.json`. The copied
+public PDF retains hash `556d1db9bf900aa4ea83156e3b1881647627e2e0a760f40d899e461ddfa7e712`.
+No review receipt, source promotion, or site update was performed.
+
+The readiness pass changed documentation only. Its 37 documentation, workspace
+boundary, and context checks and all repository hooks passed. Before/after
+inventories confirm identical regular-file paths and bytes under `local/` and
+`var/`; the canonical master hash is unchanged as well. The existing loopback
+preview serves the same public PDF. These observations are retained in the
+review workspace's `final-invariants.json` and `/tmp/cvw-release-readiness-*.log`.
 
 ## Bounded remaining effort
 
-Import-draft retention subsequently passed 1,165 tests (one existing opt-in skip),
-the seven-step CLI harness, and a real import/new-build/retention journey. The
-remaining legacy-data decisions below are explicit; validation did not remove
-or rewrite historical evidence.
-
-1. **Preserve legacy evidence.** The [retention implementation](../plans/2026-09-10-artifact-retention.md)
-   now protects standalone import baselines, including stale or damaged runs.
-   The live dry-run refuses 20 older imports without source metadata. Keep those
-   files and reconcile historical evidence before any future cleanup; do not
-   synthesize verified provenance. No live pruning is part of this phase.
-2. **Reach the review decision.** Present the selected authored/public artifact
-   and identify verified, pending-review, and deferred items. Keep the supported
-   PDF-structure investigation explicit rather than treating headings as proof.
+1. **Preserve history — decision recorded.** Keep the 20 legacy imports and run
+   store unchanged. Their notes identify 12 present possible baselines, but do
+   not establish provenance. The [preservation proposal](../plans/2026-09-10-artifact-retention.md#legacy-preservation-proposal)
+   defers cleanup; the storage cost is small and this does not block document review.
+2. **Approve a useful document — current milestone.** Review the actual public
+   candidate for wording and appearance. Resolve source changes through a fresh
+   export/preparation cycle, then review the resulting exact artifact.
+3. **Decide the PDF accessibility requirement.** Tagged, faithful export remains
+   unresolved. It is required before claiming an accessible PDF; it must remain
+   explicit in any release decision.
+4. **Release the approved artifact — subsequent phase.** Return to website
+   integration and repository gardening after the document decision.
 
 After artifact review, return to the website and its release gardening. Remote
 advisory checks, branch consolidation, pushing, and site sync belong to that
