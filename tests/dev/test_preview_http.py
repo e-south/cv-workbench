@@ -130,4 +130,7 @@ def test_preview_keeps_same_origin_build_and_exact_routes(preview_server):
     assert not stopped.is_set()
     status, body, response_headers = _request(server, "GET", "/cv.html")
     assert status == 200 and b"<html" in body
+    assert _request(server, "GET", "/canonical.md")[0] == 404
+    assert _request(server, "GET", "/../input/canonical.md")[0] == 404
+    assert _request(server, "GET", "/styles/default-modern.css")[0] == 200
     assert response_headers["X-Content-Type-Options"] == "nosniff"

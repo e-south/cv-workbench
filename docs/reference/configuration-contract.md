@@ -136,8 +136,10 @@ roles (for example, rendered `canonical.md` over canonical input) fail before
 output writes. Shared run/dist directories, including directory aliases, retain
 one run manifest with `created_at`. Audited retained HTML runs carry their linked
 CSS as well as the document. Unselected formats and unrelated files are preserved.
-An unaudited preview updates only its selected documents, canonical input, and
-styles; preexisting audit metadata is not refreshed by that mode.
+An unaudited pipeline call updates only its selected documents, canonical input,
+and styles; preexisting audit metadata is not refreshed by that mode. Ordinary
+preview routes these writes to [separate preview directories](preview-contract.md#artifact-ownership)
+so its output cannot invalidate an audited build.
 
 Rendering and metadata collection finish before persistent artifacts change.
 The collector receives captured resume bytes, so an abandoned metadata task does

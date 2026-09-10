@@ -23,13 +23,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Callable
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.build.pipeline import build_documents
+from cvworkbench.build.rendering import RenderError
 from cvworkbench.config import (
     ConfigSource,
     resolve_config_path,
-    resolve_dist_path,
     resolve_projects_path,
     resolve_runs_path,
     resolve_sot_path,
@@ -43,6 +44,7 @@ from cvworkbench.dev.preview_http import (
     render_body_length,
     validate_request_origin,
 )
+from cvworkbench.dev.preview_paths import PreviewPaths, resolve_preview_paths
 from cvworkbench.inputs.sot_versions import SotVersionError, resolve_active_sot_path
 from cvworkbench.inputs.validation import validate_sot
 from cvworkbench.ops.projects import (
@@ -148,6 +150,7 @@ class PreviewController:
         self._project_sot_override = project_sot_override
         self._project_id: str | None = None
         self._session_id = session_id
+        self._preview_id = uuid4()
         self._catalog = self._load_catalog()
         self._state: PreviewState | None = None
 
@@ -200,10 +203,6 @@ class PreviewController:
                     else:
                         sot_path = resolve_active_sot_path(project_spec.sot_path)
                     project_source_path = sot_path
-                    run_dir = (
-                        resolve_runs_path(self._config_path) / "preview" / project_spec.project_id
-                    )
-                    run_dir.mkdir(parents=True, exist_ok=True)
                     staging_dir = (
                         Path(
                             preparation.enter_context(
@@ -219,7 +218,6 @@ class PreviewController:
                     )
                 else:
                     sot_path = resolve_sot_path(self._sot_base, self._config_path)
-                    run_dir = resolve_runs_path(self._config_path) / "preview" / self._variant_id
             except (FileNotFoundError, ValueError, ProjectError, SotVersionError) as exc:
                 message = str(exc)
                 self._state = self._state or self._new_state()
@@ -234,6 +232,7 @@ class PreviewController:
                 raise PreviewError(message)
 
             try:
+                paths = self._output_paths()
                 result = build_documents(
                     sot_path=sot_path,
                     config_path=self._config_path,
@@ -242,11 +241,11 @@ class PreviewController:
                     theme=self._theme_id,
                     style_preset=self._style_preset,
                     variant_path_override=variant_path_override,
-                    run_dir=run_dir,
-                    dist_dir=run_dir if self._project_dir is not None else None,
+                    run_dir=paths.input_dir,
+                    dist_dir=paths.output_dir,
                     write_audit_artifacts=False,
                 )
-            except (ValueError, ThemeError, AtomicWriteError) as exc:
+            except (OSError, ValueError, ThemeError, RenderError, AtomicWriteError) as exc:
                 message = str(exc)
                 self._state = self._state or self._new_state()
                 self._state.last_error = message
@@ -412,8 +411,16 @@ class PreviewController:
         if output_format not in allowed:
             raise PreviewError(f"Format not supported: {output_format}")
 
+    def _output_paths(self) -> PreviewPaths:
+        return resolve_preview_paths(
+            self._config_path,
+            preview_id=self._preview_id,
+            variant_id=self._variant_id,
+            project_id=self._project_id,
+        )
+
     def _new_state(self) -> PreviewState:
-        dist_dir = resolve_dist_path(self._config_path) / self._variant_id
+        dist_dir = self._output_paths().output_dir
         return PreviewState(
             variant_id=self._variant_id,
             theme_id=self._theme_id,

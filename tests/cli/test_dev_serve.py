@@ -60,10 +60,6 @@ def _write_preview_config(config_path: Path) -> None:
 
 
 def test_dev_serve_builds_html() -> None:
-    html_path = Path("var/dist/base/cv.html")
-    if html_path.exists():
-        html_path.unlink()
-
     runner = CliRunner()
     env = os.environ.copy()
     env["CVW_DEV_ONCE"] = "1"
@@ -77,11 +73,15 @@ def test_dev_serve_builds_html() -> None:
             "base",
             "--sot-path",
             "sot.sample",
+            "--json",
         ],
         env=env,
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.stdout
+    html_path = Path(json.loads(result.stdout)["data"]["output_html"])
+    assert html_path.is_relative_to(Path.cwd() / "var/runs/preview/variants/base")
+    assert not Path("var/dist/base/cv.html").exists()
     assert html_path.exists()
     assert html_path.stat().st_size > 0
 

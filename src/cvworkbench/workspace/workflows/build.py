@@ -109,7 +109,7 @@ def automation_verify_recipe(
         ],
         "outputs": [
             "var/dist/<variant>/cv.md",
-            "var/dist/<variant>/cv.html",
+            "var/runs/preview/variants/<variant>/<preview-id>/output/cv.html",
             "var/runs/<run-id>/manifest.json",
             "var/runs/<run-id>/canonical.md",
         ],

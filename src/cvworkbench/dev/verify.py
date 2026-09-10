@@ -11,6 +11,7 @@ Module Author(s): Codex
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -469,6 +470,8 @@ def _verify_build(
         f"build run_dir outside isolated workspace: {run_dir}",
     )
     state["build_run_id"] = run_dir.name
+    state["build_artifact_roots"] = (output_md.parent, run_dir)
+    state["build_artifact_fingerprints"] = _artifact_fingerprints(state["build_artifact_roots"])
     return {
         "run_dir": str(run_dir),
         "run_id": run_dir.name,
@@ -479,11 +482,22 @@ def _verify_build(
 
 
 def _verify_preview_once(
-    payload: dict[str, Any], workspace: VerifyWorkspace, _state: dict[str, Any]
+    payload: dict[str, Any], workspace: VerifyWorkspace, state: dict[str, Any]
 ) -> dict[str, str]:
     data = _expect_summary_payload(payload, "serve")
     html_path = _require_path(data, "output_html")
     _require(html_path.exists(), f"preview output missing: {html_path}")
+    preview_root = workspace.root / "var/runs/preview/variants/base"
+    _require(
+        html_path.resolve().is_relative_to(preview_root.resolve())
+        and html_path.parent.name == "output",
+        f"preview output outside its owned rendered directory: {html_path}",
+    )
+    _require(
+        _artifact_fingerprints(state["build_artifact_roots"])
+        == state["build_artifact_fingerprints"],
+        "preview changed audited build artifacts",
+    )
     preview_path = data.get("preview_file") or data.get("preview_url")
     _require(preview_path == str(html_path), "preview --once should return the local HTML path")
     _require(
@@ -495,6 +509,16 @@ def _verify_preview_once(
         "output_html": str(html_path),
         "preview_file": str(preview_path),
         "session_path": str(session_path),
+        "audited_build_artifacts": "preserved",
+    }
+
+
+def _artifact_fingerprints(roots: tuple[Path, ...]) -> dict[str, str]:
+    return {
+        str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+        for root in roots
+        for path in root.rglob("*")
+        if path.is_file()
     }
 
 

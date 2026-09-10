@@ -35,6 +35,73 @@ source of truth.
 
 ## Findings and disposition
 
+### High for artifact ownership — previews overwrote audited and shared outputs — fixed
+
+Ordinary preview rendered into configured `var/dist/<variant>/` with audit
+artifacts disabled. A changed source/style therefore replaced documents and CSS
+while leaving the preceding build manifest and selection unchanged. Independent
+controllers for the same variant or project also shared output locations.
+Project canonical input lived in the static HTTP directory.
+
+`dev/preview_paths.py` now owns invocation-scoped paths under the preview tree,
+with separate variant/project scopes and `input/` versus `output/` directories.
+Each controller generates its own opaque filesystem identity, independent of its
+browser control lease. Rebuilds reuse that controller's directory; independent
+invocations preserve each other's last successful preview. Only rendered output
+is the HTTP root. CLI fields and HTTP filename maps remain the discovery surface;
+callers/tests now consume returned paths instead of reconstructing legacy paths.
+No legacy preview folders were moved, read as fallback, or removed.
+
+Source validation occurs before persistent preview allocation. A real failing
+Pandoc Lua filter also exposed an uncaught `RenderError`; preview now translates
+render/I/O failures through `PreviewError`, preserves previous artifacts and
+build id, and records `last_error`. Existing HTTP error handling returns the
+normal failed-render response. Live HTTP checks return 404 for canonical input
+and traversal attempts while continuing to serve the HTML and linked CSS.
+
+Harness setting: repository-local code and generated artifacts. Selected lane:
+`autonomy-hardening`; endpoints: `architecture-invariants` for artifact ownership
+and `knowledge-integrity` for path/retention routing. The target is a deterministic
+ownership check for this workflow, not a whole-product maturity claim. The
+workflow-router, operational endpoints, evidence checks, maturity, change-pattern,
+and validation-loop references were used. No external claims or provider refresh
+were needed. No clarification or publication authorization was requested.
+
+| Criterion / threshold | Before | Preventive check and result |
+| --- | --- | --- |
+| No audited-output changes, controller collisions, or served canonical input | Four real-render regressions failed | `tests/dev/test_preview_outputs.py`: ownership and rebuild cases pass |
+| Failed rendering retains the previous preview and reports its error | Real Lua failure bypassed preview error handling | Same module verifies the error and unchanged bundle |
+| Reject every preview that returns shared output or changes the preceding build | Harness accepted all three unsafe scenarios | `tests/dev/test_verify.py`: 3/3 rejected before later steps |
+| Local journeys preserve audited artifacts without manual repair | Previous harness checked only output existence | Three isolated seven-step runs pass; Markdown/HTML/CSS/canonical hashes match |
+| Paths and retention have one current contract | Styling/project docs and seven CLI tests assumed old paths | Live leaves route to preview ownership; repository/fixture/import checks pass |
+
+The harness now captures complete build dist/run file inventories and SHA-256
+fingerprints, compares them after preview, validates the returned preview-owned
+output path, and records `audited_build_artifacts: preserved`. This changes a
+false-green existence check into an ownership check. Evidence:
+`/tmp/cvw-preview-ownership-red.log`,
+`/tmp/cvw-preview-ownership-errors-red.log`,
+`/tmp/cvw-preview-ownership-harness-red.log`,
+`/tmp/cvw-preview-ownership-focused.log`, and
+`/tmp/cvw-preview-ownership-repeatability.json`.
+
+The focused preview/harness/HTTP suite passed 38 tests, and the broader
+contract/workspace/isolation checks passed 152. The full suite passed 924 tests
+with one opt-in remote skip and five existing PyMuPDF/SWIG warnings in 90.61
+seconds (`/tmp/cvw-preview-ownership-full.log`). Each of the three CLI journeys
+passed seven steps with empty stderr. Ruff, the harness skill audit, and all
+hooks including the secret scan passed. Protected
+`local/` and `var/` inventories retained all 8,317 entries and their recorded
+metadata; master/candidate hashes remained unchanged. Publication remains
+`review_required`, and the site remains untouched.
+
+The [preview contract](../reference/preview-contract.md#artifact-ownership)
+is the current authority. Preview artifacts deliberately survive exit/stop and
+remain excluded from build catalogs and run GC. A dedicated preview-retention
+plan remains follow-up work; whole-store cleanup is not a preview-only pruning
+mechanism. Render-asset capture, configuration capture across an entire preview
+request, and the outer project-build lifecycle remain separate boundaries.
+
 ### High for artifact integrity — failed builds mixed output generations — fixed
 
 A real Markdown/HTML build with a Lua filter failing only HTML replaced canonical
@@ -1449,8 +1516,9 @@ current source inputs. Project builds now share a callable operation and defer
 persistent run allocation until source/content/render preflight passes. Individual
 render outputs now share staging and ordered promotion, and test execution owns
 temporary workspaces. Complete build bundles now stage before recoverable file
-replacement. Continue with render-asset provenance, outer project-run recovery,
-preview/audit destination separation, and remaining apply/patch orchestration.
+replacement. Preview now owns independent input/output directories and preserves
+audited builds. Continue with render-asset provenance, outer project-run recovery,
+preview-retention planning, and remaining apply/patch orchestration.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,

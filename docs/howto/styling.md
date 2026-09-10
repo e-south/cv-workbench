@@ -61,8 +61,10 @@ or run:
 uv run cvw dev stop
 ```
 
-The HTML output is written to `var/dist/<variant>/cv.html`. The command prints
-the local preview URL; use Chrome DevTools MCP to open and interact with it.
+The command prints the local preview URL and rendered HTML path. Files live in
+an [invocation-scoped preview directory](../reference/preview-contract.md#artifact-ownership),
+separate from audited build output. Use Chrome DevTools MCP to open and interact
+with the local URL.
 
 ## Theme layout
 

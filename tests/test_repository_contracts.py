@@ -165,3 +165,16 @@ def test_build_recovery_contract_routes_to_distinct_owners() -> None:
     assert "tests/build/test_bundle_recovery.py" in contract
     assert "tests/test_storage.py" in contract
     assert "not simultaneous visibility" in contract
+
+
+def test_preview_ownership_contract_routes_paths_and_retention() -> None:
+    preview = (ROOT / "docs/reference/preview-contract.md").read_text()
+    retention = (ROOT / "docs/reference/artifact-retention.md").read_text()
+    verification = (ROOT / "docs/reference/verify-contract.md").read_text()
+    assert "## Artifact ownership" in preview
+    assert "dev/preview_paths.py" in preview
+    assert "artifact-retention.md#preview-artifacts" in preview
+    assert "## Preview Artifacts" in retention
+    assert "preview-contract.md#artifact-ownership" in retention
+    assert "audited_build_artifacts: preserved" in verification
+    assert "var/dist/<variant>/cv.html" not in (ROOT / "docs/howto/styling.md").read_text()

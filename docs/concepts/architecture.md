@@ -65,6 +65,11 @@ The [build recovery contract](../reference/configuration-contract.md#build-bundl
 defines staging, captured output preconditions, rollback, and concurrency limits.
 Build code must not depend on operations merely to reuse file persistence.
 
+Preview uses `dev/preview_paths.py` to separate canonical input from served
+output and assign an independent directory to each invocation. Audited builds,
+preview artifacts, and publication records have distinct ownership and retention
+rules; see [preview ownership](../reference/preview-contract.md#artifact-ownership).
+
 ## Distribution and workspace ownership
 
 The wheel's `cvworkbench_data` package contains immutable rendering filters and

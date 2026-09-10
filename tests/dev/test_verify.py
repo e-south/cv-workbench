@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 import cvworkbench.dev.verify as verify_module
@@ -178,7 +179,7 @@ def _emit_success(
         )
 
     if step.id == "preview.once":
-        html_path = workspace.root / "var" / "dist" / "base" / "cv.html"
+        html_path = workspace.root / "var/runs/preview/variants/base/fixture/output/cv.html"
         if preview_html:
             html_path.parent.mkdir(parents=True, exist_ok=True)
             html_path.write_text("<html></html>\n")
@@ -279,3 +280,29 @@ def _emit_success(
 
 def _unexpected_runner(_step: VerifyStep, _workspace: VerifyWorkspace) -> CommandExecution:
     raise AssertionError("runner should not be called when preflight fails")
+
+
+@pytest.mark.parametrize("failure", ["shared_path", "overwrite", "extra_artifact"])
+def test_verify_rejects_preview_crossing_build_ownership(tmp_path, failure):
+    def runner(step, workspace):
+        result = _success_runner(step, workspace)
+        if step.id != "preview.once":
+            return result
+        target = workspace.root / "var/dist/base"
+        if failure == "shared_path":
+            html = target / "cv.html"
+            html.write_text("<html>Shared output</html>")
+            payload = json.loads(result.stdout)
+            payload["data"].update(output_html=str(html), preview_file=str(html))
+            return CommandExecution(0, json.dumps(payload))
+        if failure == "overwrite":
+            (target / "cv.md").write_text("Overwritten by preview")
+        else:
+            (target / "preview.html").write_text("Unowned output")
+        return result
+
+    summary = verify_module.run_verify(REPO_ROOT, tmp_path / "verify", runner=runner)
+    assert summary["status"] == "failed"
+    expected = "preview output outside" if failure == "shared_path" else "preview changed audited"
+    assert expected in summary["error"]
+    assert summary["steps"][-1]["id"] == "preview.once"

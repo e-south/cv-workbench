@@ -117,8 +117,13 @@ Required artifact assertions:
   (build manifests additionally record the captured workbench configuration's
   `configuration.sha256`; its lifetime is covered by the
   [configuration regression tests](configuration-contract.md#build-and-render-boundaries))
-- `preview --once`: `cv.html` exists, the returned `preview_file` resolves to
-  that local HTML path, and no preview session file is written
+- `preview --once`: `cv.html` exists under
+  `var/runs/preview/variants/base/<preview-id>/output/`, the returned `preview_file`
+  resolves to that local HTML path, and no preview session file is written.
+  The harness compares complete file inventories and SHA-256 fingerprints of
+  the preceding build's dist/run directories; preview must not add, remove, or
+  change their artifacts. The preview step records
+  `audited_build_artifacts: preserved` on success
 - `project guide`: `project.yaml`, `proposals/variant.yaml`, and
   `proposals/patch.yaml` exist
 - `reviewpack`: `cv.docx`, `cv.pdf`, and `review.md` exist and resolve the same

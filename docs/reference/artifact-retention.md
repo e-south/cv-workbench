@@ -15,6 +15,7 @@ that an artifact is disposable.
 
 | Artifact | Owner and retention rule | Inspect |
 | --- | --- | --- |
+| Preview outputs | Disposable invocation-scoped inputs and rendered files; excluded from run GC | [Preview artifacts](#preview-artifacts) |
 | Generated run | Latest runs per workspace/project and variant, plus explicit retained IDs | `cvw runs gc --json` |
 | Draft or project proposal | Registered expiration and keep/discard decisions | [Variant lifecycle](variant-lifecycle.md) |
 | Content review copy | Editable bundle whose recorded source run is retained by GC | [Content review](review-contract.md) |
@@ -69,6 +70,21 @@ run contains canonical text and selection metadata needed to interpret edits.
 
 Authored publication uses a separate source/export pair and hash-addressed
 review packet outside the run store. `runs gc` does not remove those artifacts.
+
+## Preview Artifacts
+
+Preview owns `preview/` beneath the configured runs root, including the current
+server lease and invocation-scoped variant/project directories. Successful files
+survive one-shot exit or server stop so the returned path remains reviewable.
+They carry no build manifest or review provenance and do not enter run catalogs,
+latest-run selection, or `runs gc`, even with `--include-invalid`.
+
+Preview does not automatically remove older invocations or legacy shared folders.
+A dedicated preview-retention plan is not yet implemented. Whole-store
+`cvw clean runs` includes this subtree and all audited runs; preserve needed
+review/build artifacts and stop the preview server before explicitly applying
+that broader cleanup. Do not use it as an automatic preview-only cleanup step.
+The [preview contract](preview-contract.md#artifact-ownership) owns path semantics.
 
 ## Whole-store Cleanup
 

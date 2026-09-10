@@ -1,6 +1,6 @@
 ---
 id: reference-preview-contract
-intent: Define the local-only preview server and browser-control boundary.
+intent: Define preview artifact ownership, local HTTP behavior, and browser control.
 audience: [operator, agent, maintainer]
 status: active
 navigation:
@@ -23,6 +23,35 @@ are rejected before reading state, rendering, or stopping the server. Local CLI
 clients may omit browser-origin headers. The response disallows cross-origin
 framing and browser caching of private preview content.
 
+## Artifact ownership
+
+`dev/preview_paths.py` owns preview locations beneath the configured runs root.
+Each controller gets a fresh opaque `preview-id`, independent of its browser
+control lease. Rebuilds in that controller reuse its preview directory; another
+invocation gets a different directory even for the same variant, project, or
+provided browser lease.
+
+- Variant previews: `var/runs/preview/variants/<variant-id>/<preview-id>/`
+- Project previews: `var/runs/preview/projects/<project-id>/<preview-id>/`
+
+Each directory separates `input/canonical.md` from `output/`, which contains
+rendered documents and their linked styles. Only `output/` is the static HTTP
+root; canonical input is not served. The configured `var/dist/<variant>/` and
+audited runs remain build-owned. Preview never refreshes or overwrites their
+files, selections, or manifests.
+
+Use the CLI's `output_html` and `preview_file` fields to find a one-shot result.
+For live preview, use the returned URL and the API's format-to-filename map;
+do not construct a filename from a guessed preview id. This layout replaces
+previous shared variant/project folders; existing folders are left untouched,
+without a fallback read or automatic migration.
+
+Successful preview outputs remain available after one-shot exit or server stop.
+They are disposable generated artifacts, not retained build or review records.
+Run inventory and `runs gc` exclude the preview tree. No age-based cleanup is
+performed by preview; see [retention](artifact-retention.md#preview-artifacts)
+before deliberate whole-store cleanup.
+
 ## Session record
 
 `uv run cvw preview` writes a session record to:
@@ -42,10 +71,10 @@ Fields:
 
 `uv run cvw preview --once` builds the HTML preview output once and exits
 without starting the server. No session file is written in this mode. Pass
-`--with-pdf` when you also need a one-shot `cv.pdf`. With `--project`, the
-rendered files stay under `var/runs/preview/<project-id>/`. When `--sot-path`
-points at a concrete version directory, preview uses that exact directory
-instead of following `ACTIVE`.
+`--with-pdf` when you also need a one-shot `cv.pdf`. Both variant and project
+previews follow the artifact-ownership layout above. When `--sot-path` points at
+a concrete version directory, preview uses that exact directory instead of
+following `ACTIVE`.
 
 ## HTTP API
 
@@ -134,7 +163,10 @@ content editor.
   generated preview outputs retain their configured locations. This follows the
   [source preparation contract](project-contract.md#source-preparation).
 - `build_id` increments after each successful rebuild and is used to cache-bust
-  the iframe URL.
+  the iframe URL. Rendering and commit failures retain the previous build id,
+  documents, and canonical input, and populate `last_error`. The CLI reports the
+  error; `/api/render` returns its normal `400` error response. Initial source
+  validation failures do not allocate persistent preview directories.
 - UI controls call `/api/render`; state updates are visible via `/api/state`.
 - Non-force theme, preset, variant, format, and auto-PDF changes are briefly
   debounced and coalesced in the browser so rapid control changes collapse into

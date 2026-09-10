@@ -19,6 +19,17 @@ from typer.testing import CliRunner
 from cvworkbench.cli import app
 
 
+def _preview_output(result) -> Path:
+    assert result.exit_code == 0, result.stdout
+    values = [
+        line.removeprefix("output_html: ")
+        for line in result.stdout.splitlines()
+        if line.startswith("output_html: ")
+    ]
+    assert len(values) == 1, result.stdout
+    return Path(values[0])
+
+
 @pytest.mark.usefixtures("sample_workspace")
 def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
@@ -73,10 +84,11 @@ def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "preview_file:" in result.stdout
     assert "preview_url:" not in result.stdout
-    html_path = tmp_path / "var" / "dist" / "base" / "cv.html"
+    html_path = _preview_output(result)
+    assert html_path.is_relative_to(tmp_path / "var/runs/preview/variants/base")
     assert html_path.exists()
     assert not (tmp_path / "var" / "dist" / "base" / "cv.pdf").exists()
-    preview_run_dir = tmp_path / "var" / "runs" / "preview" / "base"
+    preview_run_dir = html_path.parent.parent / "input"
     assert (preview_run_dir / "canonical.md").exists()
     assert not (preview_run_dir / "resume.json").exists()
     assert not (preview_run_dir / "selection.json").exists()
@@ -138,8 +150,10 @@ def test_preview_once_with_pdf_renders_pdf(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
-    assert (tmp_path / "var" / "dist" / "base" / "cv.pdf").exists()
+    html_path = _preview_output(result)
+    assert html_path.is_file()
+    assert html_path.with_suffix(".pdf").read_bytes().startswith(b"%PDF-")
+    assert not (tmp_path / "var/dist/base").exists()
 
 
 def test_preview_once_reports_invalid_variant_catalog_without_traceback(tmp_path: Path) -> None:
@@ -304,7 +318,8 @@ def test_preview_once_allows_project_with_explicit_sot_path(tmp_path: Path) -> N
 
     assert result.exit_code == 0
     assert "preview_file:" in result.stdout
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     assert "Override work" in output_path.read_text()
     assert "Did work" not in output_path.read_text()
@@ -412,11 +427,12 @@ def test_preview_once_applies_project_ops_without_writing_shared_dist(tmp_path: 
     )
 
     assert result.exit_code == 0
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     assert "Delivered measurable outcomes" in output_path.read_text()
     assert not (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
-    assert not (tmp_path / "var" / "runs" / "preview" / "job" / "sot").exists()
+    assert not (output_path.parent.parent / "sot").exists()
 
 
 def test_preview_once_renders_project_summary_ops(tmp_path: Path) -> None:
@@ -519,11 +535,12 @@ def test_preview_once_renders_project_summary_ops(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     assert "Tailored project summary" in output_path.read_text()
     assert not (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
-    assert not (tmp_path / "var" / "runs" / "preview" / "job" / "sot").exists()
+    assert not (output_path.parent.parent / "sot").exists()
 
 
 def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_path: Path) -> None:
@@ -634,7 +651,8 @@ def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_
     )
 
     assert result.exit_code == 0
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     html = output_path.read_text()
     assert "Pinned version work" in html

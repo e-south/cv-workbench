@@ -39,8 +39,8 @@ partial project and active proposal, reporting any cleanup failure explicitly.
   not render, without mutating the SoT.
 - `uv run cvw preview --project <slug> [--sot-path <path>]`: preview with project patch
   applied in-memory, optionally against an explicit SoT override. Project preview
-  renders stay inside `var/runs/preview/<slug>/`. When `--sot-path` points at a
-  concrete version directory, preview stays pinned to that exact directory. The
+  renders use the [preview-owned directory](preview-contract.md#artifact-ownership)
+  for that project and invocation. When `--sot-path` points at a concrete version directory, preview stays pinned to that exact directory. The
   preview sidebar mirrors project guidance and patch visibility so operators can
   see whether `project-ops` target content that the current proposal document
   type will not render. If the preview can render but project guidance metadata
