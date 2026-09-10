@@ -218,3 +218,14 @@ def test_patch_application_routes_its_shared_execution_and_recovery_contract() -
         "src/cvworkbench/ops/AGENTS.md",
     ):
         assert "patch-application.md" in (ROOT / relative).read_text()
+
+
+def test_proposal_authoring_routes_its_owner_and_recovery_contract() -> None:
+    contract = (ROOT / "docs/reference/project-contract.md").read_text()
+    rules = (ROOT / "src/cvworkbench/ops/projects/AGENTS.md").read_text()
+    assert "### Proposal authoring" in contract
+    assert "patches.py::read_project_patch_document" in contract
+    assert "`patch_authoring.py`" in contract
+    assert "configuration-contract.md#build-bundle-recovery" in contract
+    assert "tests/ops/test_project_patch_authoring.py" in contract
+    assert "project-contract.md#proposal-authoring" in rules

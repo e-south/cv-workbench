@@ -645,9 +645,9 @@ def test_append_project_operations_serializes_concurrent_writers(
 
     barrier = threading.Barrier(2)
     projects_module = __import__(
-        "cvworkbench.ops.projects.patches", fromlist=["_load_project_patch_authoring_state"]
+        "cvworkbench.ops.projects.patch_authoring", fromlist=["read_project_patch_document"]
     )
-    original_loader = projects_module._load_project_patch_authoring_state
+    original_loader = projects_module.read_project_patch_document
 
     def _delayed_loader(project_dir: Path):
         state = original_loader(project_dir)
@@ -658,7 +658,7 @@ def test_append_project_operations_serializes_concurrent_writers(
         return state
 
     monkeypatch.setattr(
-        "cvworkbench.ops.projects.patches._load_project_patch_authoring_state",
+        "cvworkbench.ops.projects.patch_authoring.read_project_patch_document",
         _delayed_loader,
     )
 

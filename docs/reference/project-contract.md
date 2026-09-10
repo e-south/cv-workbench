@@ -461,6 +461,44 @@ execution, captured target inputs, source-write recovery, and file permissions.
 The same executor handles explicit application and temporary source preparation;
 project operation compilation retains the stable-target checks described here.
 
+### Proposal authoring
+
+`patch_authoring.py` owns the two append APIs exposed by
+`cvworkbench.ops.projects`. `patches.py::read_project_patch_document` captures
+the proposal bytes and parsed payload from one read; the same owner compiles
+operations and validates stable targets against the current source.
+
+Authoring validates the destination, proposal, and complete candidate operation
+list before creating a lock file. Invalid UTF-8, malformed YAML, unsupported
+formats, missing targets, and stale source guards become `ProjectError`
+diagnostics without changing the proposal or creating a lock. Proposal writes
+must stay inside the project and target a regular, non-symlink file. Lock files
+must be regular, non-symlink files with a single filesystem link.
+
+Cooperating writers serialize through a thread mutex and filesystem lock, then
+reread and validate the locked proposal generation. Saving uses `storage.py`
+with the captured bytes as `expected_contents`: an observed intervening edit or
+deletion fails instead of overwriting or recreating that proposal. Unknown
+metadata, the original `created_at`, and existing file permissions are retained;
+`updated_at` records the append. I/O failures use the shared recoverable write
+path; cancellation preserves its exception type. Source files are unchanged.
+
+Once created, `proposals/patch.yaml.lock` remains in place so cooperating writers
+use a stable lock inode; its initial permissions are `0600`. Do not delete it
+while authoring may be active. A failed locked operation may leave this lock
+file even though the proposal remains unchanged.
+
+This is cooperative serialization and recoverable saving, not a source lock,
+crash-durability guarantee, or protection from every filesystem race. The
+[shared recovery contract](configuration-contract.md#build-bundle-recovery)
+describes failure restoration and retained recovery files. The
+[patch application contract](patch-application.md) separately owns applying
+accepted edits to source files.
+
+Verification: `tests/ops/test_project_patch_authoring.py` covers interrupted
+saves, independent edits and deletions, invalid inputs, aliased paths, metadata
+and permissions, real subprocess locking, and CLI diagnostics.
+
 ## Saved guidance
 
 `job/proposal-plan.json` records the recommendations and selection made when
@@ -550,7 +588,8 @@ Internal modules import concrete owners rather than the public entrypoint.
 | Job-byte capture and stored-file observations against recorded digests | `artifacts.py` |
 | Descriptive/proposal inspection and bounded saved-plan reads | `inspection.py` |
 | Creation preflight, captured inputs, retargeting, registration, and discard | `creation.py` |
-| Guarded edit authoring, compilation, and application | `patches.py` |
+| Proposal byte/payload reads, guarded compilation, and application | `patches.py` |
+| Candidate validation, cooperative locking, and recoverable proposal saves | `patch_authoring.py` |
 | Source preparation in a fresh owned directory and failure cleanup | `preparation.py` |
 | Project build preflight, source validation, retained-run orchestration | `building.py` |
 | Job evidence, variant ranking, and proposal plans | `guidance.py` |

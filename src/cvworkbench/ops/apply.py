@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from cvworkbench.ops.patches import PatchError, apply_patch_file
-from cvworkbench.ops.projects import ProjectError, compile_project_patch, load_project_patch_payload
+from cvworkbench.ops.projects.patches import compile_project_patch, load_project_patch_payload
+from cvworkbench.ops.projects.records import ProjectError
 
 
 class ApplyError(RuntimeError):

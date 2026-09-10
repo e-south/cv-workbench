@@ -1212,7 +1212,7 @@ def test_project_patch_replace_experience_bullet_rejects_legacy_patch_format(
     )
 
     assert result.exit_code != 0
-    assert "requires format=project-ops" in (result.stderr or "")
+    assert "format must be project-ops" in (result.stderr or "")
 
 
 def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready(

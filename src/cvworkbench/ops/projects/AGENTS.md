@@ -25,6 +25,11 @@
 - Validate inputs before artifact writes. Project creation, retargeting, patch
   application, and proposal registration need explicit failure and recovery
   behavior; moving code does not establish transaction safety.
+- `patch_authoring.py` owns proposal append validation, locking, and recoverable
+  saves. Use `patches.py::read_project_patch_document` for bytes and parsed data
+  from one read; keep compilation and source guards in `patches.py`. Follow
+  `docs/reference/project-contract.md#proposal-authoring` for preflight, lock
+  lifetime, observed edit conflicts, and recovery limits.
 - `preparation.py` owns copied source preparation. Nonempty edits require a fresh
   destination outside source/project trees; cleanup must verify directory
   ownership. Preview callers own temporary lifetimes rather than replacing an

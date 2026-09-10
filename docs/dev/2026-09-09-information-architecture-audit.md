@@ -1533,6 +1533,69 @@ configuration, rendering resources, and tracked sample inputs. A repository
 contract test prevents the router from selecting shadow configurations again.
 Ignored historical local data was preserved.
 
+### High for edit preservation — proposal authoring could damage or overwrite saved edits — fixed for recoverable saves
+
+The proposal append path used a direct write after validation. Injected partial
+writes and cancellation left truncated YAML; a manual edit or deletion after the
+read was overwritten or recreated. Invalid proposal/source input could create a
+lock before failing, and aliased proposal or lock paths could affect files
+outside their intended ownership. FIFO inputs could reach blocking reads.
+These violated the authoring criterion: preserve the prior proposal or an
+observed independent edit, keep source unchanged, and reject invalid input
+before persistent authoring side effects.
+
+`ops/projects/patch_authoring.py` now owns append validation, cooperative locks,
+and recoverable saving. `patches.py` owns one-read proposal capture, guarded
+compilation, and application. The root Python APIs and CLI verbs remain intact;
+unsupported-format errors now use the shared reader's diagnostic. A captured
+proposal generation supplies the storage precondition. Saves retain metadata
+and permissions, and thread/process writers reread under the shared lock.
+Invalid file nodes and escaped destinations fail before writes; invalid source
+encoding and YAML become domain errors without exposing their payloads.
+
+The live [proposal authoring contract](../reference/project-contract.md#proposal-authoring)
+owns the exact preflight, lock lifetime, and recovery semantics. Existing lock
+files remain stable rather than being removed while other writers may use them.
+This does not lock the source, guarantee crash durability, or eliminate every
+filesystem race.
+
+Verification used public temporary fixtures. The initial fault tests produced
+14 intended failures; later source-decoding and node checks reproduced two and
+four further failures before their fixes. The focused implementation suite
+passed 121 tests. The final full-suite and operator evidence are recorded below.
+The first full run exposed one CLI assertion still expecting the old
+unsupported-format wording; the test now expects the shared reader diagnostic.
+No production fallback or test bypass was added.
+
+The final full suite passed 1,046 tests with one existing opt-in integration
+skip and five upstream warnings in 113.07 seconds. Evidence:
+`/tmp/cvw-proposal-authoring-full-final.log`. The slice's handoff decision is
+**pass** for recoverable proposal authoring; product and release readiness
+remain subject to the separate acceptance work below.
+
+The final focused CLI, authoring, docs, context, and import-boundary checks
+passed 78 tests. The seven standard CLI journeys passed with empty stderr. A
+separate five-step CLI journey authored a project summary, rendered the
+proposal, applied it, rebuilt the accepted result, and rejected stale repeat
+application. Only the intended source file changed during application; the
+proposal and unrelated operator file were retained. Evidence:
+`/tmp/cvw-proposal-authoring-final-contracts.log`,
+`/tmp/cvw-proposal-authoring-journey.json`, and
+`/tmp/cvw-proposal-authoring-operator.json`.
+
+Ruff, formatting, all pre-commit hooks including the secret scan, and changed
+Markdown link-target checks passed. The canonical DOCX and public candidate PDF
+retained their SHA-256 hashes; context reports ready source, no issues, and
+publication `review_required`. The private inventory comparison observed one
+Word temporary owner file disappear and its parent directory metadata change;
+no retained file metadata changed, and 8,316 entries remained. The authoring
+and verification commands did not target that owner file. The site worktree remained
+clean; no remote state was refreshed or changed.
+
+The completed slice protects the editing workflow. The
+[product readiness checkpoint](2026-09-10-product-readiness-checkpoint.md)
+connects it to document quality, source authority, and a finite next phase.
+
 ## Verification and limits
 
 Baseline: 326 tests passed, one opt-in remote PR integration test skipped. The
@@ -1692,45 +1755,13 @@ review item. No exploit against an external destination was attempted.
 
 ## Recommended next increment
 
-Portability, preview presentation extraction, and publication freshness/review
-contracts, workspace inspection, workflow-family extraction, and CLI command
-ownership are complete.
-Project identity now has one read owner shared by inspection and execution.
-Guided creation now has a callable workflow, captured settings, and explicit
-recovery. Creation cleanup now tracks directory ownership, and retarget writes
-recover from ordinary I/O failures. Direct creation now preflights local inputs
-and captures its job text and variant definition. Retargeting now reads one
-validated manifest generation, checks for observed intervening edits, and
-exposes changed saved-guidance selections. Typed descriptive metadata now has a
-single parser, inventory preserves partial/invalid descriptions, and saved-plan
-reads enforce project ownership. Stored job-file comparisons now expose missing,
-changed, or unreadable artifacts independently of run review readiness. Shared
-project inspection now supplies CLI and preview observations with explicit
-configuration capture for full inspection. Retained history remains inspectable
-when proposals expire or become invalid, and run packaging is independent of
-current source inputs. Project builds now share a callable operation and defer
-persistent run allocation until source/content/render preflight passes. Individual
-render outputs now share staging and ordered promotion, and test execution owns
-temporary workspaces. Complete build bundles now stage before recoverable file
-replacement. Preview now owns independent input/output directories and preserves
-audited builds. Explicit render assets now have observed lifetime checks and
-filter provenance, and engine metadata follows actual format selection. Project
-runs now retain completed outputs and prepared source together, with shared run
-allocation and permission-preserving recovery. Continue with preview-retention
-planning, recoverable proposal authoring, and remaining apply/patch orchestration.
-Unified-diff execution now stages captured inputs and recovers mixed source-file
-changes through shared storage. Full render dependency snapshots need their own
-explicit asset-pack contract.
-New guidance
-now records its consumed input fingerprints and supports scoped comparisons;
-historical plans retain explicit unknown provenance. Keep inventory existence,
-executable proposals, recorded metadata, current artifact observations, and
-review readiness distinct.
+Use the dated [product readiness checkpoint](2026-09-10-product-readiness-checkpoint.md)
+for the next phase: review real document quality and workflow clarity, verify
+source/configuration authority at consequential actions, then define preview
+and standalone-draft retention. The live [overview](../concepts/overview.md)
+routes the generated-document and authored-CV workflows separately.
 
-Extend explicit configuration snapshots to publication preparation/sync,
-lifecycle mutations, and preview selection. Follow with semantic document styles and further
-owner-bounded decomposition, each behind its own behavior tests. Extend retention
-to standalone draft references and inspect historical untracked bundles before
-pruning the workspace. Keep the personal
-site on hold until the chosen workbench changes and the exact public PDF are
-reviewed.
+Prioritize reproducible defects that obstruct those outcomes. Further module
+splits, more tests, and complete filesystem snapshots are not goals on their
+own. Keep the website on hold until the selected public PDF is reviewed; remote
+security verification and release gardening remain a subsequent phase.

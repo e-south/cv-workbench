@@ -3,7 +3,7 @@
 cv-workbench
 cv-workbench/src/cvworkbench/ops/projects/patches.py
 
-Author, compile, and apply guarded project content edits.
+Read, compile, and apply guarded project content edits.
 
 Module Author(s): Eric J. South
 --------------------------------------------------------------------------------
@@ -11,10 +11,8 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from difflib import unified_diff
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
 import yaml
@@ -26,30 +24,30 @@ from cvworkbench.ops.projects.records import (
     _PROJECT_PATCH_FORMAT_OPS,
     ProjectError,
     ProjectPatch,
-    _now_iso,
+    ProjectPatchDocument,
 )
 from cvworkbench.text import slugify
 
-_PROJECT_PATCH_MUTEXES: dict[str, Lock] = {}
-
-
-_PROJECT_PATCH_MUTEXES_GUARD = Lock()
-
 
 def load_project_patch(project_dir: Path, *, sot_path: Path | None = None) -> str:
-    patch = _load_project_patch_model(project_dir)
+    patch = load_project_patch_payload(project_dir / "proposals" / "patch.yaml")
     return compile_project_patch(patch=patch, sot_path=sot_path)
 
 
-def _load_project_patch_model(project_dir: Path) -> ProjectPatch:
-    patch_path = project_dir / "proposals" / "patch.yaml"
-    return load_project_patch_payload(patch_path)
-
-
 def load_project_patch_payload(patch_path: Path) -> ProjectPatch:
+    return read_project_patch_document(patch_path).patch
+
+
+def read_project_patch_document(patch_path: Path) -> ProjectPatchDocument:
     if not patch_path.exists():
         raise ProjectError(f"Project patch not found: {patch_path}")
-    raw = yaml.safe_load(patch_path.read_text())
+    if not patch_path.is_file():
+        raise ProjectError(f"Project patch must be a regular file: {patch_path}")
+    try:
+        contents = patch_path.read_bytes()
+        raw = yaml.safe_load(contents.decode("utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise ProjectError(f"Project patch could not be read as YAML: {patch_path}") from exc
     if not isinstance(raw, dict):
         raise ProjectError("Project patch file must be a mapping")
     patch_data = raw.get("patch")
@@ -62,11 +60,12 @@ def load_project_patch_payload(patch_path: Path) -> ProjectPatch:
             raise ProjectError("Project patch operations must be a list")
         if not all(isinstance(item, dict) for item in operations):
             raise ProjectError("Project patch operations must be mappings")
-        return ProjectPatch(
+        patch = ProjectPatch(
             format=fmt,
             diff="",
             operations=tuple(dict(item) for item in operations),
         )
+        return ProjectPatchDocument(contents, raw, patch)
     raise ProjectError("Project patch format must be project-ops")
 
 
@@ -84,72 +83,6 @@ def apply_project_patch(*, project_dir: Path, sot_path: Path) -> None:
         apply_patch_text(patch_text=diff, cwd=sot_path)
     except PatchError as exc:
         raise ProjectError(str(exc)) from exc
-
-
-def append_replace_experience_bullet_operation(
-    *,
-    project_dir: Path,
-    sot_path: Path,
-    role_id: str,
-    bullet_id: str,
-    new_text: str,
-    old_text: str | None = None,
-) -> ProjectPatch:
-    resolved_role_id = _require_project_text(role_id, field_name="role_id", slug=True)
-    resolved_bullet_id = _require_project_text(bullet_id, field_name="bullet_id", slug=True)
-    resolved_new_text = _require_project_text(new_text, field_name="new_text")
-    current_text = _read_experience_bullet_text(
-        sot_path=sot_path,
-        role_id=resolved_role_id,
-        bullet_id=resolved_bullet_id,
-    )
-    resolved_old_text = (
-        current_text if old_text is None else _require_project_text(old_text, field_name="old_text")
-    )
-    if resolved_old_text == resolved_new_text:
-        raise ProjectError("Project op replacement text must differ from source text")
-
-    return _append_project_operation(
-        project_dir=project_dir,
-        sot_path=sot_path,
-        operation=_experience_bullet_operation(
-            role_id=resolved_role_id,
-            bullet_id=resolved_bullet_id,
-            old_text=resolved_old_text,
-            new_text=resolved_new_text,
-        ),
-    )
-
-
-def append_replace_project_summary_operation(
-    *,
-    project_dir: Path,
-    sot_path: Path,
-    project_id: str,
-    new_text: str,
-    old_text: str | None = None,
-) -> ProjectPatch:
-    resolved_project_id = _require_project_text(project_id, field_name="project_id", slug=True)
-    resolved_new_text = _require_project_text(new_text, field_name="new_text")
-    current_text = _read_project_summary_text(
-        sot_path=sot_path,
-        project_id=resolved_project_id,
-    )
-    resolved_old_text = (
-        current_text if old_text is None else _require_project_text(old_text, field_name="old_text")
-    )
-    if resolved_old_text == resolved_new_text:
-        raise ProjectError("Project op replacement text must differ from source text")
-
-    return _append_project_operation(
-        project_dir=project_dir,
-        sot_path=sot_path,
-        operation=_project_summary_operation(
-            project_id=resolved_project_id,
-            old_text=resolved_old_text,
-            new_text=resolved_new_text,
-        ),
-    )
 
 
 def _compile_project_operations(
@@ -303,37 +236,7 @@ def _index_experience_bullets(
     return bullets, duplicates
 
 
-def _experience_bullet_operation(
-    *,
-    role_id: str,
-    bullet_id: str,
-    old_text: str,
-    new_text: str,
-) -> dict[str, str]:
-    return {
-        "op": _PROJECT_OP_REPLACE_EXPERIENCE_BULLET,
-        "role_id": role_id,
-        "bullet_id": bullet_id,
-        "old_text": old_text,
-        "new_text": new_text,
-    }
-
-
-def _project_summary_operation(
-    *,
-    project_id: str,
-    old_text: str,
-    new_text: str,
-) -> dict[str, str]:
-    return {
-        "op": _PROJECT_OP_REPLACE_PROJECT_SUMMARY,
-        "project_id": project_id,
-        "old_text": old_text,
-        "new_text": new_text,
-    }
-
-
-def _read_experience_bullet_text(
+def read_experience_bullet_text(
     *,
     sot_path: Path,
     role_id: str,
@@ -366,7 +269,7 @@ def _read_experience_bullet_text(
     return current_text.strip()
 
 
-def _read_project_summary_text(
+def read_project_summary_text(
     *,
     sot_path: Path,
     project_id: str,
@@ -402,104 +305,19 @@ def _load_project_ops_document(
     target_path = sot_path / filename
     if not target_path.exists():
         raise ProjectError(f"Project ops target file not found: {target_path}")
-    original_text = target_path.read_text()
-    raw = yaml.safe_load(original_text)
+    if not target_path.is_file():
+        raise ProjectError(f"Project ops target must be a regular file: {target_path}")
+    try:
+        original_text = target_path.read_bytes().decode("utf-8")
+        raw = yaml.safe_load(original_text)
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise ProjectError(f"Project source could not be read as YAML: {target_path}") from exc
     if not isinstance(raw, dict):
         raise ProjectError(f"{filename} must be a mapping")
     items = raw.get(root_key)
     if not isinstance(items, list):
         raise ProjectError(f"{filename} must contain a {root_key} list")
     return original_text, raw, items
-
-
-def _append_project_operation(
-    *,
-    project_dir: Path,
-    sot_path: Path,
-    operation: dict[str, str],
-) -> ProjectPatch:
-    patch_path = project_dir / "proposals" / "patch.yaml"
-    with _project_patch_authoring_lock(patch_path):
-        patch_path, raw, patch_data, operations = _load_project_patch_authoring_state(project_dir)
-        candidate_operations = tuple([*operations, operation])
-        _compile_project_operations(operations=candidate_operations, sot_path=sot_path)
-
-        patch_data["operations"] = list(candidate_operations)
-        raw.setdefault("created_at", _now_iso())
-        raw["updated_at"] = _now_iso()
-        patch_path.write_text(yaml.safe_dump(raw, sort_keys=False))
-    return ProjectPatch(
-        format=_PROJECT_PATCH_FORMAT_OPS,
-        diff="",
-        operations=candidate_operations,
-    )
-
-
-@contextmanager
-def _project_patch_authoring_lock(patch_path: Path):
-    path_key = str(patch_path.resolve())
-    with _PROJECT_PATCH_MUTEXES_GUARD:
-        mutex = _PROJECT_PATCH_MUTEXES.setdefault(path_key, Lock())
-
-    with mutex:
-        lock_path = patch_path.with_name(f"{patch_path.name}.lock")
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with lock_path.open("a+b") as handle:
-            if handle.tell() == 0:
-                handle.write(b"\0")
-                handle.flush()
-            handle.seek(0)
-            _lock_project_patch_handle(handle)
-            try:
-                yield
-            finally:
-                _unlock_project_patch_handle(handle)
-
-
-def _lock_project_patch_handle(handle: Any) -> None:
-    try:
-        import fcntl
-    except ImportError:
-        import msvcrt
-
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        return
-    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-
-
-def _unlock_project_patch_handle(handle: Any) -> None:
-    try:
-        import fcntl
-    except ImportError:
-        import msvcrt
-
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        return
-    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-def _load_project_patch_authoring_state(
-    project_dir: Path,
-) -> tuple[Path, dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
-    patch_path = project_dir / "proposals" / "patch.yaml"
-    raw = yaml.safe_load(patch_path.read_text())
-    if not isinstance(raw, dict):
-        raise ProjectError("Project patch file must be a mapping")
-    patch_data = raw.get("patch")
-    if not isinstance(patch_data, dict):
-        raise ProjectError("Project patch file is invalid")
-    if patch_data.get("format") != _PROJECT_PATCH_FORMAT_OPS:
-        raise ProjectError(
-            "Project patch authoring requires format=project-ops in proposals/patch.yaml"
-        )
-    operations = patch_data.get("operations")
-    if not isinstance(operations, list):
-        raise ProjectError("Project patch operations must be a list")
-    if not all(isinstance(item, dict) for item in operations):
-        raise ProjectError("Project patch operations must be mappings")
-    return patch_path, raw, patch_data, [dict(item) for item in operations]
 
 
 def _index_projects(items: list[Any]) -> tuple[dict[str, dict[str, Any]], set[str]]:
@@ -527,18 +345,6 @@ def _project_ops_diff(*, filename: str, original_text: str, updated_text: str) -
         lineterm="",
     )
     return "\n".join(diff) + ("\n" if original_text or updated_text else "")
-
-
-def _require_project_text(value: str, *, field_name: str, slug: bool = False) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ProjectError(f"Project op field '{field_name}' must be a non-empty string")
-    normalized = value.strip()
-    if not slug:
-        return normalized
-    resolved = slugify(normalized)
-    if not resolved:
-        raise ProjectError(f"Project op field '{field_name}' must resolve to a stable id")
-    return resolved
 
 
 def _require_operation_text(

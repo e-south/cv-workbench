@@ -31,10 +31,10 @@ from cvworkbench.ops.projects.inspection import project_patch_status as project_
 from cvworkbench.ops.projects.manifest import load_project as load_project
 from cvworkbench.ops.projects.manifest import load_project_metadata as load_project_metadata
 from cvworkbench.ops.projects.manifest import load_project_summary as load_project_summary
-from cvworkbench.ops.projects.patches import (
+from cvworkbench.ops.projects.patch_authoring import (
     append_replace_experience_bullet_operation as append_replace_experience_bullet_operation,
 )
-from cvworkbench.ops.projects.patches import (
+from cvworkbench.ops.projects.patch_authoring import (
     append_replace_project_summary_operation as append_replace_project_summary_operation,
 )
 from cvworkbench.ops.projects.patches import apply_project_patch as apply_project_patch

@@ -153,6 +153,13 @@ class ProjectPatch:
     operations: tuple[dict[str, Any], ...]
 
 
+@dataclass(frozen=True)
+class ProjectPatchDocument:
+    contents: bytes = field(repr=False)
+    data: dict[str, Any] = field(repr=False)
+    patch: ProjectPatch = field(repr=False)
+
+
 _PROJECT_PATCH_FORMAT_OPS = "project-ops"
 
 

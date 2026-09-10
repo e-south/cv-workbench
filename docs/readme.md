@@ -73,7 +73,7 @@ task instead of browsing the whole docs tree.
 
 Use these when the CLI contract matters more than the broader workflow:
 
-- [concepts/overview.md](concepts/overview.md): CLI surface, feature lanes, and bounded editing scope
+- [concepts/overview.md](concepts/overview.md): product value, document workflows, and bounded editing scope
 - [concepts/architecture.md](concepts/architecture.md): repo boundaries and design constraints
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
 - [reference/configuration-contract.md](reference/configuration-contract.md): settings lifetime, explicit snapshots, resolution, and build preflight
@@ -129,6 +129,7 @@ Top-level repo entry points:
 
 Use these when you need historical design context or open planning records:
 
+- [2026-09-10 product readiness checkpoint](dev/2026-09-10-product-readiness-checkpoint.md): user value, verified journeys, remaining product gaps, and completion criteria
 - [2026-09-09 information architecture audit](dev/2026-09-09-information-architecture-audit.md): findings, implemented hardening, and proposed next work
 
 - [plans/dev-plan.md](plans/dev-plan.md)
