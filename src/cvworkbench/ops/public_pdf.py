@@ -28,8 +28,9 @@ import pymupdf
 import yaml
 
 from cvworkbench.build.paths import output_path
-from cvworkbench.config import resolve_publish_path, resolve_variant_path
+from cvworkbench.config import resolve_publish_path, resolve_reviews_path, resolve_variant_path
 from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
+from cvworkbench.ops.publication_review import PublicationReviewError, publication_review_files
 from cvworkbench.ops.publish import PublishConfig, load_publish_config
 from cvworkbench.variants import Variant, load_variant
 
@@ -57,6 +58,7 @@ class PublicPdfResult:
     output_pdf: Path
     manifest_path: Path
     redaction_count: int
+    review_path: Path
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,7 @@ def prepare_public_pdf(
     try:
         source_visual_fingerprint = _validate_source_visual_contract(document, publish)
         redaction_plan = _mark_private_content(document, publish, person, variant)
+        _tighten_public_link_rectangles(document, person=person, variant=variant)
         for page in document:
             page.apply_redactions(images=0, graphics=0, text=0)
         document.scrub(remove_links=False)
@@ -149,13 +152,19 @@ def prepare_public_pdf(
                 allowed_redactions=redaction_plan.regions,
             )
             public_pdf_bytes = temporary_pdf.read_bytes()
+            public_pdf_hash = hashlib.sha256(public_pdf_bytes).hexdigest()
+            review_dir = resolve_reviews_path(config_path) / "publication" / public_pdf_hash
+            try:
+                review_files = publication_review_files(public_pdf_bytes)
+            except PublicationReviewError as exc:
+                raise PublicPdfError(str(exc)) from exc
             manifest_content = _publication_manifest_content(
                 authored_name=authored_source.name,
                 authored_sha256=authored_sha256,
                 source_pdf_name=source_pdf.name,
                 source_pdf_sha256=source_pdf_sha256,
                 output_pdf_name=output_pdf.name,
-                output_pdf_sha256=hashlib.sha256(public_pdf_bytes).hexdigest(),
+                output_pdf_sha256=public_pdf_hash,
                 variant=variant,
                 publish=publish,
                 redaction_count=redaction_plan.count,
@@ -167,6 +176,7 @@ def prepare_public_pdf(
                     [
                         (output_pdf, public_pdf_bytes),
                         (manifest_path, manifest_content.encode()),
+                        *((review_dir / name, content) for name, content in review_files.items()),
                     ]
                 )
             except AtomicWriteError as exc:
@@ -180,6 +190,7 @@ def prepare_public_pdf(
         output_pdf=output_pdf,
         manifest_path=manifest_path,
         redaction_count=redaction_plan.count,
+        review_path=review_dir / "review.html",
     )
 
 
@@ -199,7 +210,7 @@ def validate_public_pdf(
             raise PublicPdfError(f"Public PDF must not be encrypted: {path}")
         if document.embfile_count():
             raise PublicPdfError(f"Public PDF must not contain embedded files: {path}")
-        _validate_verifiable_visual_content(document)
+        _validate_source_visual_contract(document, publish)
         _validate_pdf_links(document, person=person, variant=variant)
         text = "\n".join(page.get_text() for page in document)
     finally:
@@ -407,6 +418,26 @@ def _allowed_public_links(person: dict[str, Any], variant: Variant) -> set[str]:
             raise PublicPdfError("Public Source of Truth links must be absolute HTTPS URLs")
         allowed.add(uri)
     return allowed
+
+
+def _tighten_public_link_rectangles(
+    document: pymupdf.Document,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+) -> None:
+    """Keep label-sized links clear of redactions on adjacent text lines."""
+
+    allowed_urls = _allowed_public_links(person, variant)
+    for page in document:
+        word_rectangles = [pymupdf.Rect(*word[:4]) for word in page.get_text("words")]
+        for link in page.get_links():
+            if link.get("kind") != pymupdf.LINK_URI or link.get("uri") not in allowed_urls:
+                continue
+            link_rect = pymupdf.Rect(link["from"])
+            label_rect = _visible_link_label_rect(link_rect, word_rectangles)
+            if label_rect is not None and _rect_edges_match(link_rect, label_rect):
+                page.update_link({**link, "from": label_rect})
 
 
 def _visible_link_label_rect(

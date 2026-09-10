@@ -131,6 +131,27 @@ def _write_minimal_sot(root: Path) -> Path:
     return sot_path
 
 
+def test_context_lists_nested_content_and_publication_reviews(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+    reviews = tmp_path / "var/reviews"
+    content_review = reviews / "projects/job/run-1"
+    publication_review = reviews / "publication" / ("a" * 64)
+    content_review.mkdir(parents=True)
+    publication_review.mkdir(parents=True)
+    (reviews / "empty").mkdir()
+    (content_review / "review.md").write_text("Review content edits")
+    (publication_review / "review.html").write_text("Review required")
+    result = CliRunner().invoke(app, ["context", "--json", "--config", str(config)])
+    assert result.exit_code == 0
+    entries = json.loads(result.stdout)["reviews"]["items"]
+    assert {entry["review_id"] for entry in entries} == {
+        "projects/job/run-1",
+        "publication/" + "a" * 64,
+    }
+    assert {entry["kind"] for entry in entries} == {"content", "publication"}
+    assert all(Path(entry["review"]).is_file() for entry in entries)
+
+
 def test_context_reports_missing_sot_and_recipes(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
 

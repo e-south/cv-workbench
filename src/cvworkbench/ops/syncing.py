@@ -125,20 +125,18 @@ def sync_site(
     publish_config_path: Path | None = None,
 ) -> SyncResult:
     site = load_site_sync(site_config_path)
-    publish: PublishConfig | None = None
-    if publish_config_path is not None:
-        try:
-            publish = load_publish_config(publish_config_path)
-        except PublishError as exc:
-            raise SyncError(str(exc)) from exc
-        if site.publish_variant not in publish.variants:
-            raise SyncError(
-                f"Publish variant '{site.publish_variant}' is not allowed by publish config"
-            )
+    policy_path = publish_config_path or config_path.parent / "publish.yaml"
+    try:
+        publish = load_publish_config(policy_path)
+    except PublishError as exc:
+        raise SyncError(str(exc)) from exc
+    if site.publish_variant not in publish.variants:
+        raise SyncError(
+            f"Publish variant '{site.publish_variant}' is not allowed by publish config"
+        )
     variant_path = resolve_variant_path(site.publish_variant, config_path)
     variant = load_variant(variant_path)
-    if publish is not None:
-        _validate_publish_policy(variant, publish)
+    _validate_publish_policy(variant, publish)
     publish_dir = resolve_publish_path(config_path) / variant.id
 
     source_pdf = output_path(publish_dir, variant, "pdf")
@@ -146,16 +144,15 @@ def sync_site(
         raise SyncError(f"Missing PDF output: {source_pdf}")
     source_manifest = publish_dir / "manifest.json"
     pdf_hash = _validate_public_artifact(source_pdf, source_manifest, variant, publish)
-    if publish is not None:
-        try:
-            validate_public_pdf(
-                source_pdf,
-                variant=variant,
-                publish=publish,
-                sot_path=resolve_sot_path(None, config_path),
-            )
-        except (PublicPdfError, ValueError) as exc:
-            raise SyncError(str(exc)) from exc
+    try:
+        validate_public_pdf(
+            source_pdf,
+            variant=variant,
+            publish=publish,
+            sot_path=resolve_sot_path(None, config_path),
+        )
+    except (PublicPdfError, ValueError) as exc:
+        raise SyncError(str(exc)) from exc
 
     plan = _plan_sync(site, source_pdf, pdf_hash, publish)
     branch_name: str | None = None
@@ -207,7 +204,7 @@ def _plan_sync(
     site: SiteSyncConfig,
     source_pdf: Path,
     pdf_hash: str,
-    publish: PublishConfig | None,
+    publish: PublishConfig,
 ) -> SyncPlan:
     dest_pdf = site.repo_path / site.cv_pdf_dir / site.cv_pdf_name
     dest_page = site.repo_path / site.cv_page
@@ -272,7 +269,7 @@ def _validate_public_artifact(
     source_pdf: Path,
     manifest_path: Path,
     variant: Variant,
-    publish: PublishConfig | None,
+    publish: PublishConfig,
 ) -> str:
     if not source_pdf.read_bytes().startswith(b"%PDF-"):
         raise SyncError(f"Public artifact is not a PDF: {source_pdf}")
@@ -319,29 +316,28 @@ def _validate_public_artifact(
     redaction_count = transformation.get("redaction_count")
     if not isinstance(redaction_count, int) or isinstance(redaction_count, bool):
         raise SyncError("Build manifest redaction count is invalid")
-    if publish is not None:
-        if source.get("visual_fingerprint_sha256") != publish.approved_visual_fingerprint_sha256:
-            raise SyncError("Build manifest visual fingerprint does not match publish policy")
-        if transformation.get("forbidden_contact_fields") != publish.forbidden_contact_fields:
-            raise SyncError("Build manifest contact policy does not match publish policy")
-        if transformation.get("forbidden_sections") != publish.forbidden_sections:
-            raise SyncError("Build manifest section policy does not match publish policy")
+    if source.get("visual_fingerprint_sha256") != publish.approved_visual_fingerprint_sha256:
+        raise SyncError("Build manifest visual fingerprint does not match publish policy")
+    if transformation.get("forbidden_contact_fields") != publish.forbidden_contact_fields:
+        raise SyncError("Build manifest contact policy does not match publish policy")
+    if transformation.get("forbidden_sections") != publish.forbidden_sections:
+        raise SyncError("Build manifest section policy does not match publish policy")
     return pdf_hash
 
 
 def _public_manifest(
     site: SiteSyncConfig,
     pdf_hash: str,
-    publish: PublishConfig | None,
+    publish: PublishConfig,
 ) -> str:
     payload = {
         "schema_version": 1,
         "variant": site.publish_variant,
         "pdf_path": str((site.cv_pdf_dir / site.cv_pdf_name).as_posix()),
         "pdf_sha256": pdf_hash,
-        "required_exclude_tags": publish.required_exclude_tags if publish else [],
-        "forbidden_contact_fields": publish.forbidden_contact_fields if publish else [],
-        "forbidden_sections": publish.forbidden_sections if publish else [],
+        "required_exclude_tags": publish.required_exclude_tags,
+        "forbidden_contact_fields": publish.forbidden_contact_fields,
+        "forbidden_sections": publish.forbidden_sections,
     }
     fields = [
         f"  {json.dumps(key)}: {json.dumps(value, sort_keys=True)}"

@@ -58,7 +58,11 @@ Top-level keys:
   `reviewpack --project/--run` resolution so variant inventory is not polluted
   by newer project-only runs.
 - `projects`: local projects list and invalid entries.
-- `reviews`: review packs inventory.
+- `reviews`: actual review packets, including nested project/run packs and
+  publication packets. Each full entry includes `kind` (`content` or
+  `publication`) and its review path. Container directories are not review
+  items. Inventory presence is not proof of publication approval or freshness.
+  Partial packets remain visible with an explicit `missing_files` list.
 - `recipes`: ordered command sequences for common workflows.
 - `recommended_workflows`: the next workflow recipes to inspect first.
 - `issues`: any non-fatal problems detected during inspection.

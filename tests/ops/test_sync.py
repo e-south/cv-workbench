@@ -21,7 +21,7 @@ from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 from cvworkbench.ops import atomic
-from cvworkbench.ops.syncing import load_site_sync
+from cvworkbench.ops.syncing import SyncError, load_site_sync, sync_site
 from tests.utils import strip_ansi
 
 
@@ -35,6 +35,24 @@ def _pdf_bytes(text: str = "Public artifact") -> bytes:
 
 
 PDF_BYTES = _pdf_bytes()
+
+
+def test_sync_api_enforces_policy_when_path_is_omitted(tmp_path: Path) -> None:
+    site, config, site_config = _write_workspace(
+        tmp_path, pdf_bytes=_pdf_bytes("Example Person | 555.867.5309")
+    )
+    before = (site / "public/cv/cv.pdf").read_bytes()
+    with pytest.raises(SyncError, match="forbidden phone"):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+    assert (site / "public/cv/cv.pdf").read_bytes() == before
+
+
+def test_sync_api_requires_configured_publication_policy(tmp_path: Path) -> None:
+    site, config, site_config = _write_workspace(tmp_path)
+    (tmp_path / "publish.yaml").unlink()
+    with pytest.raises(SyncError, match="Publish config not found"):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+    assert (site / "public/cv/cv.pdf").read_bytes() == b"old"
 
 
 def _write_workspace(

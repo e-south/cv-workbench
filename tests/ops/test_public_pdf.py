@@ -153,6 +153,18 @@ def test_prepare_public_pdf_preserves_content_and_removes_private_surfaces(
     assert "phone" in manifest["transformation"]["forbidden_contact_fields"]
 
     first_bytes = result.output_pdf.read_bytes()
+    review_dir = result.review_path.parent
+    review = json.loads((review_dir / "review.json").read_text())
+    assert review["pdf_sha256"] == hashlib.sha256(first_bytes).hexdigest()
+    assert review["page_count"] == 2
+    assert (review_dir / "cv.pdf").read_bytes() == first_bytes
+    assert "Review required" in result.review_path.read_text()
+    assert "555.867.5309" not in result.review_path.read_text()
+    assert "advisor@example.org" not in (review_dir / "review.json").read_text()
+    with pymupdf.open(result.output_pdf) as public:
+        for page, details in zip(public, review["pages"], strict=True):
+            rendered = pymupdf.Pixmap(review_dir / details["image"])
+            assert rendered.samples == page.get_pixmap(dpi=96, alpha=False).samples
     second_result = prepare_public_pdf(
         authored_source=authored_source,
         source_pdf=source_pdf,
@@ -176,6 +188,53 @@ def test_validate_public_pdf_rejects_unauthorized_third_party_email(tmp_path: Pa
             publish=load_publish_config(publish_path),
             sot_path=sot_path,
         )
+
+
+def test_validate_public_pdf_checks_actual_reviewed_graphics(tmp_path: Path) -> None:
+    _, variant_path, publish_path, sot_path = _write_workspace(tmp_path)
+    source_pdf = tmp_path / "unreviewed.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "Example Person")
+        page.draw_rect(pymupdf.Rect(72, 100, 150, 120), fill=(0, 0, 0))
+        document.save(source_pdf)
+    with pytest.raises(PublicPdfError, match="visual fingerprint"):
+        validate_public_pdf(
+            source_pdf,
+            variant=load_variant(variant_path),
+            publish=load_publish_config(publish_path),
+            sot_path=sot_path,
+        )
+
+
+def test_prepare_preserves_profile_link_next_to_phone_redaction(tmp_path: Path) -> None:
+    config, _, publish, sot = _write_workspace(tmp_path)
+    source, authored = tmp_path / "source.pdf", tmp_path / "source.docx"
+    _write_docx(authored, "555.867.5309 Profile Example Person")
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "555.867.5309", fontsize=10)
+        page.insert_text((72, 86), "Profile", fontsize=10)
+        page.insert_text((72, 120), "Example Person", fontsize=10)
+        label = page.search_for("Profile")[0]
+        link_rect = pymupdf.Rect(label.x0, label.y0 - 0.5, label.x1, label.y1)
+        assert link_rect.intersects(page.search_for("555.867.5309")[0])
+        assert not label.intersects(page.search_for("555.867.5309")[0])
+        page.insert_link(
+            {"kind": pymupdf.LINK_URI, "from": link_rect, "uri": "https://example.com/profile"}
+        )
+        document.save(source)
+    result = prepare_public_pdf(
+        authored_source=authored,
+        source_pdf=source,
+        config_path=config,
+        variant_id="base",
+        publish_config_path=publish,
+        sot_path=sot,
+    )
+    with pymupdf.open(result.output_pdf) as public:
+        assert "555.867.5309" not in public[0].get_text()
+        assert [link["uri"] for link in public[0].get_links()] == ["https://example.com/profile"]
 
 
 def test_validate_public_pdf_rejects_third_party_phone(tmp_path: Path) -> None:

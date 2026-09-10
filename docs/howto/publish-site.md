@@ -21,6 +21,16 @@ Keep both inputs outside git:
 - the canonical editable `.docx`;
 - a PDF exported from that DOCX with the authoring application.
 
+For a header that remains balanced after redaction, align the name, location,
+and contact paragraphs to the same body-column edge. Remove manual paragraph
+indents and use concise visible labels for profile links. Keep private contacts
+at the end of a left-aligned line: PDF redaction removes glyphs without moving
+the remaining text. It cannot rebalance a centered or right-aligned line.
+
+Export locally from Word for Mac using **PDF → Best for printing**. The electronic
+distribution option uses an online service. Export the whole document, then
+check every page before approving a changed visual fingerprint.
+
 The preparation command verifies token-frequency coverage from DOCX to PDF and
 from PDF to DOCX, removes fields and sections prohibited by
 `config/publish.yaml`, strips hidden or embedded payloads, rejects hidden or
@@ -47,8 +57,24 @@ uv run cvw prepare-public-pdf \
   --plain
 ```
 
-Review `var/publish/base/cv.pdf` visually. Then sync only the validated PDF and
-sanitized manifest:
+Preparation prints a `review` path under
+`var/reviews/publication/<pdf-sha256>/review.html`. Open that local file to review
+all pages, or serve only that directory on loopback with `uv run python -m http.server
+--bind 127.0.0.1 --directory <review-directory> 4401`.
+
+The packet contains the exact sanitized PDF, 96-DPI page previews, and
+`review.json` with the PDF hash, page dimensions, text bounds, and link counts.
+It contains no private source paths or source metadata. Rendering is bounded to
+50 pages and 40 million pixels across the document; larger artifacts fail
+before replacing publication outputs.
+
+Check header alignment after contact removal, readable link labels, line wraps,
+page breaks, table rules, and unexpected blank pages. A successful preparation
+proves the disclosure and fidelity contracts; it does not approve aesthetics.
+The ordinary `preview` command renders the generated-resume lane and cannot
+validate the authored public CV.
+
+After reviewing the packet, sync only the validated PDF and sanitized manifest:
 
 ```bash
 uv run cvw sync --mode local --plain
@@ -73,6 +99,8 @@ fidelity is the requirement.
 
 Retained links must exactly match a public link in the person Source of Truth,
 use HTTPS, and have a click rectangle that closely matches visible label text.
+Valid link rectangles are tightened to their visible labels before redaction so
+a small annotation overlap cannot erase a link beside a private contact line.
 Preparation stages the PDF and provenance manifest together and restores the
 prior pair if either replacement fails.
 

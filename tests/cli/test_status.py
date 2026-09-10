@@ -139,5 +139,6 @@ def test_status_json_reports_runs_variants_and_projects(tmp_path: Path) -> None:
     assert payload["variants"]["config_count"] == 2
     assert payload["projects"]["count"] == 1
     assert payload["reviews"]["count"] == 1
+    assert payload["reviews"]["items"][0]["missing_files"] == ["review.md"]
     recents = payload["runs"]["recents_by_variant"]["base"]
     assert recents[0]["run_id"] == "2026-01-03T00-00-00Z"

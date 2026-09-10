@@ -24,8 +24,10 @@ DOCX and a faithful PDF export. It checks that they correspond, applies semantic
 redactions, strips hidden payloads, and emits the only PDF eligible for sync.
 See [Publish The Authored CV](../howto/publish-site.md).
 
-Preparation commits the public PDF and its provenance manifest as one
-recoverable update. Sync applies the PDF, page frontmatter, and sanitized site
+Preparation commits the public PDF, provenance manifest, and local visual
+review packet as one recoverable update. The packet is indexed by the sanitized
+PDF hash under `var/reviews/publication`; it never crosses the site boundary.
+Sync applies the PDF, page frontmatter, and sanitized site
 manifest through the same staged replacement primitive while preserving each
 existing destination mode.
 
@@ -44,6 +46,11 @@ Before its first write, sync verifies:
 - forbidden contact fields and sections are absent; and
 - no third-party email or hidden/unsafe link survives the public allowlist.
 
+Both CLI and Python API sync require a publication policy. When the API omits
+an explicit policy path, it resolves `publish.yaml` beside the workbench config;
+a missing file fails before any site write. Sync also recomputes the actual PDF
+rectangle fingerprint, rather than relying on its declaration in the manifest.
+
 Sync copies only the PDF, updates its configured page-frontmatter path, and
 writes a sanitized manifest containing the public path, artifact hash, variant,
 and disclosure policy. Source paths, SoT hashes, and private content never cross
@@ -52,6 +59,11 @@ the site boundary.
 All changed outputs are staged before replacement. If any replacement fails,
 sync restores every previously replaced artifact before returning an error, so
 the PDF, frontmatter, and manifest cannot remain at mixed generations.
+
+If filesystem errors prevent rollback itself, the command reports an incomplete
+rollback and retains the affected backup files at the paths in the error. Stop
+syncing and recover those originals before retrying. Staging failures clean up
+temporary files without touching the prior artifacts.
 
 The sync command defaults to local updates. PR sync is opt-in and additionally
 requires a clean Git target before it creates a branch.

@@ -105,6 +105,7 @@ from cvworkbench.ops.public_pdf import (
 from cvworkbench.ops.publish import PublishError
 from cvworkbench.ops.render_compare import RenderCompareError, compare_rendered_pdfs
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
+from cvworkbench.ops.review_catalog import list_review_summaries
 from cvworkbench.ops.runs import (
     RunError,
     RunGcCandidate,
@@ -286,6 +287,7 @@ def _print_public_pdf_summary(result: PublicPdfResult) -> None:
             ("output_pdf", result.output_pdf),
             ("manifest", result.manifest_path),
             ("redactions", str(result.redaction_count)),
+            ("review", result.review_path),
         ],
     )
 
@@ -2239,24 +2241,6 @@ def _proposal_plan_summary_rows(
     return rows
 
 
-def _load_review_summaries(config_path: Path) -> list[dict[str, Any]]:
-    reviews_root = resolve_reviews_path(config_path)
-    if not reviews_root.exists():
-        return []
-    summaries: list[dict[str, Any]] = []
-    for path in sorted([p for p in reviews_root.iterdir() if p.is_dir()]):
-        summaries.append(
-            {
-                "review_id": path.name,
-                "path": str(path),
-                "docx": str(path / "cv.docx") if (path / "cv.docx").exists() else None,
-                "pdf": str(path / "cv.pdf") if (path / "cv.pdf").exists() else None,
-                "review": str(path / "review.md") if (path / "review.md").exists() else None,
-            }
-        )
-    return summaries
-
-
 def _reviews_summary_line(reviews: list[dict[str, Any]]) -> str:
     if not reviews:
         return "count=0"
@@ -2722,7 +2706,7 @@ def _build_projects_context(
 
 
 def _build_reviews_context(config_path: Path, *, include_items: bool) -> dict[str, Any]:
-    reviews = _load_review_summaries(config_path)
+    reviews = list_review_summaries(config_path)
     section: dict[str, Any] = {
         "count": len(reviews),
         "summary": _reviews_summary_line(reviews),
@@ -3259,7 +3243,7 @@ def status(
     projects_summary = _projects_summary_line(projects)
     invalid_projects_summary = _invalid_runs_line(invalid_projects)
 
-    reviews = _load_review_summaries(config_path)
+    reviews = list_review_summaries(config_path)
     reviews_summary = _reviews_summary_line(reviews)
 
     summary = {
