@@ -122,6 +122,36 @@ resolution, preflight, and the remaining adoption boundaries. Project and severa
 other command adapters retain orchestration that can move behind workspace owners as
 their behavior is characterized.
 
+## Command adapters
+
+`cli/app.py` registers public commands and groups. It contains no workflow
+function bodies or domain imports. Implementations live beneath `cli/commands/`;
+the registered command names, flags, help, output modes, and error messages are
+their public contract. Python callers use the workspace or operation APIs for
+workflow data rather than depending on command adapters or their private helpers.
+
+| Command responsibility | Owner beneath `cli/commands/` |
+| --- | --- |
+| Validation, toolchain checks, initialization, first build | `setup.py` |
+| Status, context, bootstrap, workflow guidance | `workspace.py` |
+| Source versions and tags | `source.py` |
+| Theme and preset inspection | `themes.py` |
+| Local preview/server lifecycle | `preview.py` |
+| Variant inventory, promotion, and lifecycle | `variants.py` |
+| Run retention and generated-artifact cleanup | `maintenance.py` |
+| Document build/render, comparison, and content review | Corresponding modules in `documents/` |
+| Job ingestion, draft tailoring, and draft application | `tailoring.py` |
+| Project creation/inspection, guidance, patch authoring, and presentation | Corresponding modules in `projects/` |
+| Authored publication preparation, status, review, and sync | `publication.py` |
+
+Command owners may use shared mechanics in `cli/helpers.py` and terminal
+formatting in `cli/output.py`. They do not import the entrypoint. Project/setup
+adapters that open a preview call the preview adapter directly; lower layers
+retain their prohibition on CLI imports. Architecture tests protect the
+registration-only entrypoint and these import directions, including relative
+imports. Existing project workflow decisions remain an operation-API extraction
+target; moving an adapter does not by itself turn its decisions into domain APIs.
+
 ## Preview presentation boundary
 
 `dev/preview.py` owns the local controller and server; `dev/preview_http.py`

@@ -77,7 +77,7 @@ for the operator journey and [the site contract](site-contract.md) for writes.
 validates manifest eligibility. Python consumers use these modules;
 the former flat `ops/public_pdf.py`, `ops/publish.py`, and
 `ops/publication_review.py` paths have moved. CLI spellings for preparation and
-sync remain unchanged. `cli/publication.py` owns their adapters plus the
+sync remain unchanged. `cli/commands/publication.py` owns their adapters plus the
 `publication status` and `publication review` commands; `workspace/publication.py`
 owns the workflow description. Site writes remain in `ops/syncing.py`.
 

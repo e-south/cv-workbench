@@ -269,7 +269,7 @@ def test_build_reports_unsupported_format_without_traceback() -> None:
 
 
 def test_parse_formats_dedupes_preserving_first_seen_order() -> None:
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.documents.build")
 
     assert app_module._parse_formats(["md,pdf", "md", " docx , pdf "]) == [
         "md",
@@ -584,7 +584,7 @@ def test_variant_keep_resolves_project_variant_path(tmp_path: Path, monkeypatch)
     )
 
     captured: dict[str, object] = {}
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
 
     def _fake_keep_variant(*, variant_path: Path, config_path: Path, variant_id, label):
         captured["variant_path"] = variant_path
@@ -641,7 +641,7 @@ def test_variant_discard_resolves_project_variant_path(tmp_path: Path, monkeypat
     )
 
     captured: dict[str, object] = {}
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
 
     def _fake_discard_variant(*, variant_path: Path, config_path: Path, confirm: bool):
         captured["variant_path"] = variant_path
@@ -694,7 +694,7 @@ def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, mo
             "label": "job",
         },
     )()
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
     monkeypatch.setattr(app_module, "list_variant_inbox", lambda _config: [entry])
 
     runner = CliRunner()
@@ -742,7 +742,7 @@ def test_variant_inbox_json_flags_expired_entries_and_gc_hint(tmp_path: Path, mo
             "label": "job",
         },
     )()
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
     monkeypatch.setattr(app_module, "list_variant_inbox", lambda _config: [entry])
 
     runner = CliRunner()

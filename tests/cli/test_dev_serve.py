@@ -88,7 +88,7 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
     def _fake_serve(*_args, **_kwargs) -> None:
         raise OSError(48, "Address already in use")
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(app_module, "serve_preview", _fake_serve)
 
     result = runner.invoke(
@@ -176,7 +176,7 @@ def test_dev_serve_rejects_live_existing_session(tmp_path: Path, monkeypatch) ->
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(
         app_module,
         "_preview_session_conflict",
@@ -207,7 +207,7 @@ def test_dev_serve_rejects_live_existing_session(tmp_path: Path, monkeypatch) ->
 def test_preview_session_conflict_treats_reused_live_pid_without_preview_port_as_stale(
     monkeypatch,
 ) -> None:
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(
         app_module, "_preview_api_reachable", lambda *_: (False, "connection refused")
     )

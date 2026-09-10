@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/cli/publication.py
+cv-workbench/src/cvworkbench/cli/commands/publication.py
 
 Adapts authored publication operations to CLI arguments and operator output.
 

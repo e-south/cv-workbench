@@ -70,3 +70,14 @@ def resolve_selection_path(
         return resolve_runs_path(config) / run / "selection.json"
     resolved_variant = variant or resolve_default_variant(config)
     return resolve_dist_path(config) / resolved_variant / "selection.json"
+
+
+def _not_implemented(command: str) -> None:
+    typer.echo(f"{command} is not implemented yet", err=True)
+    raise typer.Exit(code=2)
+
+
+def _validate_sot(sot_path: Path) -> list[str]:
+    from cvworkbench.inputs.validation import validate_sot
+
+    return validate_sot(sot_path)

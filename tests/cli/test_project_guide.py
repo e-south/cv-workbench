@@ -277,7 +277,7 @@ def test_project_guide_rolls_back_project_when_retargeting_fails(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.projects.guide")
 
     def _boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
         raise app_module.ProjectError("retarget failed")
@@ -310,7 +310,7 @@ def test_project_guide_rolls_back_project_when_retargeting_raises_value_error(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.projects.guide")
 
     def _boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
         raise ValueError("retarget failed")
@@ -344,7 +344,7 @@ def test_project_guide_reports_cleanup_failure_without_leaking_exception(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.projects.guide")
 
     def _retarget_boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
         raise ValueError("retarget failed")

@@ -243,14 +243,13 @@ matches the previous page except outer whitespace normalized by repository
 hooks, and still uses one request for markup/styles/script. Focused tests cover
 the UI contracts, real HTTP boundary, controller behavior, and installed-wheel
 asset availability. Publication command adapters now live in
-`cli/publication.py`; lifecycle code is grouped under `ops/publication/` with
+`cli/commands/publication.py`; lifecycle code is grouped under `ops/publication/` with
 scoped owner guidance. Publication inspection and workflow description have a
 workspace module shared by context and status.
 
 Workspace inspection now lives in `workspace/context.py`, backed by separate
 source, variant, run, project, review, publication, and project-guidance owners.
-`cli/app.py` is 5,068 lines after status extraction; further command-adapter
-extraction remains open.
+`cli/app.py` is a 382-line registration surface after command-family extraction.
 The recipe catalog selects and orders descriptions from setup, build, review,
 project, and maintenance modules. No recipe body spans the whole product flow.
 The inspection API raises domain exceptions without terminal output; the CLI
@@ -258,13 +257,39 @@ retains its prior messages and exit codes. Seven deterministic before/after CLI
 snapshots match byte-for-byte, including strict failure and explicit source
 selection. Import-direction tests protect workspace/adapter and domain owners.
 
+Command ownership follow-up (2026-09-10): the 5,068-line entrypoint's 108 function
+bodies now reside in command families and shared CLI mechanics. Setup,
+workspace, source, theme, variant, maintenance, preview, and tailoring each have
+an owner beneath `cli/commands/`. Document build/comparison/review and project
+workflow/guidance/patch/presentation responsibilities have subdirectories. The
+publication adapter is in the same command tree. Root registration imports no
+domain layers and defines no workflow functions. A regression gate enforces
+that boundary and rejects command-owner imports of the entrypoint, including
+relative imports.
+
+This is a behavior-preserving extraction: all 108 function bodies match their
+pre-extraction ASTs, all 65 help surfaces match byte-for-byte, and publication's
+module body is unchanged apart from its module-path header. Adapter tests observe
+the owning module rather than depending on private entrypoint helpers. Project
+workflow decisions still require extraction into operation APIs; namespace
+organization alone does not resolve that responsibility.
+
+Verification for command ownership: the focused CLI/workspace and render-format
+selection passed 157 tests; default discovery passed 596 tests with one skip and
+five existing PyMuPDF/SWIG deprecation warnings. The isolated seven-step
+`scripts/verify_repo.py` journey passed with empty stderr for every step. Seven
+workspace output snapshots remained byte-identical. Live context reported ready
+source data, no context issues, and `review_required` publication. The canonical
+master and public candidate hashes were unchanged; the personal-site tree
+remained clean on `main`. No site sync or remote operation was performed.
+
 Proposed extraction order:
 
 1. Context, status, and recipe extraction is complete. Further reduce
    project-guide orchestration in CLI adapters using the explicit configuration
    snapshot contract.
-2. Publication command extraction is complete. Register review, tailoring and
-   build commands from their own CLI modules without changing command syntax.
+2. Command-family extraction is complete. Keep root registration declarative
+   and evolve each family's workflow/API contract independently.
 3. Preview asset extraction is complete. Continue separating server transport
    and build control where new behavior would otherwise cross their boundaries.
 4. Publication grouping is complete. Split correspondence, visual geometry and
@@ -539,7 +564,8 @@ review item. No exploit against an external destination was attempted.
 ## Recommended next increment
 
 Portability, preview presentation extraction, and publication freshness/review
-contracts, workspace inspection, and workflow-family extraction are complete.
+contracts, workspace inspection, workflow-family extraction, and CLI command
+ownership are complete.
 Next extend explicit configuration snapshots to publication preparation/sync,
 lifecycle mutations, and preview selection, and address project command
 orchestration. Follow with semantic document styles and further
