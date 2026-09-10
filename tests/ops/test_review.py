@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 from typer.testing import CliRunner
 
-import cvworkbench.ops.review as review_module
+import cvworkbench.ops.review.importing as review_module
 from cvworkbench.cli import app
 from cvworkbench.config import resolve_drafts_path, resolve_reviews_path
 from tests.utils import isolated_filesystem

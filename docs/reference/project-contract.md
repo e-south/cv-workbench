@@ -192,3 +192,13 @@ formats fail fast instead of being interpreted heuristically.
 
 Project-scoped review packs default to `var/reviews/projects/<slug>/` so they do
 not collide with variant-level review packs.
+
+## Python Ownership
+
+Content review operations live under `cvworkbench.ops.review`:
+`packs.build_review_pack` creates bundles, `importing.import_docx_review` writes
+import drafts, `targets` resolves source runs, `patches` interprets supported
+edits, and `catalog` reports review artifacts. `ReviewError` is defined by the
+package. The CLI adapts these operations; document interpretation does not
+depend on command parsing. Authored public-PDF review is owned separately by
+`ops.publication`.

@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/ops/review_catalog.py
+cv-workbench/src/cvworkbench/ops/review/catalog.py
 
 Discovers content review packs and public PDF review packets.
 

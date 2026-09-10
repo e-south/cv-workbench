@@ -97,8 +97,10 @@ from cvworkbench.ops.projects import (
 )
 from cvworkbench.ops.publication.state import PublicationState
 from cvworkbench.ops.render_compare import RenderCompareError, compare_rendered_pdfs
-from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
-from cvworkbench.ops.review_catalog import list_review_summaries
+from cvworkbench.ops.review import ReviewError
+from cvworkbench.ops.review.catalog import list_review_summaries
+from cvworkbench.ops.review.importing import import_docx_review
+from cvworkbench.ops.review.packs import build_review_pack
 from cvworkbench.ops.runs import (
     RunError,
     RunGcCandidate,

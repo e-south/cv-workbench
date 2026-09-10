@@ -108,7 +108,7 @@ provenance manifest, which intentionally omits private paths. Operators must
 reconstruct the source/export pair.
 
 Preparation now produces a hash-addressed local visual packet from the exact
-sanitized PDF. [review_catalog.py](../../src/cvworkbench/ops/review_catalog.py)
+sanitized PDF. [review catalog](../../src/cvworkbench/ops/review/catalog.py)
 discovers actual content and publication packets, including nested project
 reviews; container directories no longer masquerade as review items.
 
@@ -223,6 +223,13 @@ project retention, invalid-run keep failures, and deletion beyond the run store.
 The [artifact retention contract](../reference/artifact-retention.md) owns these
 rules. Durable review references remain open; routine cleanup documentation now
 leads with an inspectable GC plan and explicit review dependencies.
+
+Preparatory review decomposition separates bundle creation, target resolution,
+DOCX import, patch interpretation, and catalog inspection under `ops/review/`.
+The 943-line review module is replaced by focused owners, with its unused private
+run resolver removed. The same 48 review/context/retention checks pass before
+and after extraction. Command spellings are unchanged; Python entry points are
+documented by the [project contract](../reference/project-contract.md#python-ownership).
 
 ### Medium — documentation contained competing executable owners — fixed
 
