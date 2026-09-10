@@ -116,11 +116,59 @@ must not mutate them between planning and execution. Capture is per input, not a
 atomic filesystem snapshot across all files. Filter and theme assets must remain
 available and unchanged during rendering. A project operation retains its prepared
 source before execution and updates the plan's source location without reparsing
-its selected content. Render-asset capture remains a separate contract.
+its selected content. Explicit render-asset lifetimes are enforced below;
+durable dependency snapshots remain a separate contract.
 
 Each build run and dist manifest records `configuration.sha256`, identifying
 the workbench config bytes used by that build. It remains the captured hash if
 the file is edited during rendering; the manifest does not re-read the config.
+
+### Render asset lifetime
+
+`build/assets.py::capture_render_assets` records the explicit file dependencies
+of a build plan. Its `RenderAssetContract` keeps immutable fingerprints and the
+ordered selected filter paths. The contract covers `theme.yaml`, every declared
+route's defaults/templates used by the composite theme hash, and styles selected
+for the requested formats. `themes.py::theme_hash_paths` owns composite-hash
+membership and ordering; unselected routes remain part of that theme identity.
+
+`Theme.definition_sha256` identifies the bytes parsed for the theme definition.
+Planning rejects a definition edited after parsing, differing hashes observed
+while preparing format plans, or a style inconsistent with its recorded hash.
+The resulting `BuildPlan.theme_hash` uses the recorded fingerprints rather than
+another filesystem read. Composite theme and style hash encodings are unchanged.
+
+Execution checks recorded assets before allocating outputs and again after
+staged rendering/metadata completes. Missing, unreadable, or changed assets fail
+with `RenderAssetError` (a `ValueError`) before the bundle commits. Changes to the
+selected filters or introduction of unrecorded render paths also fail. The CLI
+and preview use their existing error handling; a previous bundle survives.
+
+Build manifests additionally record `render.filters`, an ordered list of
+`name`/`sha256` entries for selected Lua filters, without absolute filter paths.
+An empty list records that no filters were selected. Historical manifests without
+this field have unknown filter provenance; do not infer it from current files.
+The renderer treats `filter_paths=None` as discovery of the known built-in files,
+an empty sequence as no filters, and a supplied sequence as the exact selection.
+A planned empty selection does not pick up files added afterward.
+
+`BuildPlan.pdf_engine` is the effective engine of the selected PDF route, or
+`None` when PDF is not requested. Theme overrides therefore agree with manifest
+tool metadata, and Markdown, HTML, DOCX, and ATS builds do not probe an unused
+configured PDF engine. Workbench configuration still undergoes its ordinary
+field validation.
+
+These are observed lifetime checks, not retained asset bytes or a locked
+filesystem snapshot. Transient edits reverted between checks can go undetected,
+and another writer can change a file after the final check. Indirect reads from
+Pandoc defaults, template partials, Lua modules, fonts, user data, or external
+processes are not a captured dependency graph. Assets remain trusted execution
+inputs. Full reproducible asset packs need an explicit dependency contract;
+this change preserves existing path resolution and does not relocate assets.
+
+The negative-path and real-render checks live in
+`tests/build/test_render_assets.py`; effective-engine behavior is covered by
+`tests/build/test_manifest.py`.
 
 ### Build bundle recovery
 

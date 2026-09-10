@@ -102,7 +102,9 @@ def _render_document(
     if variant.max_bullets_per_role is not None:
         metadata["max_bullets_per_role"] = variant.max_bullets_per_role
 
-    resolved_filter_paths = tuple(filter_paths or resolve_filter_paths(filters_dir))
+    resolved_filter_paths = (
+        tuple(filter_paths) if filter_paths is not None else resolve_filter_paths(filters_dir)
+    )
     args = [
         resolved_pandoc_path,
         "--from",

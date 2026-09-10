@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.build.assets import RenderAssetContract, capture_render_assets
 from cvworkbench.build.formats import normalize_output_formats
 from cvworkbench.build.markdown import build_markdown
 from cvworkbench.build.paths import filters_dir
@@ -40,7 +41,6 @@ from cvworkbench.themes import (
     Theme,
     ThemeError,
     build_render_plan,
-    hash_theme,
     resolve_theme,
 )
 from cvworkbench.variants import Variant, load_variant_snapshot
@@ -66,6 +66,7 @@ class BuildPlan:
     theme_hash: str
     style_preset: str | None
     render_plans: dict[str, RenderPlan]
+    render_assets: RenderAssetContract
 
 
 def plan_build(
@@ -97,7 +98,7 @@ def plan_build(
     resume_payload = build_resume(sot)
     filters_path = filters_dir()
     filter_paths = resolve_filter_paths(filters_path)
-    pdf_engine = resolve_pdf_engine(configuration)
+    configured_pdf_engine = resolve_pdf_engine(configuration)
     theme_id = theme or variant.render_theme or resolve_default_theme(configuration)
     preset = style_preset or variant.render_style_preset or resolve_style_preset(configuration)
     try:
@@ -106,10 +107,15 @@ def plan_build(
         raise ValueError(str(exc)) from exc
     render_plans = {
         fmt: build_render_plan(
-            output_format=fmt, theme=theme_obj, style_preset=preset, pdf_engine=pdf_engine
+            output_format=fmt,
+            theme=theme_obj,
+            style_preset=preset,
+            pdf_engine=configured_pdf_engine,
         )
         for fmt in selected_formats
     }
+    render_assets = capture_render_assets(theme_obj, render_plans, filter_paths)
+    pdf_plan = render_plans.get("pdf")
     return BuildPlan(
         configuration=configuration,
         sot_path=sot_path,
@@ -124,9 +130,10 @@ def plan_build(
         resume_payload=resume_payload,
         filters_path=filters_path,
         filter_paths=filter_paths,
-        pdf_engine=pdf_engine,
+        pdf_engine=pdf_plan.pdf_engine if pdf_plan is not None else None,
         theme=theme_obj,
-        theme_hash=hash_theme(theme_obj),
+        theme_hash=render_assets.theme_hash,
         style_preset=preset,
         render_plans=render_plans,
+        render_assets=render_assets,
     )

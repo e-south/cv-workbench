@@ -76,6 +76,7 @@ def execute_build(
     write_audit_artifacts: bool = True,
 ) -> BuildResult:
     """Materialize a complete bundle before recoverable replacement of owned files."""
+    build_plan.render_assets.verify(build_plan.filter_paths, build_plan.render_plans)
     configuration = build_plan.configuration
     dist_dir = dist_dir or (resolve_dist_path(configuration) / build_plan.variant.id)
     destinations = artifact_paths(
@@ -108,6 +109,7 @@ def execute_build(
             dist_dir=stage_dist,
             write_audit_artifacts=write_audit_artifacts,
         )
+        build_plan.render_assets.verify(build_plan.filter_paths, build_plan.render_plans)
         # Capture completed payloads before reserving a persistent run.
         contents = {key: path.read_bytes() for key, path in staged.items()}
         allocated = run_dir is None

@@ -182,6 +182,7 @@ def write_build_artifacts(
                     "theme_hash": build_plan.theme_hash,
                     "style_preset": preset,
                     "formats": render_details,
+                    "filters": build_plan.render_assets.filter_metadata(),
                 },
             )
             write_manifest(dist_dir / "manifest.json", dist_manifest)

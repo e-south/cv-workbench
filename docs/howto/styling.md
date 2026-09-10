@@ -101,3 +101,17 @@ variants. Keep variants focused on content selection.
 
 The default theme uses Pandoc's built-in templates (`template: default`). If you
 want full control, add a template file and point to it from `theme.yaml`.
+
+
+## Build-time changes and provenance
+
+Finish theme/style edits before starting a build. If a recorded asset changes
+while rendering, the build reports the changed path and preserves the previous
+bundle; rebuild after the edits settle. A live preview keeps its last successful
+output and reports the error through its usual status surface.
+
+The [render-asset contract](../reference/configuration-contract.md#render-asset-lifetime)
+defines tracked files, filter fingerprints, and concurrency limits. Templates
+and defaults retain their existing path resolution; this check does not package
+or freeze their indirect dependencies. PDF engine metadata follows the selected
+theme route. Other formats do not require probing a PDF engine.

@@ -186,3 +186,28 @@ def test_build_normalizes_duplicate_format_requests(tmp_path: Path) -> None:
     manifest = json.loads((result.dist_dir / "manifest.json").read_text())
     assert manifest["formats"] == ["md", "pdf"]
     assert manifest["outputs"] == {"md": "cv.md", "pdf": "cv.pdf"}
+
+
+@pytest.mark.parametrize("fmt", ["md", "html", "docx", "ats", "pdf"])
+def test_manifest_probes_only_the_pdf_engine_selected_for_rendering(sample_workspace, fmt):
+    import yaml
+
+    config = sample_workspace / "config/workbench.yaml"
+    payload = yaml.safe_load(config.read_text())
+    payload["render"]["pdf_engine"] = "cvw-unavailable-pdf-engine"
+    config.write_text(yaml.safe_dump(payload))
+    result = build_documents(
+        sot_path=sample_workspace / "sot.sample",
+        config_path=config,
+        variant_id="base",
+        formats=[fmt],
+    )
+    manifest = json.loads((result.run_dir / "manifest.json").read_text())
+    engine = "xelatex" if fmt == "pdf" else None
+    assert manifest["tools"]["pdf_engine"] == engine
+    assert manifest["render"]["formats"][fmt]["pdf_engine"] == engine
+    if fmt == "pdf":
+        assert manifest["tools"]["pdf_engine_version"]
+        assert (result.dist_dir / "cv.pdf").read_bytes().startswith(b"%PDF-")
+    else:
+        assert manifest["tools"]["pdf_engine_version"] is None

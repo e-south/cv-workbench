@@ -57,6 +57,7 @@ than maintaining executable copies beneath `docs/`.
 | Responsibility | Owner beneath `src/cvworkbench/` |
 | --- | --- |
 | Read-only content and render planning | `build/planning.py` |
+| Explicit render-input fingerprints and lifetime checks | `build/assets.py` |
 | Bundle membership and temporary artifact generation | `build/artifacts.py` |
 | Build lifetime, persistent run allocation, and commit orchestration | `build/pipeline.py` |
 | Recoverable file replacements shared by workflows | `storage.py` |

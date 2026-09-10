@@ -35,6 +35,64 @@ source of truth.
 
 ## Findings and disposition
 
+### High for artifact provenance — rendering could outlive recorded inputs — fixed within explicit lifetime checks
+
+Theme definitions, templates, defaults, styles, and selected Lua filters could
+change or disappear after planning while the build committed outputs paired with
+earlier hashes. Theme parsing and fingerprinting also read separate generations.
+An explicitly empty filter selection silently rediscovered filters from disk.
+
+`build/assets.py` now owns an immutable fingerprint record and checks explicit
+asset lifetimes before output allocation and after staged generation, before the
+bundle commits. `themes.py` owns composite-hash membership/order and fingerprints
+the exact definition bytes it parses. Planning rejects observed inconsistencies;
+execution rejects observed changes, deletions, and unrecorded asset selections.
+Previous output bundles survive failures. Existing paths and hash encodings are
+preserved. Build manifests add ordered filter names and SHA-256 fingerprints;
+historical missing provenance remains unknown. An empty filter list now means
+no filters, including when files appear after planning.
+
+The initial regression log reproduced 15 asset-lifetime failures. The corrected
+known-filter fixture separately reproduced both empty-selection failures; its
+first unsupported filename was not valid evidence of that bug. Three further
+negative cases exposed unrecorded template/defaults selections and inconsistent
+style hashes. The final asset suite covers 23 cases using isolated inputs and
+real rendering, with narrow observers for changes during planning/rendering.
+Evidence: `/tmp/cvw-render-assets-red.log`,
+`/tmp/cvw-render-assets-filters-red.log`, and
+`/tmp/cvw-render-assets-selection-red.log`.
+
+These checks enforce observed lifetimes, not immutable asset snapshots. A change
+reverted between checks or made after the final check can escape detection.
+Indirect template/defaults dependencies, Lua modules, fonts, user data, and
+external processes are not a frozen dependency graph. The current authority is
+the [render-asset contract](../reference/configuration-contract.md#render-asset-lifetime).
+Full reproducible asset packs require an explicit dependency contract before
+copying or relocating assets.
+
+### Medium for workflow availability — metadata probed an unused or incorrect PDF engine — fixed
+
+Metadata collection probed the configured PDF engine even for Markdown, HTML,
+DOCX, and ATS builds. It also ignored a PDF theme route's engine override. Five
+real builds failed on an unavailable configured executable, including a PDF
+successfully rendered by the theme-selected engine
+(`/tmp/cvw-render-assets-engine-red.log`). `BuildPlan.pdf_engine` now records the
+effective PDF route engine, or `None` when PDF is not selected. Rendering and
+manifest tool metadata agree; non-PDF formats avoid the unused probe.
+
+The focused suite passed 193 tests. Repository/documentation contracts passed 28;
+the full suite passed 953 with one opt-in skip and five existing PyMuPDF/SWIG
+warnings in 94.57 seconds (`/tmp/cvw-render-assets-full.log`). The isolated
+seven-step CLI journey passed with zero exit codes and empty stderr, including
+preserved audited artifacts after preview
+(`/tmp/cvw-render-assets-journey.json`). All 8,317 private entries retained their
+recorded metadata, and master/candidate hashes remained unchanged
+(`/tmp/cvw-render-assets-live-preservation.json`). Publication remains
+`review_required`; the personal-site checkout remains clean and untouched.
+Ruff and all pre-commit checks, including the secret scan, passed
+(`/tmp/cvw-render-assets-hooks.log`). Final documentation/import contracts passed
+28 tests after this audit record was added.
+
 ### High for artifact ownership — previews overwrote audited and shared outputs — fixed
 
 Ordinary preview rendered into configured `var/dist/<variant>/` with audit
@@ -1517,8 +1575,11 @@ persistent run allocation until source/content/render preflight passes. Individu
 render outputs now share staging and ordered promotion, and test execution owns
 temporary workspaces. Complete build bundles now stage before recoverable file
 replacement. Preview now owns independent input/output directories and preserves
-audited builds. Continue with render-asset provenance, outer project-run recovery,
-preview-retention planning, and remaining apply/patch orchestration.
+audited builds. Explicit render assets now have observed lifetime checks and
+filter provenance, and engine metadata follows actual format selection. Continue
+with outer project-run recovery, preview-retention planning, and remaining
+apply/patch orchestration. Full render dependency snapshots need their own
+explicit asset-pack contract.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,

@@ -178,3 +178,15 @@ def test_preview_ownership_contract_routes_paths_and_retention() -> None:
     assert "preview-contract.md#artifact-ownership" in retention
     assert "audited_build_artifacts: preserved" in verification
     assert "var/dist/<variant>/cv.html" not in (ROOT / "docs/howto/styling.md").read_text()
+
+
+def test_render_asset_contract_routes_fingerprints_and_limits() -> None:
+    contract = (ROOT / "docs/reference/configuration-contract.md").read_text()
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    styling = (ROOT / "docs/howto/styling.md").read_text()
+    assert "### Render asset lifetime" in contract
+    assert "build/assets.py::capture_render_assets" in contract
+    assert "`render.filters`" in contract
+    assert "Transient edits reverted between checks can go undetected" in contract
+    assert "`build/assets.py`" in architecture
+    assert "configuration-contract.md#render-asset-lifetime" in styling

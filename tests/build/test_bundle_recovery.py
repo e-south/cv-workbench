@@ -19,6 +19,7 @@ import yaml
 
 from cvworkbench import storage
 from cvworkbench.build import artifacts
+from cvworkbench.build.assets import capture_render_assets
 from cvworkbench.build.pipeline import execute_build
 from cvworkbench.build.planning import plan_build
 from cvworkbench.build.rendering import RenderError
@@ -58,7 +59,11 @@ def test_render_failure_preserves_complete_previous_bundle(
     failure.write_text(
         'function Pandoc(doc)\n if FORMAT == "html5" then error("HTML failed") end\n return doc\nend\n'
     )
-    plan = replace(plan, filter_paths=(failure,))
+    plan = replace(
+        plan,
+        filter_paths=(failure,),
+        render_assets=capture_render_assets(plan.theme, plan.render_plans, (failure,)),
+    )
 
     with pytest.raises(RenderError, match="HTML failed"):
         execute_build(plan, run_dir=run, dist_dir=dist, write_audit_artifacts=audited)
@@ -76,7 +81,11 @@ def test_failed_build_does_not_retain_an_allocated_run(sample_workspace):
     )
     failure = root / "failure.lua"
     failure.write_text('function Pandoc(doc) error("HTML failed") end\n')
-    plan = replace(plan, filter_paths=(failure,))
+    plan = replace(
+        plan,
+        filter_paths=(failure,),
+        render_assets=capture_render_assets(plan.theme, plan.render_plans, (failure,)),
+    )
     runs = root / "var/runs"
     before = set(runs.iterdir())
 
