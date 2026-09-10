@@ -11,10 +11,13 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
 import cvworkbench.ops.doctor as doctor_module
 from cvworkbench.cli import app
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_doctor_reports_dependencies(monkeypatch) -> None:

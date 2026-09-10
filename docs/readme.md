@@ -77,7 +77,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
 - [reference/configuration-contract.md](reference/configuration-contract.md): settings lifetime, explicit snapshots, resolution, and build preflight
 - [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, session semantics, and UI control hooks
-- [reference/verify-contract.md](reference/verify-contract.md): repo-local tracer-bullet verification harness
+- [reference/verify-contract.md](reference/verify-contract.md): test isolation and repo-local CLI journey verification
 - [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, guarded patch application, and proposal visibility rules
 - [reference/variant-lifecycle.md](reference/variant-lifecycle.md): ephemeral draft/project proposal lifecycle
 - [reference/artifact-retention.md](reference/artifact-retention.md): run ownership, retained IDs, cleanup plans, and review dependencies

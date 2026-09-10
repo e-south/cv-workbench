@@ -14,13 +14,17 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import shlex
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 from cvworkbench.dev.preview import PreviewSession
 from tests.utils import strip_ansi
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def _write_preview_config(config_path: Path) -> None:
@@ -106,7 +110,16 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
 
     assert result.exit_code == 1
     assert "Address already in use" in result.stderr
-    assert "uv run cvw dev stop" in result.stderr
+    stop_command = result.stderr.split("Run `", 1)[1].split("`", 1)[0]
+    assert shlex.split(stop_command) == [
+        "uv",
+        "run",
+        "--project",
+        str(Path(__file__).resolve().parents[2]),
+        "cvw",
+        "dev",
+        "stop",
+    ]
 
 
 def test_dev_serve_rejects_legacy_preview_env() -> None:

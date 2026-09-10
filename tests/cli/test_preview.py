@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -83,6 +85,7 @@ def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     assert not session_path.exists()
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_preview_once_with_pdf_renders_pdf(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -638,6 +641,7 @@ def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_
     assert "Active version work" not in html
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_preview_rejects_nonlocal_host_binding(monkeypatch) -> None:
     runner = CliRunner()
     monkeypatch.setenv("CVW_DEV_HOST", "0.0.0.0")

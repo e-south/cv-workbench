@@ -14,9 +14,12 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_render_writes_html_and_docx(tmp_path: Path) -> None:

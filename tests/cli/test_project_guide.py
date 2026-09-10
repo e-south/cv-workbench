@@ -17,6 +17,7 @@ import json
 import shlex
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -156,6 +157,7 @@ def _write_ranked_project_guide_fixture(tmp_path: Path) -> tuple[Path, Path, Pat
     return config_path, sot_path, job_path
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_guide_creates_project_and_recommends_variants(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     job_path = tmp_path / "job.txt"
@@ -377,6 +379,7 @@ def test_project_guide_reports_cleanup_failure_without_leaking_exception(
     assert "cleanup failed" in result.output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     job_path = tmp_path / "job.txt"
@@ -406,6 +409,7 @@ def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> 
     assert result.stdout.count("preview_step:") == 1
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_guide_rejects_unsafe_job_url(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
 
@@ -429,6 +433,7 @@ def test_project_guide_rejects_unsafe_job_url(tmp_path: Path) -> None:
     assert "https" in (result.stderr or "")
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_new_rejects_unsafe_job_url(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
 

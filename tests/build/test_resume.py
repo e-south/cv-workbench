@@ -14,7 +14,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from cvworkbench.build.pipeline import build_documents
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_resume_written_to_run_dir() -> None:

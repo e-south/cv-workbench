@@ -13,7 +13,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from cvworkbench.build.pipeline import build_documents
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_cover_letter_renders_sections() -> None:

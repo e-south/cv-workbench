@@ -28,6 +28,8 @@ from cvworkbench.cli import app
 from cvworkbench.variants import DEFAULT_ORDER, Variant
 from tests.utils import strip_ansi
 
+pytestmark = pytest.mark.usefixtures("sample_workspace")
+
 
 def test_render_writes_output(tmp_path: Path) -> None:
     canonical_path = tmp_path / "canonical.md"

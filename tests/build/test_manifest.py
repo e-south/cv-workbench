@@ -15,7 +15,11 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from cvworkbench.build.pipeline import build_documents
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def _write_build_config(root: Path) -> Path:

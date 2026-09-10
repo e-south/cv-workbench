@@ -11,9 +11,12 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_tags_list_outputs_known_tag() -> None:

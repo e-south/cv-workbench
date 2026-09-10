@@ -128,11 +128,14 @@ def test_live_documentation_has_unique_agent_routing_frontmatter() -> None:
 def test_scoped_agent_routes_keep_private_and_documentation_rules_local() -> None:
     docs_rules = (ROOT / "docs/AGENTS.md").read_text()
     ops_rules = (ROOT / "src/cvworkbench/ops/AGENTS.md").read_text()
+    test_rules = (ROOT / "tests/AGENTS.md").read_text()
 
     assert "frontmatter" in docs_rules
     assert "progressive disclosure" in docs_rules
     assert "publication boundary" in ops_rules
     assert "fail closed" in ops_rules
+    assert "sample_workspace" in test_rules
+    assert "../docs/reference/verify-contract.md#test-workspaces" in test_rules
 
 
 def test_docs_router_links_to_canonical_configuration_and_sample_sources() -> None:

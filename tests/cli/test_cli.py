@@ -18,6 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
@@ -127,6 +128,7 @@ def test_runs_gc_explains_retained_invalid_runs(tmp_path: Path) -> None:
     assert kept.is_dir() and removable.is_dir()
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_validate_succeeds_with_sample_sot() -> None:
     runner = CliRunner()
 
@@ -231,6 +233,7 @@ def test_apply_prints_status(tmp_path: Path) -> None:
     assert "empty_patch" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_build_prints_output_locations() -> None:
     runner = CliRunner()
 
@@ -246,6 +249,7 @@ def test_build_prints_output_locations() -> None:
     assert "run_dir:" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_build_reports_unsupported_format_without_traceback() -> None:
     runner = CliRunner()
 
@@ -279,6 +283,7 @@ def test_parse_formats_dedupes_preserving_first_seen_order() -> None:
     assert app_module._parse_formats(["   "]) == []
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_build_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -329,6 +334,7 @@ def test_build_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
     assert "No output formats selected" in (result.stderr or "")
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_render_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -455,6 +461,7 @@ def test_import_docx_help_mentions_run_resolution() -> None:
     assert "--project" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_theme_list_ships_multiple_themes() -> None:
     runner = CliRunner()
 
@@ -467,6 +474,7 @@ def test_theme_list_ships_multiple_themes() -> None:
     assert "signal" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_theme_info_reports_presets() -> None:
     runner = CliRunner()
 

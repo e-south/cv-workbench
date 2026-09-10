@@ -196,22 +196,63 @@ unchanged; context reported a ready source, no issues, and publication still
 requiring review. The site remained clean. No network refresh, publication
 approval, site sync, or push occurred.
 
-### Medium — some tests write to the current workspace — open
+### Medium — some tests wrote to the current workspace — fixed
 
 `tests/build/test_build.py`, `test_render.py`, and `test_render_formats.py` include
-tests that unlink/write `var/dist/base` using the current directory and default
-configuration. Running these tests from an operator's checkout can replace
-generated outputs and allocate live run directories. The ordinary suite has no
-shared workspace-isolation fixture. The immediate verification boundary is a
-temporary local checkout with current edits copied into it; durable remediation
-is to make these tests own explicit temporary workspaces and verify that default
-test execution preserves the operator's artifacts.
+tests that unlinked/wrote `var/dist/base` using the current directory and default
+configuration. Manifest, cover-letter, preview, and diff tests also depended on
+ambient inputs or artifact roots. A regression launched four real tests from a
+seeded operator workspace: the child tests passed but changed its existing files
+and added artifacts (`/tmp/cvw-test-isolation-red.log`). The failed criterion was
+that verification preserve the workspace from which it is launched.
 
-Fresh environment setup in the temporary checkout could not complete offline:
-the locked PyMuPDF wheel was absent from the package cache
+`tests/conftest.py` now gives each test an empty temporary working directory.
+Tests that need public sample inputs declare `sample_workspace`; custom inputs
+remain in their existing temporary fixtures. Sample setup copies current public
+data, variants, and themes, then uses the scaffold owner for neutral local
+configuration. It does not copy operator inputs, artifacts, or publication settings.
+Test setup restores the original working directory, and the temporary working
+directory is separate from each test's `tmp_path` inventory.
+
+The first full isolated run exposed 27 implicit fixture/path assumptions while
+preserving every byte and directory entry beneath the checkout's protected input
+and artifact roots (`/tmp/cvw-test-isolation-full.log` and
+`/tmp/cvw-test-isolation-first-preservation.json`). Explicit fixture declarations
+restore the intended positive and negative test boundaries. The preview-stop
+hint test now verifies the command's complete argument list when launched outside
+a checkout. Runtime application behavior and error assertions remain intact.
+
+The harness pass uses the `autonomy-hardening` lane with `architecture-invariants`
+and `knowledge-integrity` endpoints. Its deterministic-workspace criterion is zero
+operator artifact changes while child tests pass; its documentation criterion is
+one routed fixture contract with passing repository checks. The
+[verification contract](../reference/verify-contract.md#test-workspaces) owns the
+semantics, and `tests/AGENTS.md` routes maintainers to it. The acceptance regression
+also verifies fresh empty directories across consecutive cases. Working-directory
+isolation does not sandbox explicit filesystem paths.
+
+Final verification passed 887 tests with one opt-in remote skip and five existing
+PyMuPDF/SWIG warnings (`/tmp/cvw-test-isolation-final-full.log`). The same acceptance
+checks passed in three independent pytest invocations: the 81-test focused run,
+the full run, and the 16-test contract run (`/tmp/cvw-test-isolation-focused.log`
+and `/tmp/cvw-test-isolation-contracts.log`). All child tests passed and each seeded
+operator workspace retained its exact file hashes and directory inventory.
+
+The normal `uv run pytest` invocation also preserved the real checkout's 8,382
+protected entries under `local`, `var`, configuration, sample data, and themes:
+no additions, removals, or mode/size/mtime/inode changes
+(`/tmp/cvw-test-isolation-live-preservation.json`). Canonical-master and
+public-candidate hashes were unchanged. Context remained ready with no issues
+and publication requiring review; the site remained clean. No publication
+approval, site sync, network refresh, or push occurred. The harness skill audit
+passed (`/tmp/cvw-test-isolation-skill-audit.log`), as did all pre-commit hooks,
+including the secret scan (`/tmp/cvw-test-isolation-hooks.log`).
+
+During the render-recovery pass, fresh environment setup in its temporary checkout
+could not complete offline: the locked PyMuPDF wheel was absent from the package cache
 (`/tmp/cvw-render-recovery-checkout-sync.log`). Broader verification therefore
-uses the existing installed dependencies with the temporary checkout's source
-selected through `PYTHONPATH`; it does not prove a fresh offline installation.
+used existing installed dependencies with that temporary checkout's source
+selected through `PYTHONPATH`; it did not prove a fresh offline installation.
 The installed-wheel test retains its separate dependency-reuse contract.
 
 ### High — suggested project commands could mutate a different copy — fixed
@@ -1347,8 +1388,9 @@ configuration capture for full inspection. Retained history remains inspectable
 when proposals expire or become invalid, and run packaging is independent of
 current source inputs. Project builds now share a callable operation and defer
 persistent run allocation until source/content/render preflight passes. Individual
-render outputs now share staging and ordered promotion. Continue with test-workspace
-isolation, render-asset provenance, whole-build recovery, and remaining apply/patch orchestration.
+render outputs now share staging and ordered promotion, and test execution owns
+temporary workspaces. Continue with render-asset provenance, whole-build recovery,
+and remaining apply/patch orchestration.
 New guidance
 now records its consumed input fingerprints and supports scoped comparisons;
 historical plans retain explicit unknown provenance. Keep inventory existence,

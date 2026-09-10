@@ -13,9 +13,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from cvworkbench.build.markdown import build_markdown
 from cvworkbench.inputs.sot import load_sot
 from cvworkbench.variants import load_variant
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_markdown_includes_role_divs_and_tags() -> None:

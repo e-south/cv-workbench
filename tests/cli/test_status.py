@@ -19,6 +19,8 @@ from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 
+pytestmark = pytest.mark.usefixtures("sample_workspace")
+
 
 @pytest.mark.parametrize("output", ["--plain", "--json"])
 def test_status_reports_publication_in_both_output_modes(tmp_path, output):

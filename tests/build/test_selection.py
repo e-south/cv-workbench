@@ -14,9 +14,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def _write_build_config(root: Path) -> Path:

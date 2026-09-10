@@ -1,6 +1,6 @@
 ---
 id: reference-verify-contract
-intent: Define the repository tracer-bullet verification contract.
+intent: Define repository test isolation and CLI journey verification.
 audience: [agent, maintainer]
 status: active
 navigation:
@@ -28,6 +28,37 @@ uv run pytest
 package's canonical local journeys. It runs in an isolated temp workspace,
 targets `./sot.sample`, and fails fast when the toolchain or artifact contract
 drifts.
+
+## Test workspaces
+
+`tests/conftest.py` gives every test a fresh, empty working directory under
+pytest's temporary root and restores the caller's directory afterward. This
+directory is separate from the test's `tmp_path`, so custom fixture inventories
+do not inherit ambient workspace files. Tests that need populated inputs request
+`sample_workspace`, directly or with `pytest.mark.usefixtures` at function or
+module scope.
+
+The sample fixture copies the checkout's public `sot.sample`, variants, and
+themes, then initializes neutral workspace-local settings through `init_project`.
+It ignores the operator's `CVW_TEMPLATE_DIR` only while initializing that fixture.
+Custom-template tests can still set their own environment explicitly. Operator
+`local/`, `var/`, workbench settings, and site-publication settings are not copied.
+
+Use `tmp_path` for custom input/output fixtures. Checked-in examples can be read
+through paths resolved from `__file__`; writes belong to a temporary workspace.
+Working-directory isolation is not a filesystem sandbox: explicit paths still
+need an owner. Tests must exercise their intended failure boundary rather than
+passing because unrelated sample inputs are missing.
+
+`tests/dev/test_workspace_isolation.py` checks fresh-directory behavior and launches
+real build, render, preview, and diff tests from a seeded operator workspace. Its
+acceptance criterion is unchanged file bytes and directory inventory, with all
+child tests passing. Run it before broader verification when changing fixtures:
+
+```bash
+uv run pytest tests/dev/test_workspace_isolation.py
+uv run pytest
+```
 
 ## Entry point
 

@@ -23,6 +23,8 @@ import cvworkbench.build.pipeline as pipeline_module
 from cvworkbench.build.rendering import RenderError
 from cvworkbench.cli import app
 
+pytestmark = pytest.mark.usefixtures("sample_workspace")
+
 
 def test_build_generates_markdown() -> None:
     output_path = Path("var/dist/base/cv.md")

@@ -18,6 +18,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib import request as url_request
 
+import pytest
+
 from cvworkbench.config import resolve_config_path, resolve_themes_dir
 from cvworkbench.dev.presentation import preview_page_html
 from cvworkbench.dev.preview import (
@@ -27,6 +29,8 @@ from cvworkbench.dev.preview import (
     _load_project_context,
     _make_handler,
 )
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_preview_controller_watch_paths() -> None:
