@@ -12,7 +12,8 @@ navigation:
 This workbench separates four planes:
 
 1) Source authorities
-- Structured YAML input outside this repo
+- Structured YAML input outside version control, in the configured ignored
+  workspace or an external directory; see [security](../reference/security.md)
 - Compiled to JSON Resume internally
 - Cover letters share the same variant/tag system
 - Letters live in `letters.yaml` and are selected via `variant.letter_id`

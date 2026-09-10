@@ -9,7 +9,9 @@ navigation:
 
 # Security
 
-- Personal SoT data must live outside this repo.
+- Personal SoT data must stay outside version control. Use the configured,
+  ignored `local/` workspace or an explicitly configured external directory;
+  tracked source data is limited to public examples.
 - `local/sot/`, `var/dist/`, `var/runs/`, `var/drafts/`, `var/registry/`, `var/reviews/`, and `var/projects/` are ignored by git.
 - Public variants must omit forbidden contact fields and sections in addition
   to excluding private tags. Tag filtering alone does not protect top-level

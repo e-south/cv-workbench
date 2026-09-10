@@ -74,14 +74,37 @@ Evidence: `/tmp/cvw-pack-routing-full.log`,
 `/tmp/cvw-pack-routing-harness.json`, and `/tmp/cvw-pack-routing-journey.json` (the latter
 locates the real journey workspace and logs). Earlier retained evidence includes
 `/tmp/cvw-cover-letter-journey.json`, `/tmp/cvw-draft-retention-import-journey.json`,
-and `/tmp/cvw-publication-authority-real-journey.json`. These are local session
-artifacts; live contracts above remain the durable behavior authority.
+and `/tmp/cvw-publication-authority-real-journey.json`. The cover-letter descriptor
+retains the initial failing reproduction; its workspace's `journey-result.json`
+records the final successful checks. These are local session artifacts; live
+contracts above remain the durable behavior authority.
 
 Before/after inventories confirm unchanged regular-file paths and bytes under
 `local/` and `var/`, along with unchanged canonical master and public PDF hashes.
 Context reports a ready source with no issues and publication still requiring
 review. `/tmp/cvw-pack-routing-invariants.json` records those checks. The website
 working tree remains clean; no source promotion, site sync, or push occurred.
+
+## Engineering acceptance
+
+The acceptance audit checked what each test and journey actually establishes.
+The current code baseline is `3560278`; passing checks support the bounded
+contracts below, not a blanket claim of product or security completeness.
+
+| Requirement | Evidence and practical limit |
+| --- | --- |
+| Usable installation and compilation | The [installed-wheel journey](../reference/verify-contract.md#installed-distribution) builds resume and letter Markdown/PDF/DOCX and HTML preview outside the checkout. It reuses locked test dependencies; fresh dependency resolution is a separate CI responsibility. |
+| Useful editing and versioning | The seven-step CLI harness verifies an unchanged DOCX import as a no-op. Real edited-document tests and the letter/version journeys cover changes; a successful no-op alone would not prove editing utility. |
+| Maintainable ownership and callable interfaces | [Architecture](../concepts/architecture.md) identifies source, build, operation, inspection, and adapter owners. Import-direction tests cover ordinary, relative, and local imports. Some adapter orchestration remains documented; file length or test count does not establish ease of change. |
+| Navigable documentation and automation | Repository/context checks verify unique live frontmatter, routed contract owners, compact context/workflow commands, and explicit editing limits. Architecture and security now consistently allow ignored private workspace inputs. |
+| Privacy and source preservation | Publication and mutation tests cover the documented disclosure, identity, and recovery boundaries. A fresh acceptance inventory confirms unchanged live inputs/artifacts and canonical/public hashes; private paths remain untracked. |
+| Release confidence | The single skipped test creates a real remote branch and PR when explicitly enabled. It remains unrun during this local audit, as do remote advisory checks. Neither is implied by the local suite result. |
+
+`/tmp/cvw-product-acceptance.json` maps these requirements to inspected evidence
+and distinguishes verified behavior, incomplete acceptance, and deferred release
+work. `/tmp/cvw-acceptance-invariants.json` records the fresh preservation check.
+These records help choose the next action; they do not replace the live contracts
+or the human review of the actual document.
 
 ## Current public artifact review
 
@@ -102,6 +125,31 @@ with title/heading styles preserved three-page rendering, text, and links, but
 did not establish tagged export. That copy contains private material and is not
 the sanitized public artifact. The installed Word AppleScript `save as` interface
 exposes no tagging option. A faithful, accessible PDF export remains unresolved.
+
+A non-Adobe feasibility experiment used the installed Pandoc 2.10.1 and LuaHBTeX
+1.21.0 (TeX Live 2025), following the installed `tagpdf` example's `phase-III`
+configuration. It added a structure tree and `en-US` language to a generated
+public sample. Both outputs had two pages and three links, but spacing changed
+and the Conferences section moved to page two. The experiment therefore does
+not establish a layout-preserving export or PDF accessibility conformance.
+It also does not establish an export path for the separately authored DOCX.
+`/tmp/cvw-nonadobe-export.json` locates commands, TeX sources, PDFs, and page
+images. The prototype was not promoted into the renderer or theme. Adobe
+products are excluded by the user's tool constraint; no alternative converter
+or conformance validator was installed during this local-only audit.
+
+A controlled follow-up isolated the layout change. Metadata-only export and
+`phase-II` paragraph tagging preserved the sample's page text and pixels at
+96 DPI. Disabling tagging inside `phase-III` still changed layout, showing that
+its layout code, not emitted tags alone, causes the regression. Both full
+`phase-III` and the narrower `phase-II,sec` configuration reported failed
+`parskip` adjustments to `\@startsection` and `\@xsect`. The latter added heading
+roles but still changed layout. Paragraph-only output contains no heading or
+list roles, so it is not a substitute for semantic document acceptance.
+`/tmp/cvw-tagging-isolation.json` records the four controlled variants, commands,
+and decision. A tagged export route needs a compatible template/toolchain plus
+reading-structure validation; these experiments do not justify changing the
+current theme or claiming a faithful authored-DOCX export.
 
 The [non-page disclosure contract](../reference/publication-contract.md#non-page-disclosure)
 covers decoded PDF object strings and bookmark actions. Opaque streams and
