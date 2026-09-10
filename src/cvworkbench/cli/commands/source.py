@@ -247,6 +247,12 @@ def sot_diff(
     except (SotPackError, SotVersionError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    if get_output_mode() == OutputMode.JSON:
+        print_summary(
+            "sot.diff",
+            [("root", root), ("left", left), ("right", right), ("diff", diff_text)],
+        )
+        return
     if diff_text:
         typer.echo(diff_text)
         return

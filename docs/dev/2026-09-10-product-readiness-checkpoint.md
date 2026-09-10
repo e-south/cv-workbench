@@ -40,6 +40,7 @@ publish**. More modules, tests, or audit findings are not completion criteria.
 | Edit through Word and retain source authority | A real supported bullet edit returns as a guarded patch; unchanged DOCX imports are no-ops; changed link destinations require review | Broader editing coverage remains limited to documented supported operations |
 | Preview without obscuring the document or changing source | Secondary settings use native disclosure; document visible at inspected narrow widths; keyboard controls and format switching verified; isolated preview outputs | Expanded settings/long warnings can require scrolling; no full assistive-technology conformance claim |
 | Apply an edit to the selected source version | Draft and project application share one selection owner, preserve explicit version pins, and report the concrete edited directory | Directory selection is not a global source snapshot; expected-text/byte guards retain their documented concurrency limits |
+| Compare and use a source-version experiment | Version diffs include file/inline snippets and provide parseable JSON; named-version reads stay within their source directories; a real activation/build used the revised snippet | Pack creation is not exposed by the CLI; current version commands require an existing pack |
 | Preserve work when a save fails | Proposal locking, expected-text/byte guards, staged rendering, and recoverable grouped writes | No crash-durability or universal concurrent-writer guarantee |
 | Publish a faithful, private-data-checked CV | Captured preparation inputs, consistent action settings, disclosure checks, source freshness, immutable artifact hashes, and exact-PDF review | Current public candidate requires human review; site update remains on hold |
 | Keep the workspace understandable | Separate artifact owners; review and import drafts retain exact source runs; cleanup explains dependencies and rejects ambiguous import metadata | Twenty legacy imports need provenance/retention decisions before cleanup; preserve them; automatic preview pruning deferred |
@@ -81,8 +82,9 @@ assessment remain outside that claim.
 | Capture preparation inputs and action settings | Validation and provenance describe the bytes actually processed; changed originals reject preparation before replacement | [Input lifetime](../reference/publication-contract.md#input-lifetime) |
 | Retain import baselines independently of recency | Building a newer document cannot silently remove an outstanding edit's comparison source | [Draft dependencies](../reference/artifact-retention.md#import-draft-dependencies) |
 | Explain the actual cover letter and review its paragraphs | Selection and checklists describe the document being revised, with clear inclusion/exclusion reasons | [Selection evidence](../reference/selection-contract.md) |
+| Compare source-version prose and provide real JSON | Operators can inspect shared snippet changes and automation can consume the result without parsing terminal text | [Version comparison](../howto/sot-versions.md#comparison-contract) |
 
-The latest code baseline passed 1,173 tests with one existing opt-in integration
+The latest code baseline passed 1,190 tests with one existing opt-in integration
 skip and five upstream warnings, plus the seven-step isolated CLI harness and
 repository hooks. A real import/new-build/retention journey kept its baseline
 solely through its draft dependency. A separate preparation from real authored
@@ -101,6 +103,25 @@ Markdown/HTML bytes, DOCX document XML, and PDF text/pixels. Full-suite and harn
 evidence is in `/tmp/cvw-cover-letter-full.log` and
 `/tmp/cvw-cover-letter-harness.json`; `/tmp/cvw-cover-letter-journey.json` locates
 the isolated workspace and its `journey-result.json`. No live source was edited.
+
+The version-comparison pass reproduced the starter snippet-schema crash, external
+reads through escaping paths, raw YAML/encoding/read errors, and plain text emitted
+despite `--json`. Four snippet cases, seven boundary/error cases, and two JSON
+cases failed before their respective fixes. A real named-version comparison,
+activation, and cover-letter build now succeeds in an isolated workspace while
+preserving the base version. `/tmp/cvw-version-workflow.json` locates its logs
+and `journey-result.json`; the boundary cases use private sentinel fixtures.
+Final evidence is in `/tmp/cvw-version-diff-final-full.log`,
+`/tmp/cvw-version-diff-final-targeted.log`, and
+`/tmp/cvw-version-diff-harness.json`. The 39 documentation/boundary/context checks
+and repository hooks passed. `/tmp/cvw-version-diff-invariants.json` confirms
+unchanged live private files, canonical master, public PDF, and publication state.
+
+Pack initialization remains a utility follow-up: the current `sot` verbs assume
+an existing pack, whereas workspace initialization produces a flat source. Add
+an explicit creation path from a chosen source to a fresh destination, with
+source preservation and clear output/configuration ownership. This improves the
+editing workflow; it is not an additional gate on the pending public CV review.
 
 ## Current public artifact review
 

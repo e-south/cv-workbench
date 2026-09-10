@@ -76,6 +76,11 @@ meaning in section builders and paragraph composition in one shared owner.
 The [selection contract](../reference/selection-contract.md) keeps document
 selection in the build layer and explanation/checklist presentation in consumers.
 
+Source-version path resolution belongs to `inputs/sot_versions.py`; version
+lifecycle and comparison belong to `ops/sot_versions.py`. The
+[version workflow](../howto/sot-versions.md#comparison-contract) owns comparison
+semantics and the existing-pack prerequisite.
+
 Preview uses `dev/preview_paths.py` to separate canonical input from served
 output and assign an independent directory to each invocation. Audited builds,
 preview artifacts, and publication records have distinct ownership and retention

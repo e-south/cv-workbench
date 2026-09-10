@@ -154,6 +154,15 @@ def test_docs_router_links_to_canonical_configuration_and_sample_sources() -> No
     assert "local/sot/" not in links
 
 
+def test_source_version_comparison_routes_one_workflow_owner() -> None:
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    guide = (ROOT / "docs/howto/sot-versions.md").read_text()
+    assert "howto/sot-versions.md#comparison-contract" in architecture
+    assert "ops/sot_versions.py::diff_versions" in guide
+    assert "tests/ops/test_sot_versions.py" in guide
+    assert "## Prerequisite: an existing pack" in guide
+
+
 def test_selection_contract_routes_build_and_review_evidence() -> None:
     for relative in (
         "docs/readme.md",

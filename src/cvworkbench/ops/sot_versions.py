@@ -71,18 +71,14 @@ def diff_versions(root: Path, left: str, right: str) -> str:
     root = resolve_versioned_root(root)
     _validate_version_name(left)
     _validate_version_name(right)
-    left_dir = root / "versions" / left
-    right_dir = root / "versions" / right
-    if not left_dir.exists():
-        raise SotPackError(f"SoT version not found: {left_dir}")
-    if not right_dir.exists():
-        raise SotPackError(f"SoT version not found: {right_dir}")
+    left_dir = _comparison_version(root, left)
+    right_dir = _comparison_version(root, right)
 
     files = _collect_sot_files(left_dir, right_dir)
     diffs: list[str] = []
     for rel_path in files:
-        left_path = left_dir / rel_path
-        right_path = right_dir / rel_path
+        left_path = _version_file(left_dir, rel_path)
+        right_path = _version_file(right_dir, rel_path)
         left_text = _read_file(left_path)
         right_text = _read_file(right_path)
         if left_text == right_text:
@@ -98,16 +94,42 @@ def diff_versions(root: Path, left: str, right: str) -> str:
     return "\n".join(diffs)
 
 
+def _comparison_version(root: Path, name: str) -> Path:
+    path = root / "versions" / name
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise SotPackError(f"Cannot resolve SoT version: {path}") from exc
+    if not resolved.is_relative_to(root / "versions"):
+        raise SotPackError("Compared SoT versions must remain within the pack's versions directory")
+    if not resolved.is_dir():
+        raise SotPackError(f"SoT version directory not found: {path}")
+    return resolved
+
+
+def _version_file(version_dir: Path, relative: Path) -> Path:
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SotPackError(f"SoT file path must be relative to its version: {relative}")
+    path = version_dir / relative
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise SotPackError(f"Cannot resolve SoT file: {path}") from exc
+    if not resolved.is_relative_to(version_dir):
+        raise SotPackError(f"SoT file must remain within its version: {relative}")
+    return path
+
+
 def _collect_sot_files(left_dir: Path, right_dir: Path) -> list[Path]:
     files: set[Path] = set()
     for filename in list(REQUIRED_FILES.keys()) + list(OPTIONAL_FILES.keys()):
-        left_path = left_dir / filename
-        right_path = right_dir / filename
+        left_path = _version_file(left_dir, Path(filename))
+        right_path = _version_file(right_dir, Path(filename))
         if left_path.exists() or right_path.exists():
             files.add(Path(filename))
 
     for base in (left_dir, right_dir):
-        snippets_file = base / "snippets.yaml"
+        snippets_file = _version_file(base, Path("snippets.yaml"))
         if snippets_file.exists():
             for snippet in _snippet_paths(snippets_file):
                 files.add(Path(snippet))
@@ -115,12 +137,8 @@ def _collect_sot_files(left_dir: Path, right_dir: Path) -> list[Path]:
 
 
 def _snippet_paths(snippets_file: Path) -> Iterable[str]:
-    raw = yaml.safe_load(snippets_file.read_text())
-    if raw is None:
-        return []
-    if not isinstance(raw, dict):
-        raise SotPackError(f"{snippets_file.name} must be a YAML mapping")
-    snippets = raw.get("snippets", {}).get("snippets")
+    raw = _read_yaml_mapping(snippets_file)
+    snippets = raw.get("snippets")
     if snippets is None:
         return []
     if not isinstance(snippets, list):
@@ -143,16 +161,31 @@ def _read_file(path: Path) -> str:
         return ""
     if path.suffix == ".yaml":
         return _normalize_yaml(path)
-    return path.read_text().strip()
+    return _read_text(path).strip()
 
 
 def _normalize_yaml(path: Path) -> str:
-    raw = yaml.safe_load(path.read_text())
+    return yaml.safe_dump(_read_yaml_mapping(path), sort_keys=True).strip()
+
+
+def _read_yaml_mapping(path: Path) -> dict:
+    text = _read_text(path)
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise SotPackError(f"Invalid YAML in {path.name}") from exc
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
         raise SotPackError(f"{path.name} must be a YAML mapping")
-    return yaml.safe_dump(raw, sort_keys=True).strip()
+    return raw
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise SotPackError(f"Cannot read SoT file as UTF-8: {path}") from exc
 
 
 def _read_active(root: Path) -> str:
