@@ -25,7 +25,7 @@ task instead of browsing the whole docs tree.
 
 - First local build: [howto/quickstart.md](howto/quickstart.md) -> [reference/preview-contract.md](reference/preview-contract.md)
 - Job tailoring and project preview: [howto/ingestion.md](howto/ingestion.md) -> [reference/project-contract.md](reference/project-contract.md)
-- Review/import loop: [reference/project-contract.md](reference/project-contract.md) -> [reference/variant-lifecycle.md](reference/variant-lifecycle.md)
+- Review/import loop: [reference/review-contract.md](reference/review-contract.md) -> [reference/project-contract.md](reference/project-contract.md)
 - Publish the faithful authored CV: [howto/publish-site.md](howto/publish-site.md) -> [reference/site-contract.md](reference/site-contract.md)
 - Automation/bootstrap: [reference/context-contract.md](reference/context-contract.md) -> [reference/verify-contract.md](reference/verify-contract.md)
 
@@ -58,7 +58,7 @@ task instead of browsing the whole docs tree.
 | Inspect, keep, discard, or clean up proposal variants | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) | [reference/project-contract.md](reference/project-contract.md) |
 | Retain project runs and inspect artifact cleanup plans | [reference/artifact-retention.md](reference/artifact-retention.md) | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) |
 | Compare a project run against a baseline before export or review | [reference/project-contract.md](reference/project-contract.md) | [concepts/overview.md](concepts/overview.md) |
-| Package a review run and import reviewed DOCX edits | [reference/project-contract.md](reference/project-contract.md) | [howto/ingestion.md](howto/ingestion.md) |
+| Package a review run and import reviewed DOCX edits | [reference/review-contract.md](reference/review-contract.md) | [reference/project-contract.md](reference/project-contract.md) |
 
 ### Automation, Verification, And Performance
 
@@ -80,6 +80,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, guarded patch application, and proposal visibility rules
 - [reference/variant-lifecycle.md](reference/variant-lifecycle.md): ephemeral draft/project proposal lifecycle
 - [reference/artifact-retention.md](reference/artifact-retention.md): run ownership, retained IDs, cleanup plans, and review dependencies
+- [reference/review-contract.md](reference/review-contract.md): content-review source identity, safe imports, and baseline health
 - [reference/site-contract.md](reference/site-contract.md): local-first site sync contract
 - [reference/publication-contract.md](reference/publication-contract.md): authored sources, freshness and exact-PDF review receipts
 - [reference/security.md](reference/security.md): local/private content boundaries and security posture

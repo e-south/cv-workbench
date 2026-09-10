@@ -20,7 +20,26 @@ from typer.testing import CliRunner
 import cvworkbench.ops.review.importing as review_module
 from cvworkbench.cli import app
 from cvworkbench.config import resolve_drafts_path, resolve_reviews_path
+from cvworkbench.ops.review.packs import build_review_pack
+from cvworkbench.ops.review.targets import resolve_review_target
 from tests.utils import isolated_filesystem
+
+
+def _pack_review_docx(config: Path, *, variant_id=None, project_dir=None) -> Path:
+    target = resolve_review_target(
+        config_path=config, run=None, variant_id=variant_id, project_dir=project_dir
+    )
+    manifest_path = target.run.path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for fmt in ("docx", "pdf"):
+        manifest["outputs"][fmt] = f"cv.{fmt}"
+        (target.run.path / f"cv.{fmt}").write_bytes(fmt.encode())
+    manifest["formats"] = list(manifest["outputs"])
+    manifest_path.write_text(json.dumps(manifest))
+    (target.run.path / "selection.json").write_text('{"items": []}')
+    return build_review_pack(
+        config_path=config, run=str(target.run.path), variant_id=None, project_dir=project_dir
+    ).docx_path
 
 
 def _write_minimal_config(root: Path) -> Path:
@@ -829,13 +848,12 @@ def test_import_docx_keeps_review_diff_only_for_unsupported_heading_edits(
     assert "- apply_status: review_diff_only" in notes_files[0].read_text()
 
 
-def test_import_docx_uses_variant_latest_run(tmp_path: Path, monkeypatch) -> None:
+def test_import_docx_uses_variant_review_source(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", "base-before\n")
     _write_run_manifest(tmp_path, "2026-01-02T00-00-00Z", "cover", "cover-before\n")
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, variant_id="base")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
@@ -879,8 +897,8 @@ def test_import_docx_reports_hint_when_runs_are_missing(tmp_path: Path) -> None:
                 "import-docx",
                 "--from",
                 str(docx_path),
-                "--variant",
-                "base",
+                "--run",
+                "missing",
                 "--config",
                 str(config_path),
                 "--plain",
@@ -888,11 +906,11 @@ def test_import_docx_reports_hint_when_runs_are_missing(tmp_path: Path) -> None:
         )
 
     assert result.exit_code != 0
-    assert "No runs available" in (result.stderr or "")
+    assert "Run not found" in (result.stderr or "")
     assert "cvw reviewpack --variant" in (result.stderr or "")
 
 
-def test_import_docx_ignores_invalid_run_dirs_when_variant_resolves_latest_run(
+def test_import_docx_uses_recorded_run_with_unrelated_invalid_directories(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path = _write_minimal_config(tmp_path)
@@ -900,8 +918,7 @@ def test_import_docx_ignores_invalid_run_dirs_when_variant_resolves_latest_run(
     invalid_dir = tmp_path / "var" / "runs" / "2026-01-01T00-00-00Z"
     invalid_dir.mkdir(parents=True, exist_ok=True)
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, variant_id="base")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
@@ -1113,8 +1130,7 @@ def test_import_docx_variant_ignores_project_scoped_runs(tmp_path: Path, monkeyp
         "project-before\n",
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, variant_id="base")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
@@ -1146,7 +1162,9 @@ def test_import_docx_variant_ignores_project_scoped_runs(tmp_path: Path, monkeyp
     assert "base-before" in patch_text
 
 
-def test_import_docx_variant_rejects_project_only_runs(tmp_path: Path, monkeypatch) -> None:
+def test_import_docx_requires_explicit_run_for_untracked_project_document(
+    tmp_path: Path, monkeypatch
+) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_project_run_manifest(
         tmp_path,
@@ -1181,7 +1199,7 @@ def test_import_docx_variant_rejects_project_only_runs(tmp_path: Path, monkeypat
         )
 
     assert result.exit_code != 0
-    assert "No non-project runs available for variant: base" in (result.stderr or "")
+    assert "requires an explicit --run" in (result.stderr or "")
     assert "--run <run-id>" in (result.stderr or "")
 
 
@@ -1196,8 +1214,7 @@ def test_import_docx_uses_project_selector(tmp_path: Path, monkeypatch) -> None:
         "project-before\n",
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, project_dir=tmp_path / "var" / "projects" / "job")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
@@ -1250,8 +1267,7 @@ def test_import_docx_project_selector_writes_project_ops_patch_for_summary_edits
         canonical,
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, project_dir=tmp_path / "var" / "projects" / "job")
 
     def fake_convert(_path: Path) -> str:
         return canonical.replace("Example summary.", "Tailored project summary.")
@@ -1340,8 +1356,7 @@ def test_import_docx_project_selector_reconciles_existing_project_summary_overla
         canonical,
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, project_dir=tmp_path / "var" / "projects" / "job")
 
     def fake_convert(_path: Path) -> str:
         return canonical.replace("Overlay summary.", "Reviewed summary.")

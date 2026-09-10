@@ -446,7 +446,7 @@ def test_import_docx_help_mentions_run_resolution() -> None:
     result = runner.invoke(app, ["import-docx", "--help"])
 
     assert result.exit_code == 0
-    output = strip_ansi(result.stdout)
+    output = " ".join(strip_ansi(result.stdout).split())
     assert "--from" in output
     assert "canonical.md" in output
     assert "patch.yaml using structured project-ops" in output

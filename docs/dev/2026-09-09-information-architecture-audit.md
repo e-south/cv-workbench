@@ -199,12 +199,9 @@ failed because a recorded cleanup target was already missing. The run-GC preview
 listed 613 candidates and 55 invalid directories at the audit snapshot; nothing
 was deleted. Counts can increase as checkout tests produce runs.
 
-[variant_lifecycle.py](../../src/cvworkbench/ops/variant_lifecycle.py) needs an
-explicit stale-record reconciliation path, while preserving fail-closed deletion
-rules. [runs.py](../../src/cvworkbench/ops/runs.py) retains latest/explicit run IDs
-but does not derive retention from outstanding review references. Review packs
-should carry a durable source-run/hash record, and cleanup should explain which
-review, project, or publication protects an artifact before proposing removal.
+The baseline lacked stale-record reconciliation and retention derived from
+review dependencies. The required contract is an explicit source-run/hash
+record and a cleanup plan that names the review or project protecting each run.
 
 Implemented follow-up: variant GC now exposes an explicit remove/reconcile plan,
 validates every target before deletion, rejects shared-container cleanup, and
@@ -221,8 +218,7 @@ Python API callers receive the same root/target guards as the CLI; symlink
 traversal is rejected before any deletion. Regression tests reproduce competing
 project retention, invalid-run keep failures, and deletion beyond the run store.
 The [artifact retention contract](../reference/artifact-retention.md) owns these
-rules. Durable review references remain open; routine cleanup documentation now
-leads with an inspectable GC plan and explicit review dependencies.
+rules. Routine cleanup documentation leads with an inspectable GC plan.
 
 Preparatory review decomposition separates bundle creation, target resolution,
 DOCX import, patch interpretation, and catalog inspection under `ops/review/`.
@@ -230,6 +226,31 @@ The 943-line review module is replaced by focused owners, with its unused privat
 run resolver removed. The same 48 review/context/retention checks pass before
 and after extraction. Command spellings are unchanged; Python entry points are
 documented by the [project contract](../reference/project-contract.md#python-ownership).
+
+Content bundles now record exact source-run identity and baseline hashes.
+Run GC retains referenced sources even when their manifests are damaged, and
+reports the protecting review in `keep_reasons`. Malformed source records stop
+cleanup before deletion. Historical untracked bundles, custom bundles outside
+the configured review store, and standalone import-draft references still need
+explicit retention; automatic dependency discovery for those remains open.
+
+### High — review imports could drift and replacement could lose edits — fixed
+
+An actual DOCX conversion reproduced an import selecting a newer run after its
+review copy was created. Imports now bind to `review-source.json`, reject changed
+baseline artifacts and conflicting selectors, and require an explicit run for
+untracked DOCX files. Relative project-run paths retain their full scoped ID.
+
+An injected record-write failure reproduced loss of edited review content during
+forced replacement. The bundle's four files now share a recoverable transaction;
+the regression verifies byte-for-byte preservation of the existing edited bundle
+on failure. Invalid selection metadata is rejected before replacement. Targets
+cannot overwrite their source run or the review store itself.
+
+The [content-review contract](../reference/review-contract.md) owns provenance,
+source health, import selection, output naming, retention, and Python boundaries.
+`context` and `status` expose ready/changed/missing/invalid/untracked source
+states. Custom output names are read from records instead of assuming `cv.*`.
 
 ### Medium — documentation contained competing executable owners — fixed
 
@@ -291,8 +312,19 @@ regression and the run/repository contract tests passed together (18 checks).
 Red/green logs are under `/tmp/cvw-retention-*`. The live dry runs report
 25 proposal actions, including one record-only reconciliation, and 16 retained
 runs across project/variant scopes. No private artifact cleanup was applied.
-Ruff and secret-scanning commit hooks passed. Durable review/run references
-remain an explicit open dependency rather than an inferred retention guarantee.
+Ruff and secret-scanning commit hooks passed. That pass preceded the recorded
+content-review lifecycle described above.
+
+Content-review lifecycle follow-up: 412 tests passed, with the same one opt-in
+remote integration skip and five upstream warnings. The seven-step isolated
+CLI journey passed. Real DOCX conversion tests demonstrate import remaining on
+its original baseline after a newer build, while counterfactual tests cover
+changed sources, conflicting selectors, malformed records, unsafe targets,
+and restoration of edited bundle bytes after a replacement failure. Ruff and
+pre-commit checks passed. Evidence is under `/tmp/cvw-review-*`; the final full
+suite log is `/tmp/cvw-review-verified-tests.log`. The live workspace still
+reports the public CV as `review_required`; canonical master and site Git state
+were rechecked unchanged. No live review bundle or private run was replaced.
 
 Useful verification commands:
 
@@ -320,7 +352,8 @@ review item. No exploit against an external destination was attempted.
 Portability, preview presentation extraction, and publication freshness/review
 contracts are complete. Next extract remaining context/workflow decisions from
 the CLI. Follow with semantic document styles and further
-owner-bounded decomposition, each behind its own behavior tests. Reconcile lifecycle records and
-protect referenced artifacts before pruning the workspace. Keep the personal
+owner-bounded decomposition, each behind its own behavior tests. Extend retention
+to standalone draft references and inspect historical untracked bundles before
+pruning the workspace. Keep the personal
 site on hold until the chosen workbench changes and the exact public PDF are
 reviewed.

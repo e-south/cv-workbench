@@ -175,30 +175,16 @@ This is a compare-and-set contract:
   no longer matches `old_text`, the command fails fast instead of silently
   rewriting the wrong content.
 
-`import-docx` now writes `var/drafts/import-*/patch.yaml` using the same
-`project-ops` schema when reviewed Experience bullets or Projects summaries map
-cleanly back to SoT ids. Canonical markdown now follows the same variant
-selection gates as rendered review artifacts, so filtered project imports no
-longer fall back to `review_diff_only` just because hidden items were present
-in the unrendered canonical source. Formatting-only normalized imports report
-`apply_status: ready_no_changes`. Every import draft also writes
-`var/drafts/import-*/draft.json`; that metadata is the authoritative
-applyability contract, while `notes.md` is informational. Unsupported edits
-still fall back to `var/drafts/import-*/patch.diff` with
-`apply_status: review_diff_only`.
+Reviewed Experience bullets and Projects summaries can produce this same
+`project-ops` schema when edits map to stable SoT IDs. See the
+[content-review contract](review-contract.md) for baseline identity, review
+bundle locations, import selection, and `draft.json` applyability states.
 
 Project proposal artifacts must use `project-ops`. Unsupported legacy patch
 formats fail fast instead of being interpreted heuristically.
 
-Project-scoped review packs default to `var/reviews/projects/<slug>/` so they do
-not collide with variant-level review packs.
-
 ## Python Ownership
 
-Content review operations live under `cvworkbench.ops.review`:
-`packs.build_review_pack` creates bundles, `importing.import_docx_review` writes
-import drafts, `targets` resolves source runs, `patches` interprets supported
-edits, and `catalog` reports review artifacts. `ReviewError` is defined by the
-package. The CLI adapts these operations; document interpretation does not
-depend on command parsing. Authored public-PDF review is owned separately by
-`ops.publication`.
+Review implementation boundaries are owned by
+[Content Review](review-contract.md#python-ownership). Project patch compilation
+and guarded SoT application remain project operations.

@@ -301,8 +301,12 @@ To package a specific project build deterministically, use the run path emitted 
 ```bash
 uv run cvw build --project <project-id> --format md,pdf,docx
 uv run cvw reviewpack --run projects/<project-id>/<run-id>
-uv run cvw import-docx --from ./var/reviews/projects/<project-id>/cv.docx --project <project-id> --run projects/<project-id>/<run-id>
+uv run cvw import-docx --from ./var/reviews/projects/<project-id>/cv.docx
 ```
+
+The bundle's `review-source.json` pins the source run. Keep it beside the edited
+DOCX. A standalone DOCX without that record requires explicit `--run <run-id>`.
+See [Content Review](../reference/review-contract.md) for source-health checks.
 
 If you need to refresh an existing review pack for the same run, rerun
 `reviewpack` explicitly with `--force`:

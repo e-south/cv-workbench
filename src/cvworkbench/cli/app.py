@@ -101,6 +101,7 @@ from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.catalog import list_review_summaries
 from cvworkbench.ops.review.importing import import_docx_review
 from cvworkbench.ops.review.packs import build_review_pack
+from cvworkbench.ops.review.record import SOURCE_RECORD_NAME
 from cvworkbench.ops.runs import (
     RunError,
     RunGcCandidate,
@@ -383,6 +384,7 @@ def _print_context_summary(summary: dict[str, Any]) -> None:
         ("variants", summary["variants"]["summary"]),
         ("runs_latest", summary["runs"]["latest_summary"]),
         ("projects", summary["projects"]["summary"]),
+        ("reviews", summary["reviews"]["summary"]),
         (
             "next_workflows",
             ", ".join([workflow["id"] for workflow in recommended]) or "none",
@@ -970,7 +972,7 @@ def _build_context_recipes(
                             sot_path=None,
                             configured_sot_path=configured_sot_path,
                         ),
-                        "description": "Create a review pack with DOCX/PDF plus checklist.",
+                        "description": "Create a review pack with DOCX/PDF, checklist, and an exact source-run record.",
                     },
                     {
                         "command": "edit var/reviews/<variant>/cv.docx",
@@ -1006,6 +1008,7 @@ def _build_context_recipes(
                 ],
                 "outputs": [
                     "var/reviews/<variant>/cv.docx",
+                    "var/reviews/<variant>/review-source.json",
                     "var/drafts/import-*/patch.yaml",
                     "var/drafts/import-*/patch.diff",
                     "var/drafts/import-*/draft.json",
@@ -1013,6 +1016,7 @@ def _build_context_recipes(
                 ],
                 "stop_conditions": [
                     "If no runs exist, run the baseline build recipe first.",
+                    "Keep review-source.json beside the edited DOCX; a standalone file requires an explicit --run.",
                     "Use reviewpack --run <run-id> when you need a pinned review pack in a multi-run workspace.",
                     "If draft.json reports review_diff_only, author a real SoT patch manually instead of applying the draft patch payload.",
                 ],
@@ -2230,7 +2234,16 @@ def _proposal_plan_summary_rows(
 def _reviews_summary_line(reviews: list[dict[str, Any]]) -> str:
     if not reviews:
         return "count=0"
-    lines = [item["review_id"] for item in reviews]
+    lines = [
+        item["review_id"]
+        + (
+            f" | source={item['source']['state']}"
+            + (f" | run={item['source']['run_id']}" if item["source"]["run_id"] else "")
+            if item.get("source")
+            else ""
+        )
+        for item in reviews
+    ]
     return f"count={len(reviews)}\n" + "\n".join(lines)
 
 
@@ -5916,6 +5929,7 @@ def reviewpack(
         "pdf": pack.pdf_path,
         "review": pack.review_path,
         "run_id": pack.run_id,
+        "source_record": pack.source_record_path,
     }
     _print_reviewpack_summary(summary)
 
@@ -5923,10 +5937,10 @@ def reviewpack(
 @app.command(
     "import-docx",
     help=(
-        "Convert a reviewed DOCX into an import draft. Requires `--from` plus "
-        "`--variant`, `--project`, or `--run`; `--run` may be combined with "
-        "`--project` to pin a specific project-scoped run so canonical.md can "
-        "be resolved from the selected run. When the edited DOCX is a resume "
+        "Convert a reviewed DOCX into an import draft. The adjacent review-source.json "
+        "pins its baseline. A standalone DOCX requires an explicit `--run`; "
+        "variant/project selectors must agree with a recorded source. "
+        "When the edited DOCX is a resume "
         "whose Experience bullet or Projects summary text edits map cleanly to "
         "supported source fields, import-docx writes patch.yaml using "
         "structured project-ops; otherwise it falls back to patch.diff against "
@@ -5952,14 +5966,14 @@ def import_docx(
         str | None,
         typer.Option(
             "--variant",
-            help="Variant id to resolve the latest run; cannot be combined with --run or --project",
+            help="Require the recorded source variant; cannot be combined with --run or --project",
         ),
     ] = None,
     project: Annotated[
         str | None,
         typer.Option(
             "--project",
-            help="Project id or path to resolve the latest project-scoped run; cannot be combined with --variant",
+            help="Require the source project; without a review record also provide --run",
         ),
     ] = None,
     config: Annotated[
@@ -5991,7 +6005,12 @@ def import_docx(
     if project and variant:
         typer.echo("ERROR: --project cannot be combined with --variant", err=True)
         raise typer.Exit(code=2)
-    if not run and not variant and not project:
+    if (
+        not run
+        and not variant
+        and not project
+        and not (docx_path.parent / SOURCE_RECORD_NAME).exists()
+    ):
         typer.echo("ERROR: Provide one of --run, --variant, or --project", err=True)
         raise typer.Exit(code=2)
     config_path = resolve_config_path(config)

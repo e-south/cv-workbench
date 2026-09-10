@@ -11,13 +11,16 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from cvworkbench.config import resolve_project_path, resolve_reviews_path
+from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
 from cvworkbench.ops.review import ReviewError
+from cvworkbench.ops.review.record import SOURCE_RECORD_NAME, create_source_record
 from cvworkbench.ops.review.targets import require_run_output, resolve_review_target
 
 
@@ -28,6 +31,7 @@ class ReviewPack:
     pdf_path: Path
     review_path: Path
     run_id: str
+    source_record_path: Path
 
 
 def build_review_pack(
@@ -56,24 +60,55 @@ def build_review_pack(
     if not selection_path.exists():
         raise ReviewError(f"Missing selection metadata: {selection_path}")
 
+    source = create_source_record(resolution.run, docx_source, pdf_source)
+    checklist = _build_review_checklist(selection_path)
+    output_bytes = {path: path.read_bytes() for path in (docx_source, pdf_source)}
+    for path, payload in output_bytes.items():
+        name = path.relative_to(resolution.run.path.resolve()).as_posix()
+        if hashlib.sha256(payload).hexdigest() != source.files[name]:
+            raise ReviewError(f"Run output changed during review preparation: {path}")
+
     reviews_root = resolve_reviews_path(config_path)
     if out_dir is None:
         target_dir = reviews_root / resolution.review_dir
     else:
         target_dir = resolve_project_path(out_dir, config_path)
+    target = target_dir.resolve()
+    source_root = resolution.run.path.resolve()
+    if reviews_root.resolve().is_relative_to(target):
+        raise ReviewError(f"Review target must not replace the reviews store: {target_dir}")
+    if target.is_relative_to(source_root) or source_root.is_relative_to(target):
+        raise ReviewError(f"Review target overlaps its source run: {target_dir}")
     if target_dir.exists():
         if not force:
             raise ReviewError(f"Review pack already exists: {target_dir}")
-        shutil.rmtree(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=False)
+    if target_dir.is_symlink():
+        raise ReviewError(f"Review pack target must not be a symlink: {target_dir}")
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     docx_target = target_dir / docx_source.name
     pdf_target = target_dir / pdf_source.name
-    shutil.copy2(docx_source, docx_target)
-    shutil.copy2(pdf_source, pdf_target)
-
     review_path = target_dir / "review.md"
-    review_path.write_text(_build_review_checklist(selection_path))
+    source_record_path = target_dir / SOURCE_RECORD_NAME
+    writes = [
+        (docx_target, output_bytes[docx_source]),
+        (pdf_target, output_bytes[pdf_source]),
+        (review_path, checklist.encode()),
+        (source_record_path, (source.model_dump_json(indent=2) + "\n").encode()),
+    ]
+    try:
+        replace_files_atomically(writes, file_modes={source_record_path: 0o600})
+    except AtomicWriteError as exc:
+        raise ReviewError(str(exc)) from exc
+    if force:
+        destinations = {path for path, _ in writes}
+        for path in target_dir.iterdir():
+            if path in destinations:
+                continue
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
 
     return ReviewPack(
         out_dir=target_dir,
@@ -81,12 +116,20 @@ def build_review_pack(
         pdf_path=pdf_target,
         review_path=review_path,
         run_id=resolution.run_id,
+        source_record_path=source_record_path,
     )
 
 
 def _build_review_checklist(selection_path: Path) -> str:
-    selection = json.loads(selection_path.read_text())
+    try:
+        selection = json.loads(selection_path.read_text())
+    except (OSError, ValueError) as exc:
+        raise ReviewError(f"Selection metadata cannot be read: {selection_path}") from exc
+    if not isinstance(selection, dict):
+        raise ReviewError(f"Selection metadata must be an object: {selection_path}")
     items = selection.get("items", [])
+    if not isinstance(items, list):
+        raise ReviewError(f"Selection metadata items must be a list: {selection_path}")
     lines = ["# Review Checklist", ""]
     for item in items:
         if not isinstance(item, dict):

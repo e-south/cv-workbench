@@ -17,7 +17,7 @@ that an artifact is disposable.
 | --- | --- | --- |
 | Generated run | Latest runs per workspace/project and variant, plus explicit retained IDs | `cvw runs gc --json` |
 | Draft or project proposal | Registered expiration and keep/discard decisions | [Variant lifecycle](variant-lifecycle.md) |
-| Content review copy | Operator-owned editable bundle; retain its source run explicitly | [Project review/import](project-contract.md) |
+| Content review copy | Editable bundle whose recorded source run is retained by GC | [Content review](review-contract.md) |
 | Authored public PDF and review packet | Preparation snapshot and exact-PDF review state | [Publication lifecycle](publication-contract.md) |
 
 ## Run Cleanup
@@ -41,7 +41,8 @@ The JSON plan distinguishes:
 - `invalid_candidates`: the subset eligible for removal when
   `--include-invalid` is selected, excluding explicitly retained IDs.
 - `kept`: retained valid runs.
-- `keep_reasons`: retained IDs with `explicit_keep` and/or `latest_in_scope`.
+- `keep_reasons`: retained IDs with `explicit_keep`, `latest_in_scope`, and/or
+  `review:<review-id>`.
 
 A nonempty preview exits with code 2. An empty plan exits with code 0. Add
 `--yes` to apply a plan recalculated from current state. It is not a frozen
@@ -55,11 +56,16 @@ directories are not transactionally restored.
 
 ## Review Dependencies
 
-Content review packs currently return their source run ID when created but do
-not persist a durable run reference in the bundle. Keep that exact run explicitly
-while editing or importing its DOCX. Run cleanup does not yet infer retention
-from review copies or patch proposals. The run contains canonical text and
-selection metadata needed to interpret edits correctly.
+Content review packs persist `review-source.json`. GC retains the exact source
+paths referenced by records under the configured reviews root, including damaged
+run manifests. Invalid records stop cleanup before deletion. Source health is
+visible through `context` and `status`; changed source bytes still protect the
+run for recovery even though they prevent import.
+
+Historical bundles without a source record and custom Python API bundles outside
+the configured reviews root require explicit `--keep` retention. GC does not yet
+infer dependencies from standalone import drafts or other patch proposals. The
+run contains canonical text and selection metadata needed to interpret edits.
 
 Authored publication uses a separate source/export pair and hash-addressed
 review packet outside the run store. `runs gc` does not remove those artifacts.

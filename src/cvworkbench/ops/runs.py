@@ -18,7 +18,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.config import resolve_runs_path, resolve_var_root
+from cvworkbench.config import resolve_reviews_path, resolve_runs_path, resolve_var_root
+from cvworkbench.ops.review import ReviewError
+from cvworkbench.ops.review.catalog import load_review_sources
 
 
 class RunError(RuntimeError):
@@ -212,6 +214,8 @@ def resolve_run(config_path: Path, run: str | Path) -> RunInfo:
     if run_dir is None:
         raise RunError(f"Run not found: {run}")
 
+    run_dir = run_dir.resolve()
+
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.exists():
         raise RunError(f"Run manifest not found: {manifest_path}")
@@ -277,6 +281,20 @@ def gc_runs(
         raise RunError(f"Unknown run id(s): {', '.join(sorted(unknown))}")
 
     keep_ids = set(keep)
+    try:
+        review_sources = load_review_sources(config_path)
+    except ReviewError as exc:
+        raise RunError(str(exc)) from exc
+    review_reasons: dict[str, list[str]] = {}
+    reviews_root = resolve_reviews_path(config_path)
+    source_paths = {run.path.resolve(): run.run_id for run in runs}
+    source_paths.update({path.resolve(): _run_id(runs_root, path) for path in invalid})
+    for directory, source in review_sources.items():
+        run_id = source_paths.get(Path(source.run_path).resolve())
+        if run_id is not None:
+            review_reasons.setdefault(run_id, []).append(
+                f"review:{directory.relative_to(reviews_root).as_posix()}"
+            )
     kept_by_latest: set[str] = set()
     grouped: dict[tuple[str, str], list[RunInfo]] = {}
     for run in sorted(runs, key=lambda item: item.created_at, reverse=True):
@@ -286,14 +304,15 @@ def gc_runs(
         for run in variant_runs[:keep_latest]:
             kept_by_latest.add(run.run_id)
 
-    kept_ids = keep_ids | kept_by_latest
+    kept_ids = keep_ids | kept_by_latest | review_reasons.keys()
     keep_reasons = {
         run_id: (["explicit_keep"] if run_id in keep_ids else [])
         + (["latest_in_scope"] if run_id in kept_by_latest else [])
+        + review_reasons.get(run_id, [])
         for run_id in sorted(kept_ids)
     }
     invalid_candidates = [
-        path for path in invalid if include_invalid and _run_id(runs_root, path) not in keep_ids
+        path for path in invalid if include_invalid and _run_id(runs_root, path) not in kept_ids
     ]
     candidates: list[RunGcCandidate] = []
     kept: list[RunInfo] = []

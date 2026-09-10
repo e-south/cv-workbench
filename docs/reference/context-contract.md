@@ -63,6 +63,11 @@ Top-level keys:
   `publication`) and its review path. Container directories are not review
   items. Inventory presence is not proof of publication approval or freshness.
   Partial packets remain visible with an explicit `missing_files` list.
+  Content entries include a `source` object reporting the recorded run and its
+  baseline state (`ready`, `changed`, `missing`, `invalid`, or `untracked`).
+  Plain/compact summaries include that state. See
+  [Content Review](review-contract.md#provenance-and-health) for its meaning;
+  `ready` does not mean human approval.
 - `publication`: the declared site's authored publication, including current
   source/export paths, PDF hash, packet path, phase and explicit reasons.
   It remains present in compact output. Inspection hashes current files and

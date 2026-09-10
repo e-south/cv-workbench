@@ -21,6 +21,11 @@ from pathlib import Path
 from cvworkbench.config import resolve_drafts_path
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.patches import build_import_patch
+from cvworkbench.ops.review.record import (
+    SOURCE_RECORD_NAME,
+    load_source_record,
+    validate_source_artifacts,
+)
 from cvworkbench.ops.review.targets import resolve_review_target
 
 
@@ -45,13 +50,29 @@ def import_docx_review(
 ) -> ImportResult:
     if not docx_path.exists():
         raise ReviewError(f"DOCX file not found: {docx_path}")
+    if project_dir is not None and variant_id is not None:
+        raise ReviewError("--project cannot be combined with --variant")
 
+    source_path = docx_path.parent / SOURCE_RECORD_NAME
+    source = load_source_record(source_path) if source_path.exists() else None
+    if source is None and not run:
+        raise ReviewError("DOCX without a review source record requires an explicit --run")
+    if source is not None:
+        validate_source_artifacts(source)
     resolution = resolve_review_target(
         config_path=config_path,
-        run=run,
-        variant_id=variant_id,
+        run=run or (source.run_path if source is not None else None),
+        variant_id=None if source is not None else variant_id,
         project_dir=project_dir,
     )
+    if source is not None:
+        if (
+            resolution.run.path.resolve() != Path(source.run_path).resolve()
+            or resolution.run_id != source.run_id
+        ):
+            raise ReviewError("Selected run conflicts with review source")
+        if variant_id is not None and resolution.run.variant_id != variant_id:
+            raise ReviewError("Selected variant conflicts with review source")
     run_id = resolution.run_id
     run_dir = resolution.run.path
     canonical_path = run_dir / "canonical.md"
