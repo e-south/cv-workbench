@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/tests/ops/test_public_pdf.py
+cv-workbench/tests/ops/publication/test_pdf.py
 
 Tests faithful authored-PDF publication and privacy validation.
 
@@ -22,7 +22,7 @@ from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 from cvworkbench.ops import atomic
-from cvworkbench.ops.public_pdf import (
+from cvworkbench.ops.publication.pdf import (
     PHONE_CANDIDATE_PATTERN,
     PublicPdfError,
     _matches_forbidden_phone,
@@ -31,7 +31,7 @@ from cvworkbench.ops.public_pdf import (
     validate_public_pdf,
     validate_public_pdf_layout,
 )
-from cvworkbench.ops.publish import PublishError, load_publish_config
+from cvworkbench.ops.publication.policy import PublishError, load_publish_config
 from cvworkbench.variants import load_variant
 
 
@@ -58,6 +58,7 @@ def _write_docx(path: Path, text: str) -> None:
 def _write_workspace(root: Path) -> tuple[Path, Path, Path, Path]:
     (root / "config/variants").mkdir(parents=True)
     (root / "local/sot").mkdir(parents=True)
+    (root / "config/site-sync.yaml").write_text("site:\n  publish_variant: base\n")
     config_path = root / "config/workbench.yaml"
     config_path.write_text(
         "paths:\n  sot: ../local/sot\n  dist: ../var/dist\nvariants:\n  default: base\n"
@@ -158,7 +159,8 @@ def test_prepare_public_pdf_preserves_content_and_removes_private_surfaces(
     assert review["pdf_sha256"] == hashlib.sha256(first_bytes).hexdigest()
     assert review["page_count"] == 2
     assert (review_dir / "cv.pdf").read_bytes() == first_bytes
-    assert "Review required" in result.review_path.read_text()
+    assert "Review this PDF" in result.review_path.read_text()
+    assert "cvw publication status" in result.review_path.read_text()
     assert "555.867.5309" not in result.review_path.read_text()
     assert "advisor@example.org" not in (review_dir / "review.json").read_text()
     with pymupdf.open(result.output_pdf) as public:

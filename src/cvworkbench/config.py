@@ -33,6 +33,24 @@ def load_config(config_path: Path) -> dict[str, Any]:
     return raw
 
 
+def resolve_publication_variant(config_path: Path) -> str:
+    """Select the declared site publication independently of generated-build defaults."""
+    site_path = resolve_config_path(config_path).parent / "site-sync.yaml"
+    if not site_path.is_file():
+        raise ValueError(
+            "Declare site.publish_variant in site-sync.yaml or pass --variant explicitly"
+        )
+    try:
+        raw = yaml.safe_load(site_path.read_text())
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Site configuration is invalid YAML: {site_path}") from exc
+    site = raw.get("site") if isinstance(raw, dict) else None
+    value = site.get("publish_variant") if isinstance(site, dict) else None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Site configuration must declare a non-empty publish_variant")
+    return value.strip()
+
+
 def resolve_config_path(config_path: Path) -> Path:
     if config_path.is_absolute():
         if not config_path.exists():

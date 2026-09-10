@@ -14,9 +14,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+
+
+@pytest.mark.parametrize("output", ["--plain", "--json"])
+def test_status_reports_publication_in_both_output_modes(tmp_path, output):
+    config = _write_config(tmp_path)
+    result = CliRunner().invoke(
+        app, ["status", output, "--sot-path", "sot.sample", "--config", str(config)]
+    )
+    assert result.exit_code == 0, result.output
+    if output == "--json":
+        assert json.loads(result.output)["publication"]["state"] == "unconfigured"
+    else:
+        assert "publication: unconfigured" in result.output
 
 
 def _write_config(root: Path) -> Path:

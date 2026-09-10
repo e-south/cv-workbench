@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pymupdf
@@ -21,7 +22,15 @@ from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 from cvworkbench.ops import atomic
+from cvworkbench.ops.publication.packet import publication_review_files
+from cvworkbench.ops.publication.record import (
+    ReviewReceipt,
+    hash_file,
+    json_bytes,
+    preparation_bytes,
+)
 from cvworkbench.ops.syncing import SyncError, load_site_sync, sync_site
+from tests.ops.publication.test_pdf import _write_docx
 from tests.utils import strip_ansi
 
 
@@ -181,6 +190,41 @@ def _write_workspace(
         )
         + "\n"
     )
+    if pdf_bytes.startswith(b"%PDF-"):
+        # Arrange a reviewed publication; malformed artifacts remain intentionally unprepared.
+        authored = root / "authored.docx"
+        exported = root / "exported.pdf"
+        _write_docx(authored, "Public artifact")
+        exported.write_bytes(pdf_bytes)
+        packet = publication_review_files(pdf_bytes)
+        artifact_hash = hashlib.sha256(pdf_bytes).hexdigest()
+        review_dir = root / "var/reviews/publication" / artifact_hash
+        review_dir.mkdir(parents=True)
+        for name, content in packet.items():
+            (review_dir / name).write_bytes(content)
+        preparation = preparation_bytes(
+            authored_source=authored,
+            source_pdf=exported,
+            policy_path=root / "publish.yaml",
+            variant_path=variants_dir / "base.yaml",
+            person_path=root / "local/sot/person.yaml",
+            variant="base",
+            pdf_hash=artifact_hash,
+            manifest_content=(publish_dir / "manifest.json").read_text(),
+            review_files=packet,
+            authored_hash=hash_file(authored),
+            exported_hash=hash_file(exported),
+        )
+        (publish_dir / "preparation.json").write_bytes(preparation)
+        receipt = ReviewReceipt(
+            schema_version=1,
+            pdf_sha256=artifact_hash,
+            preparation_sha256=hashlib.sha256(preparation).hexdigest(),
+            reviewed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        (publish_dir / "review-receipt.json").write_bytes(
+            json_bytes(receipt.model_dump(mode="json"))
+        )
     return site_repo, workbench_config, site_config
 
 

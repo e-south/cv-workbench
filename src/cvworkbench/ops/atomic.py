@@ -15,6 +15,7 @@ import os
 import shutil
 import stat
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,12 +31,21 @@ class _StagedWrite:
     backup: Path | None
 
 
-def replace_files_atomically(writes: list[tuple[Path, bytes]]) -> None:
+def replace_files_atomically(
+    writes: list[tuple[Path, bytes]],
+    *,
+    file_modes: Mapping[Path, int] | None = None,
+) -> None:
     """Stage every payload, then replace all destinations with rollback on failure."""
 
     destinations = [destination for destination, _ in writes]
     if len(destinations) != len(set(destinations)):
         raise AtomicWriteError("Atomic replacement destinations must be unique")
+    modes = file_modes or {}
+    if not set(modes).issubset(destinations) or any(
+        type(mode) is not int or not 0 <= mode <= 0o777 for mode in modes.values()
+    ):
+        raise AtomicWriteError("File modes must name write destinations and valid permission bits")
 
     staged_writes: list[_StagedWrite] = []
     applied: list[_StagedWrite] = []
@@ -47,7 +57,9 @@ def replace_files_atomically(writes: list[tuple[Path, bytes]]) -> None:
             staged = _temporary_sibling(destination, "stage")
             temporary_paths.add(staged)
             staged.write_bytes(content)
-            mode = stat.S_IMODE(destination.stat().st_mode) if destination.exists() else 0o644
+            mode = modes.get(destination)
+            if mode is None:
+                mode = stat.S_IMODE(destination.stat().st_mode) if destination.exists() else 0o644
             staged.chmod(mode)
             backup: Path | None = None
             if destination.exists():

@@ -63,7 +63,15 @@ Top-level keys:
   `publication`) and its review path. Container directories are not review
   items. Inventory presence is not proof of publication approval or freshness.
   Partial packets remain visible with an explicit `missing_files` list.
+- `publication`: the declared site's authored publication, including current
+  source/export paths, PDF hash, packet path, phase and explicit reasons.
+  It remains present in compact output. Inspection hashes current files and
+  verifies packet integrity; the default generated-document variant does not
+  select this publication. Missing configuration is reported without guessing.
 - `recipes`: ordered command sequences for common workflows.
+  `authored.publish` routes source preparation, a non-runnable manual review
+  step, exact-hash review recording, and guarded local sync. Configured
+  publications receive a recommendation when the structured workspace is ready.
 - `recommended_workflows`: the next workflow recipes to inspect first.
 - `issues`: any non-fatal problems detected during inspection.
 

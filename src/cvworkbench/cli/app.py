@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
@@ -44,6 +44,7 @@ from cvworkbench.build.rendering import (
 from cvworkbench.build.styles import prepare_html_style
 from cvworkbench.cli.helpers import configure_output_mode, load_sot_payload, resolve_selection_path
 from cvworkbench.cli.output import OutputMode, get_output_mode, print_summary
+from cvworkbench.cli.publication import prepare_public_pdf_command, publication_app, sync
 from cvworkbench.config import (
     load_config,
     resolve_config_path,
@@ -60,7 +61,6 @@ from cvworkbench.config import (
     resolve_runs_path,
     resolve_sot_path,
     resolve_style_preset,
-    resolve_sync_mode,
     resolve_themes_dir,
     resolve_var_root,
     resolve_variant_path,
@@ -95,14 +95,7 @@ from cvworkbench.ops.projects import (
     retarget_project_variant,
     suggest_project_variant_id,
 )
-from cvworkbench.ops.public_pdf import (
-    PublicPdfError,
-    PublicPdfResult,
-)
-from cvworkbench.ops.public_pdf import (
-    prepare_public_pdf as prepare_authored_public_pdf,
-)
-from cvworkbench.ops.publish import PublishError
+from cvworkbench.ops.publication.state import PublicationState
 from cvworkbench.ops.render_compare import RenderCompareError, compare_rendered_pdfs
 from cvworkbench.ops.review import ReviewError, build_review_pack, import_docx_review
 from cvworkbench.ops.review_catalog import list_review_summaries
@@ -123,7 +116,6 @@ from cvworkbench.ops.sot_versions import (
     diff_versions,
     list_versions,
 )
-from cvworkbench.ops.syncing import SyncError, SyncResult, sync_site
 from cvworkbench.ops.tailor import DraftPaths, TailorError, tailor_job
 from cvworkbench.ops.variant_lifecycle import (
     VariantLifecycleError,
@@ -142,11 +134,19 @@ from cvworkbench.themes import (
     resolve_theme,
 )
 from cvworkbench.variants import load_variant
+from cvworkbench.workspace.publication import inspect_workspace_publication, publication_recipe
 
 if TYPE_CHECKING:
     from cvworkbench.dev.preview import PreviewSession
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
+app.add_typer(
+    publication_app,
+    name="publication",
+    help="Inspect authored publication freshness and record exact-PDF review.",
+)
+app.command("prepare-public-pdf")(prepare_public_pdf_command)
+app.command("sync")(sync)
 job_app = typer.Typer(no_args_is_help=True)
 tags_app = typer.Typer(no_args_is_help=True)
 theme_app = typer.Typer(no_args_is_help=True)
@@ -256,42 +256,6 @@ def _print_render_summary(
     print_summary("render", rows)
 
 
-def _print_sync_summary(result: SyncResult) -> None:
-    plan = result.plan
-    changed_files = len(plan.copy_ops)
-    if plan.frontmatter_content:
-        changed_files += 1
-    if plan.manifest_content:
-        changed_files += 1
-    status = "no_changes"
-    if plan.has_changes():
-        status = "pr_created" if result.mode == "pr" else "applied"
-
-    rows: list[tuple[str, str | Path]] = [
-        ("sync_mode", result.mode),
-        ("sync_status", status),
-        ("site_repo", result.site.repo_path),
-        ("pdf_url", plan.pdf_url),
-        ("files_updated", str(changed_files)),
-    ]
-    if result.branch:
-        rows.append(("branch", result.branch))
-    print_summary("sync", rows)
-
-
-def _print_public_pdf_summary(result: PublicPdfResult) -> None:
-    print_summary(
-        "prepare-public-pdf",
-        [
-            ("status", "prepared"),
-            ("output_pdf", result.output_pdf),
-            ("manifest", result.manifest_path),
-            ("redactions", str(result.redaction_count)),
-            ("review", result.review_path),
-        ],
-    )
-
-
 def _print_validate_summary(sot_path: Path) -> None:
     print_summary(
         "validate",
@@ -393,6 +357,7 @@ def _print_status_summary(summary: dict[str, Any]) -> None:
         ("runs_latest", summary["runs"]["latest_summary"]),
         ("runs_recent", summary["runs"]["recents_summary"]),
         ("projects", summary["projects"]["summary"]),
+        ("publication", summary["publication"]["state"]),
         ("reviews", summary["reviews"]["summary"]),
     ]
     if summary["runs"]["invalid_summary"]:
@@ -409,6 +374,7 @@ def _print_context_summary(summary: dict[str, Any]) -> None:
     recommended = summary["recommended_workflows"]
     rows = [
         ("config", summary["config"]["path"]),
+        ("publication", summary["publication"]["state"]),
         ("sot_status", summary["sot"]["status"]),
         ("sot_path", sot_path),
         ("variants", summary["variants"]["summary"]),
@@ -1243,6 +1209,7 @@ def _build_recommended_workflows(
     default_variant: str | None,
     config_path: Path,
     sot_path: Path | None,
+    publication: PublicationState | None = None,
 ) -> list[dict[str, str]]:
     recipe_lookup = {recipe["id"]: recipe for recipe in recipes}
     recommendations: list[dict[str, str]] = []
@@ -1301,6 +1268,12 @@ def _build_recommended_workflows(
         )
         return recommendations
 
+    if publication is not None and publication.state != "unconfigured":
+        add(
+            "authored.publish",
+            "Inspect authored publication freshness and review before site handoff.",
+        )
+
     add(
         "automation.verify",
         "Fastest deterministic smoke path for a ready workspace.",
@@ -1324,7 +1297,7 @@ def _build_recommended_workflows(
             "project.guide",
             "Start here when you are tailoring the workspace to a specific job or role.",
         )
-    return recommendations
+    return recommendations[:3]
 
 
 def _workflow_command(
@@ -1467,6 +1440,7 @@ def _project_review_payload(project_id: str, config_path: Path) -> dict[str, Any
 def _compact_context_payload(summary: dict[str, Any]) -> dict[str, Any]:
     return {
         "config": summary["config"],
+        "publication": summary["publication"],
         "sot": {
             "configured_path": summary["sot"]["configured_path"],
             "path": summary["sot"]["path"],
@@ -2773,6 +2747,16 @@ def _build_context_summary(
         projects=projects,
     )
 
+    publication = inspect_workspace_publication(shared.config_path, sot_path=sot_path)
+    recipes.append(
+        publication_recipe(
+            publication,
+            config_path=shared.config_path,
+            command_prefix=_cvw_command_prefix(),
+            sot_path=sot_path,
+        )
+    )
+
     return {
         "config": {
             "path": str(shared.config_path),
@@ -2800,6 +2784,7 @@ def _build_context_summary(
         "runs": runs_section,
         "projects": projects_section,
         "reviews": reviews_section,
+        "publication": asdict(publication),
         "recipes": recipes,
         "recommended_workflows": _build_recommended_workflows(
             recipes=recipes,
@@ -2808,6 +2793,7 @@ def _build_context_summary(
             default_variant=shared.default_variant,
             config_path=shared.config_path,
             sot_path=sot_path,
+            publication=publication,
         ),
         "issues": shared.issues,
     }
@@ -3245,6 +3231,7 @@ def status(
     reviews_summary = _reviews_summary_line(reviews)
 
     summary = {
+        "publication": asdict(inspect_workspace_publication(config_path, sot_path=sot_path)),
         "sot": {
             "path": str(resolved_sot),
             "files": files,
@@ -7043,139 +7030,3 @@ def compare(
         return
 
     _print_compare_summary(summary)
-
-
-@app.command("prepare-public-pdf")
-def prepare_public_pdf_command(
-    authored_source: Annotated[
-        Path,
-        typer.Option(
-            "--authored-source",
-            help="Canonical editable DOCX used to create the exported PDF",
-        ),
-    ],
-    source_pdf: Annotated[
-        Path,
-        typer.Option(
-            "--source-pdf",
-            help="Faithful PDF exported from the authored CV source",
-        ),
-    ],
-    variant: Annotated[
-        str | None,
-        typer.Option(
-            "--variant",
-            help="Publish variant id (defaults to config)",
-        ),
-    ] = None,
-    config: Annotated[
-        Path,
-        typer.Option(
-            "--config",
-            help="Path to workbench config",
-        ),
-    ] = Path("config/workbench.yaml"),
-    publish_config: Annotated[
-        Path | None,
-        typer.Option(
-            "--publish-config",
-            help="Path to public publication policy",
-        ),
-    ] = None,
-    sot_path: Annotated[
-        Path | None,
-        typer.Option(
-            "--sot-path",
-            help="Path to private Source of Truth data",
-        ),
-    ] = None,
-    plain: Annotated[
-        bool,
-        typer.Option(
-            "--plain",
-            help="Use plain text output (no Rich panels)",
-        ),
-    ] = False,
-    json_output: Annotated[
-        bool,
-        typer.Option(
-            "--json",
-            help="Use JSON output for summaries",
-        ),
-    ] = False,
-) -> None:
-    """Prepare a faithful authored PDF for fail-closed public distribution."""
-
-    configure_output_mode(plain, json_output)
-    try:
-        resolved_config = resolve_config_path(config)
-        resolved_variant = variant or resolve_default_variant(resolved_config)
-        resolved_sot = resolve_sot_path(sot_path, resolved_config)
-        resolved_publish = publish_config or resolved_config.parent / "publish.yaml"
-        result = prepare_authored_public_pdf(
-            authored_source=authored_source.expanduser().resolve(),
-            source_pdf=source_pdf.expanduser().resolve(),
-            config_path=resolved_config,
-            variant_id=resolved_variant,
-            publish_config_path=resolved_publish,
-            sot_path=resolved_sot,
-        )
-    except (FileNotFoundError, PublicPdfError, PublishError, ValueError) as exc:
-        typer.echo(f"ERROR: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    _print_public_pdf_summary(result)
-
-
-@app.command()
-def sync(
-    mode: Annotated[
-        str | None,
-        typer.Option(
-            "--mode",
-            help="Sync mode: pr or local",
-        ),
-    ] = None,
-    config: Annotated[
-        Path,
-        typer.Option(
-            "--config",
-            help="Path to workbench config",
-        ),
-    ] = Path("config/workbench.yaml"),
-    site_config: Annotated[
-        Path,
-        typer.Option(
-            "--site-config",
-            help="Path to site sync config",
-        ),
-    ] = Path("config/site-sync.yaml"),
-    plain: Annotated[
-        bool,
-        typer.Option(
-            "--plain",
-            help="Use plain text output (no Rich panels)",
-        ),
-    ] = False,
-    json_output: Annotated[
-        bool,
-        typer.Option(
-            "--json",
-            help="Use JSON output for summaries",
-        ),
-    ] = False,
-) -> None:
-    configure_output_mode(plain, json_output)
-    try:
-        resolved_config = resolve_config_path(config)
-        resolved_site = resolve_config_path(site_config)
-        selected_mode = mode or resolve_sync_mode(resolved_config)
-        result = sync_site(
-            config_path=resolved_config,
-            site_config_path=resolved_site,
-            mode=selected_mode,
-            publish_config_path=resolved_config.parent / "publish.yaml",
-        )
-    except (FileNotFoundError, SyncError, RenderError) as exc:
-        typer.echo(f"ERROR: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    _print_sync_summary(result)

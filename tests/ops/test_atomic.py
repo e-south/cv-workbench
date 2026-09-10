@@ -16,6 +16,14 @@ import pytest
 from cvworkbench.ops import atomic
 
 
+@pytest.mark.parametrize("mode", [True, -1, 0o4777])
+def test_invalid_file_modes_fail_before_creating_outputs(tmp_path, mode):
+    target = tmp_path / "output/data.json"
+    with pytest.raises(atomic.AtomicWriteError, match="permission bits"):
+        atomic.replace_files_atomically([(target, b"private")], file_modes={target: mode})
+    assert not target.parent.exists()
+
+
 def test_failed_rollback_retains_original_recovery_copy(tmp_path, monkeypatch):
     first, second = tmp_path / "first.pdf", tmp_path / "manifest.json"
     first.write_bytes(b"original PDF")

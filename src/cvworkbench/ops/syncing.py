@@ -24,9 +24,11 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_sot_path, resolve_variant_path
 from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
-from cvworkbench.ops.public_pdf import PublicPdfError, validate_public_pdf
-from cvworkbench.ops.publish import PublishConfig, PublishError, load_publish_config
-from cvworkbench.variants import Variant, load_variant
+from cvworkbench.ops.publication.artifact import validate_public_artifact, validate_publish_policy
+from cvworkbench.ops.publication.pdf import PublicPdfError, validate_public_pdf
+from cvworkbench.ops.publication.policy import PublishConfig, PublishError, load_publish_config
+from cvworkbench.ops.publication.state import inspect_publication
+from cvworkbench.variants import load_variant
 
 
 class SyncError(RuntimeError):
@@ -136,15 +138,18 @@ def sync_site(
         )
     variant_path = resolve_variant_path(site.publish_variant, config_path)
     variant = load_variant(variant_path)
-    _validate_publish_policy(variant, publish)
+    try:
+        validate_publish_policy(variant, publish)
+    except ValueError as exc:
+        raise SyncError(str(exc)) from exc
     publish_dir = resolve_publish_path(config_path) / variant.id
 
     source_pdf = output_path(publish_dir, variant, "pdf")
     if not source_pdf.exists():
         raise SyncError(f"Missing PDF output: {source_pdf}")
     source_manifest = publish_dir / "manifest.json"
-    pdf_hash = _validate_public_artifact(source_pdf, source_manifest, variant, publish)
     try:
+        pdf_hash = validate_public_artifact(source_pdf, source_manifest, variant, publish)
         validate_public_pdf(
             source_pdf,
             variant=variant,
@@ -153,6 +158,10 @@ def sync_site(
         )
     except (PublicPdfError, ValueError) as exc:
         raise SyncError(str(exc)) from exc
+
+    publication = inspect_publication(config_path, variant.id, publish_config_path=policy_path)
+    if publication.state != "reviewed":
+        raise SyncError(f"Publication is {publication.state}: {'; '.join(publication.reasons)}")
 
     plan = _plan_sync(site, source_pdf, pdf_hash, publish)
     branch_name: str | None = None
@@ -245,84 +254,6 @@ def _apply_plan(plan: SyncPlan) -> None:
         replace_files_atomically(writes)
     except AtomicWriteError as exc:
         raise SyncError(str(exc)) from exc
-
-
-def _validate_publish_policy(variant: Variant, publish: PublishConfig) -> None:
-    missing_tags = sorted(set(publish.required_exclude_tags) - set(variant.exclude_tags))
-    if missing_tags:
-        raise SyncError(
-            f"Publish variant is missing required exclude tags: {', '.join(missing_tags)}"
-        )
-
-    contact_fields = sorted(set(variant.contact_fields) & set(publish.forbidden_contact_fields))
-    if contact_fields:
-        raise SyncError(
-            f"Publish variant includes forbidden contact fields: {', '.join(contact_fields)}"
-        )
-
-    sections = sorted(set(variant.order) & set(publish.forbidden_sections))
-    if sections:
-        raise SyncError(f"Publish variant includes forbidden sections: {', '.join(sections)}")
-
-
-def _validate_public_artifact(
-    source_pdf: Path,
-    manifest_path: Path,
-    variant: Variant,
-    publish: PublishConfig,
-) -> str:
-    if not source_pdf.read_bytes().startswith(b"%PDF-"):
-        raise SyncError(f"Public artifact is not a PDF: {source_pdf}")
-    if not manifest_path.exists():
-        raise SyncError(f"Build manifest not found: {manifest_path}")
-    try:
-        manifest = json.loads(manifest_path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        raise SyncError(f"Build manifest is invalid: {manifest_path}") from exc
-    if not isinstance(manifest, dict):
-        raise SyncError(f"Build manifest is invalid: {manifest_path}")
-    if manifest.get("schema_version") != 1:
-        raise SyncError("Build manifest schema does not match authored publication contract")
-    if manifest.get("artifact_kind") != "authored-pdf-publication":
-        raise SyncError("Build manifest is not an authored PDF publication")
-    if manifest.get("formats") != ["pdf"]:
-        raise SyncError("Build manifest must declare only the PDF publication format")
-
-    manifest_variant = manifest.get("variant")
-    if not isinstance(manifest_variant, dict) or manifest_variant.get("id") != variant.id:
-        raise SyncError("Build manifest variant does not match publish variant")
-    variant_contract = {
-        "exclude_tags": variant.exclude_tags,
-        "contact_fields": variant.contact_fields,
-        "order": variant.order,
-    }
-    for key, expected in variant_contract.items():
-        if manifest_variant.get(key) != expected:
-            raise SyncError(f"Build manifest {key} does not match publish variant")
-
-    outputs = manifest.get("outputs")
-    if not isinstance(outputs, dict) or outputs.get("pdf") != source_pdf.name:
-        raise SyncError("Build manifest does not declare the PDF artifact")
-    output_hashes = manifest.get("output_hashes")
-    pdf_hash = _hash_file(source_pdf)
-    if not isinstance(output_hashes, dict) or output_hashes.get("pdf") != pdf_hash:
-        raise SyncError("Build manifest PDF hash does not match the artifact")
-    source = manifest.get("source")
-    if not isinstance(source, dict):
-        raise SyncError("Build manifest lacks authored source provenance")
-    transformation = manifest.get("transformation")
-    if not isinstance(transformation, dict) or transformation.get("kind") != "semantic-redaction":
-        raise SyncError("Build manifest lacks the semantic-redaction provenance contract")
-    redaction_count = transformation.get("redaction_count")
-    if not isinstance(redaction_count, int) or isinstance(redaction_count, bool):
-        raise SyncError("Build manifest redaction count is invalid")
-    if source.get("visual_fingerprint_sha256") != publish.approved_visual_fingerprint_sha256:
-        raise SyncError("Build manifest visual fingerprint does not match publish policy")
-    if transformation.get("forbidden_contact_fields") != publish.forbidden_contact_fields:
-        raise SyncError("Build manifest contact policy does not match publish policy")
-    if transformation.get("forbidden_sections") != publish.forbidden_sections:
-        raise SyncError("Build manifest section policy does not match publish policy")
-    return pdf_hash
 
 
 def _public_manifest(

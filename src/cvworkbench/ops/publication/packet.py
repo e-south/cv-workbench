@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/ops/publication_review.py
+cv-workbench/src/cvworkbench/ops/publication/packet.py
 
 Renders local review evidence from an already validated public PDF.
 
@@ -73,7 +73,7 @@ def publication_review_files(pdf_bytes: bytes) -> dict[str, bytes]:
             )
     summary = {
         "schema_version": 1,
-        "status": "review-required",
+        "artifact_kind": "publication-review-packet",
         "pdf_sha256": pdf_hash,
         "page_count": len(pages),
         "render_dpi": REVIEW_DPI,
@@ -93,9 +93,11 @@ def publication_review_files(pdf_bytes: bytes) -> dict[str, bytes]:
         "a{color:#174b72}figure{margin:2rem 0}figcaption{margin-bottom:.5rem}"
         "img{display:block;width:100%;height:auto;border:1px solid #bdbbb5;background:white}"
         "code{overflow-wrap:anywhere;font-size:.8rem}</style><main>"
-        "<h1>Public CV review</h1><p><strong>Review required.</strong> "
+        "<h1>Public CV review</h1><p><strong>Review this PDF.</strong> "
         "Check header alignment, contact spacing, line wraps and page breaks before sync.</p>"
         '<p><a href="cv.pdf">Open PDF</a> · <a href="review.json">Review measurements</a></p>'
+        "<p>This packet preserves review evidence. Use <code>cvw publication status</code> "
+        "in the workbench to check current freshness and recorded review.</p>"
         f"<p>PDF SHA-256: <code>{pdf_hash}</code></p>" + "".join(figures) + "</main></html>\n"
     ).encode()
     return files

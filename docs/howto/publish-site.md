@@ -74,7 +74,21 @@ proves the disclosure and fidelity contracts; it does not approve aesthetics.
 The ordinary `preview` command renders the generated-resume lane and cannot
 validate the authored public CV.
 
-After reviewing the packet, sync only the validated PDF and sanitized manifest:
+Inspect freshness and record review of the exact hash printed by preparation:
+
+```bash
+uv run cvw publication status --json
+uv run cvw publication review --pdf-sha256 <reviewed-pdf-sha256>
+```
+
+The private preparation record retains the explicit source pair and detects
+later source/export/configuration changes. Review binds to this preparation and
+the exact PDF; changed or damaged artifacts require preparation and review
+again. No command records review merely because a packet exists. Publication
+selection defaults to `site.publish_variant`, independently of generated builds.
+Inspect `uv run cvw workflow --id authored.publish` for the current sequence.
+
+After recording review, sync only the validated PDF and sanitized manifest:
 
 ```bash
 uv run cvw sync --mode local --plain
@@ -104,6 +118,7 @@ a small annotation overlap cannot erase a link beside a private contact line.
 Preparation stages the PDF and provenance manifest together and restores the
 prior pair if either replacement fails.
 
-Continue with [the site contract](../reference/site-contract.md) for ownership
+Continue with [the publication lifecycle](../reference/publication-contract.md)
+for freshness states and private records, and [the site contract](../reference/site-contract.md) for ownership
 and write-boundary details, then [security](../reference/security.md) for the
 public disclosure policy.

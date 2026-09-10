@@ -79,6 +79,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, guarded patch application, and proposal visibility rules
 - [reference/variant-lifecycle.md](reference/variant-lifecycle.md): ephemeral draft/project proposal lifecycle
 - [reference/site-contract.md](reference/site-contract.md): local-first site sync contract
+- [reference/publication-contract.md](reference/publication-contract.md): authored sources, freshness and exact-PDF review receipts
 - [reference/security.md](reference/security.md): local/private content boundaries and security posture
 - [reference/documentation-contract.md](reference/documentation-contract.md): frontmatter, lifecycle, and progressive-disclosure rules
 - [reference/journal.md](reference/journal.md): operator and maintainer journal surface

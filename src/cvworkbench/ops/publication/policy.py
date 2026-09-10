@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/ops/publish.py
+cv-workbench/src/cvworkbench/ops/publication/policy.py
 
 Loads publish gating configuration for public outputs.
 

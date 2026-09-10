@@ -1,7 +1,7 @@
 """
 --------------------------------------------------------------------------------
 cv-workbench
-cv-workbench/src/cvworkbench/ops/public_pdf.py
+cv-workbench/src/cvworkbench/ops/publication/pdf.py
 
 Prepares faithful authored PDFs for public distribution.
 
@@ -30,8 +30,9 @@ import yaml
 from cvworkbench.build.paths import output_path
 from cvworkbench.config import resolve_publish_path, resolve_reviews_path, resolve_variant_path
 from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
-from cvworkbench.ops.publication_review import PublicationReviewError, publication_review_files
-from cvworkbench.ops.publish import PublishConfig, load_publish_config
+from cvworkbench.ops.publication.packet import PublicationReviewError, publication_review_files
+from cvworkbench.ops.publication.policy import PublishConfig, load_publish_config
+from cvworkbench.ops.publication.record import preparation_bytes
 from cvworkbench.variants import Variant, load_variant
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
@@ -171,13 +172,28 @@ def prepare_public_pdf(
                 source_match=source_match,
                 source_visual_fingerprint=source_visual_fingerprint,
             )
+            record_content = preparation_bytes(
+                authored_source=authored_source,
+                source_pdf=source_pdf,
+                policy_path=publish_config_path,
+                variant_path=resolve_variant_path(variant_id, config_path),
+                person_path=sot_path / "person.yaml",
+                variant=variant.id,
+                pdf_hash=public_pdf_hash,
+                manifest_content=manifest_content,
+                review_files=review_files,
+                authored_hash=authored_sha256,
+                exported_hash=source_pdf_sha256,
+            )
             try:
                 replace_files_atomically(
                     [
                         (output_pdf, public_pdf_bytes),
                         (manifest_path, manifest_content.encode()),
+                        (output_pdf.parent / "preparation.json", record_content),
                         *((review_dir / name, content) for name, content in review_files.items()),
-                    ]
+                    ],
+                    file_modes={output_pdf.parent / "preparation.json": 0o600},
                 )
             except AtomicWriteError as exc:
                 raise PublicPdfError(str(exc)) from exc

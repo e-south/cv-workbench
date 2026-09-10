@@ -37,6 +37,8 @@ so a resume build or test cannot replace the reviewed authored artifact.
 
 Before its first write, sync verifies:
 
+- the selected source/export pair and publication inputs still match their
+  private preparation record, and the current PDF has a matching review receipt;
 - the source is a parseable, unencrypted PDF without embedded files;
 - the manifest identifies an authored PDF publication produced by semantic
   redaction and names the selected variant and PDF;

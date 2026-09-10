@@ -99,7 +99,7 @@ rejects missing template inputs before creating a partial workspace. Installed
 command suggestions now use `cvw` directly. See the
 [distribution contract](../reference/verify-contract.md#installed-distribution).
 
-### Medium — publication is absent from the bootstrap workflow model — partly fixed
+### Medium — publication is absent from the bootstrap workflow model — fixed
 
 The live `context` recipe index includes generated build, preview, import, and
 tailoring flows, but no authored-publication journey or publication freshness
@@ -112,12 +112,20 @@ sanitized PDF. [review_catalog.py](../../src/cvworkbench/ops/review_catalog.py)
 discovers actual content and publication packets, including nested project
 reviews; container directories no longer masquerade as review items.
 
-Proposed next contract: a private workspace publication-source record, explicit
-source/export/public artifact hashes, and distinct states for missing inputs,
-stale export, prepared artifact, review required, and synced artifact. Expose an
-`authored.publish` recipe through `context` with local source paths only in local
-output. A visual review receipt should reference the PDF hash and become stale
-when that artifact changes. Inventory presence must never mean approval.
+Implemented follow-up: [the publication lifecycle](../reference/publication-contract.md)
+defines a private preparation snapshot, source/export/configuration freshness,
+packet integrity, and a review receipt bound to the exact PDF and preparation.
+`context`, `status`, and `publication status` expose the observed phase;
+`authored.publish` provides a source-aware recipe with a manual review step.
+Publication defaults follow the declared site variant independently of generated
+build defaults. Sync rejects stale, missing and unreviewed inputs before writing.
+Private records use owner-only permissions and never enter the site manifest.
+
+The static packet describes itself as evidence and directs the operator to live
+status, avoiding a permanently stale "review required" label. Local `reviewed`
+means ready for sync's destination checks; it intentionally does not claim that
+a remote deployment or even the configured site checkout has been updated.
+Destination/deployment observability remains a distinct future inspection surface.
 
 ### Medium — formatting fidelity is not document usability — partly fixed
 
@@ -160,18 +168,23 @@ and interaction assets under `dev/assets/preview/`, assembled by the small
 matches the previous page except outer whitespace normalized by repository
 hooks, and still uses one request for markup/styles/script. Focused tests cover
 the UI contracts, real HTTP boundary, controller behavior, and installed-wheel
-asset availability. CLI/context decomposition below remains open.
+asset availability. Publication command adapters now live in
+`cli/publication.py`; lifecycle code is grouped under `ops/publication/` with
+scoped owner guidance. Publication inspection and workflow description have a
+workspace module shared by context and status. Broader CLI/context decomposition
+below remains open.
 
 Proposed extraction order:
 
 1. Move context inspection and recipe construction into workspace modules with
    typed results; leave CLI parsing and output adapters thin.
-2. Register publication, review, tailoring, and build commands from their own
-   CLI modules without changing command syntax.
+2. Publication command extraction is complete. Register review, tailoring and
+   build commands from their own CLI modules without changing command syntax.
 3. Preview asset extraction is complete. Continue separating server transport
    and build control where new behavior would otherwise cross their boundaries.
-4. Group publication policy, source correspondence, PDF preparation, visual
-   review, and site handoff under a publication owner as those modules change.
+4. Publication grouping is complete. Split correspondence, visual geometry and
+   redaction out of `publication/pdf.py` as independently verified responsibilities;
+   keep site transport in `ops/syncing.py`.
 
 AST import inspection found no build-layer imports of CLI, preview, or ops and
 no non-CLI module importing the CLI. Preserve those useful dependency directions
@@ -230,6 +243,23 @@ Evidence is under `var/runs/preview/2026-09-10-resource-audit/`, with test and
 journey logs at `/tmp/cvw-architecture-final-*`. The canonical DOCX hash and the
 personal site's clean Git state were rechecked unchanged.
 
+Publication lifecycle follow-up: 370 tests passed with one opt-in remote test
+skipped and the same upstream warnings. The seven-step CLI journey, three-run
+ergonomics harness, Ruff and all pre-commit checks passed. The ergonomics harness
+initially caught a missing plain-text status field; explicit plain/JSON status
+regressions now cover that failure. Record tests cover missing/boolean schema
+versions, changed inputs, wrong review hashes, packet/PDF disagreement, damaged
+images, preserved review on identical preparation, and private file permissions.
+
+The actual local CV candidate was prepared again from its existing review copy.
+Its PDF hash stayed `556d1db9bf900aa4ea83156e3b1881647627e2e0a760f40d899e461ddfa7e712`,
+with three pages and three retained profile links. Status reports
+`review_required`; no review was declared and no site sync occurred. Browser
+inspection loaded all three page images without overflow or console warnings.
+Evidence is under `var/runs/preview/2026-09-10-publication-lifecycle/`, with
+validation logs at `/tmp/cvw-publication-*`. The canonical master DOCX and site
+checkout were rechecked unchanged.
+
 Useful verification commands:
 
 ```bash
@@ -253,9 +283,9 @@ review item. No exploit against an external destination was attempted.
 
 ## Recommended next increment
 
-Portability and preview presentation extraction are complete. Next make authored
-publication discoverable and freshness-aware, then extract context/workflow
-decisions from the CLI. Follow with semantic document styles and further
+Portability, preview presentation extraction, and publication freshness/review
+contracts are complete. Next extract remaining context/workflow decisions from
+the CLI. Follow with semantic document styles and further
 owner-bounded decomposition, each behind its own behavior tests. Reconcile lifecycle records and
 protect referenced artifacts before pruning the workspace. Keep the personal
 site on hold until the chosen workbench changes and the exact public PDF are
