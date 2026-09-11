@@ -226,6 +226,12 @@ native TeX spacing with a minimum gap and keeps the heading with its next block.
 The DOCX theme must provide an `Entry Heading` paragraph style with a right tab
 stop at the text-area boundary and `keepNext`; no layout table is inserted.
 Keep OOXML namespace prefixes intact when editing a reference DOCX.
+For PDF entry spacing, a theme may define `\cvwentryspace`, for example
+`\newcommand{\cvwentryspace}{\addvspace{5pt}}`. The aligned renderer calls it
+before each entry heading. An undefined hook adds no spacing. Match this rhythm
+with HTML entry margins and the DOCX `Entry Heading` style, rather than inserting
+blank source paragraphs. Name alignment belongs to each theme's top-level heading
+style; contact alignment is independent.
 
 This option takes precedence over `cvw-compact-entries` for semantic entries;
 unaligned legacy entries retain the existing compact behavior. Disable compact
@@ -242,7 +248,7 @@ the build manifest records the filter hashes actually used.
 ### Concise entry details
 
 Set `metadata.cvw-concise-entries: true` alongside aligned entries to place a
-service role before its organization and an award issuer after its title on the
+service or conference role before its organization/event and an award issuer after its title on the
 identity line. The shared metadata helper emits `entry-role` and `entry-issuer`
 spans; presentation uses those roles rather than parsing names or display text.
 Dates keep the existing right-alignment and narrow-view stacking behavior.
@@ -251,9 +257,11 @@ metadata does not justify dropping text; ambiguous entries are left intact.
 
 With this option, simple Education highlights join the degree line with
 semicolons; advisors and thesis remain separate. Nested or multi-paragraph
-highlights keep their list structure. In-preparation publication notes marked
-`entry-note` join the preceding status paragraph, preserving working-title
-qualifications without adding a line. Other publication notes are unchanged.
+highlights keep their list structure. Publication notes marked
+`entry-note` join the preceding citation or status paragraph, preserving working-title
+qualifications or contribution explanations without adding a paragraph.
+When authors are present, their `entry-authors` span keeps the note beside the
+author list, before the venue details.
 The note compaction also works without aligned dates. These are presentation
 changes: canonical source records, IDs, selection, and ordinary text exports
 retain their fields. With the option disabled, existing detail lines remain.
@@ -262,6 +270,21 @@ Keep factual restoration and removal of redundant prose in the source version;
 the filter never decides which assertions are dispensable. Verify native output
 with `tests/build/test_concise_entries.py`, including unknown presentation titles,
 optional dates, ambiguous metadata, and actual PDF/DOCX/text builds.
+
+### Repeated teaching and publication labels
+
+The canonical teaching renderer groups adjacent selected records with exactly
+matching course and role under one heading. Every offering keeps its source ID,
+term, enrollment, evaluation, and summary. Selection happens first; different
+roles or nonadjacent courses remain separate. This structure also reaches plain
+text without a layout table. Source records and machine-readable exports retain
+the individual offerings.
+
+An explicitly published paper with a journal/venue omits the redundant
+`Published` display label. Without a venue the label remains; manuscripts in
+preparation always keep their status. Source status is unchanged. Authoring a
+contribution note within a publication lets concise presentation place it beside
+that citation. Notes are never removed automatically based on their wording.
 
 ## Build-time changes and provenance
 

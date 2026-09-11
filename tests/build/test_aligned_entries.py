@@ -16,6 +16,50 @@ from cvworkbench.variants import parse_variant
 FILTER = Path(__file__).resolve().parents[2] / "build/filters/presentation.lua"
 
 
+def test_pdf_theme_can_space_entries_without_changing_their_text(tmp_path):
+    source = """::: {#education-a .section}
+### First University
+
+[MSc]{.entry-detail}
+:::
+
+::: {#education-b .section}
+### Second University
+
+[BSc]{.entry-detail}
+:::
+"""
+    distances = []
+    for gap in (0, 12):
+        header = tmp_path / f"gap-{gap}.tex"
+        header.write_text(r"\newcommand{\cvwentryspace}{\vspace{" + str(gap) + "pt}}")
+        target = tmp_path / f"gap-{gap}.pdf"
+        subprocess.run(
+            [
+                "pandoc",
+                "--pdf-engine=xelatex",
+                "--lua-filter",
+                str(FILTER),
+                "-M",
+                "cvw-aligned-entries=true",
+                "-H",
+                str(header),
+                "-o",
+                str(target),
+            ],
+            input=source,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        with pymupdf.open(target) as pdf:
+            first = pdf[0].search_for("First University")[0]
+            second = pdf[0].search_for("Second University")[0]
+            assert "MSc" in pdf[0].get_text() and "BSc" in pdf[0].get_text()
+            distances.append(second.y0 - first.y0)
+    assert 11 < distances[1] - distances[0] < 13
+
+
 def test_aligned_role_preserves_inline_identity_and_literal_content():
     source = """::: {#role-example .role}
 ### [Researcher]{#role-name .entry-role} - [Example Lab]{#employer .entry-organization}

@@ -9,7 +9,8 @@ local function simple_list_items(block)
 end
 
 local function aligned_entry(div, concise)
-  if not (div.classes:includes('section') or div.classes:includes('role')) then
+  if not (div.classes:includes('section') or div.classes:includes('role')
+      or div.classes:includes('teaching-course')) then
     return nil
   end
   local blocks = div.content
@@ -105,6 +106,7 @@ local function aligned_entry(div, concise)
     pandoc.Attr('', {'entry-heading'}, {['custom-style']='Entry Heading'}))
   local result = {heading}
   if FORMAT:match('latex') then
+    table.insert(result, 1, pandoc.RawBlock('latex', '\\ifdefined\\cvwentryspace\\cvwentryspace\\fi'))
     table.insert(result, pandoc.RawBlock('latex', '\\nopagebreak[4]'))
   end
   if #details > 0 then
@@ -172,9 +174,17 @@ local function concise_publication_note(div)
   if note.t ~= 'Para' or metadata.t ~= 'Para' or #note.content ~= 1 then return nil end
   local span = note.content[1]
   if span.t ~= 'Span' or not span.classes:includes('entry-note') then return nil end
-  table.insert(metadata.content, pandoc.Str(';'))
-  table.insert(metadata.content, pandoc.Space())
-  table.insert(metadata.content, span)
+  local first = metadata.content[1]
+  if first and first.t == 'Span' and first.classes:includes('entry-authors') then
+    -- Keep author/contribution context together before the venue metadata.
+    table.insert(metadata.content, 2, pandoc.Str(';'))
+    table.insert(metadata.content, 3, pandoc.Space())
+    table.insert(metadata.content, 4, span)
+  else
+    table.insert(metadata.content, pandoc.Str(';'))
+    table.insert(metadata.content, pandoc.Space())
+    table.insert(metadata.content, span)
+  end
   blocks:remove(#blocks)
   return div
 end

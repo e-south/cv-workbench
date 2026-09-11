@@ -18,6 +18,7 @@ from cvworkbench.build.contacts import build_contact_line
 from cvworkbench.build.entry_layout import append_entry_text, entry_metadata
 from cvworkbench.build.links import http_link, literal_text
 from cvworkbench.build.selection import select_letter
+from cvworkbench.build.teaching import append_teaching_entries
 from cvworkbench.text import slugify, tag_classes
 from cvworkbench.variants import Variant
 
@@ -395,10 +396,12 @@ def _build_publications(
         if status not in {"published", "in_preparation"}:
             raise ValueError(f"Unsupported publication status: {status}")
         status_text = "Manuscript in preparation" if status == "in_preparation" else ""
-        if status == "published" and "status" in item:
+        if status == "published" and "status" in item and not _string(item.get("venue")):
             status_text = "Published"
-        if status == "in_preparation" and notes:
+        if notes:
             notes = f"[{notes}]{{.entry-note}}"
+            if authors_text:
+                authors_text = f"[{authors_text}]{{.entry-authors}}"
         append_entry_text(
             lines, metadata=(authors_text, venue_line, status_text), paragraphs=(notes,)
         )
@@ -442,7 +445,8 @@ def _build_conferences(
         append_entry_text(
             lines,
             metadata=entry_metadata(
-                " - ".join(part for part in (presentation_type, title if event else "") if part),
+                title if event else "",
+                role=presentation_type,
                 location=location,
                 dates=year,
             ),
@@ -548,35 +552,12 @@ def _build_teaching(
     lines.append("## Teaching")
     lines.append("")
     _append_section_intro(lines, "teaching", variant, snippets)
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        if not _tags_match_variant(item.get("tags"), variant):
-            continue
-        entry_id = slugify(item.get("id", ""))
-        tag_list = _tag_classes(item.get("tags"))
-        div_attr = _format_div_attributes(f"teaching-{entry_id}", ["section", *tag_list])
-        lines.append(f"::: {div_attr}")
-
-        course = _string(item.get("course"))
-        if course:
-            lines.append(f"### {course}")
-
-        role = _string(item.get("role"))
-        term = _string(item.get("term"))
-        enrollment = item.get("enrollment")
-        enrollment_text = f"Enrollment: {enrollment}" if isinstance(enrollment, int) else ""
-        evaluation = _string(item.get("evaluation"))
-        evaluation_text = f"Evaluation: {evaluation}" if evaluation else ""
-        summary = _string(item.get("summary"))
-        append_entry_text(
-            lines,
-            metadata=entry_metadata(role, enrollment_text, evaluation_text, dates=term),
-            paragraphs=(summary,),
-        )
-
-        lines.append(":::")
-        lines.append("")
+    selected = [
+        item
+        for item in items
+        if isinstance(item, dict) and _tags_match_variant(item.get("tags"), variant)
+    ]
+    append_teaching_entries(lines, selected)
 
 
 def _build_references(

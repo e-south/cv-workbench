@@ -47,5 +47,21 @@ def test_unknown_status_is_rejected():
         )
 
 
+def test_publication_venue_makes_published_label_redundant():
+    variant = parse_variant({"variant": {"id": "cv", "outputs": ["md"], "order": ["publications"]}})
+    record = {
+        "id": "paper",
+        "title": "A paper",
+        "authors": [{"name": "A. Author"}],
+        "status": "published",
+        "venue": "Example Journal",
+        "year": 2024,
+    }
+    source = {"publications": {"publications": [record]}}
+    assert "Published" not in build_markdown(source, variant)
+    record.pop("venue")
+    assert "Published" in build_markdown(source, variant)
+
+
 def test_migrating_all_manuscripts_does_not_require_placeholder_projects():
     assert Projects.model_validate({"projects": []}).projects == []

@@ -158,6 +158,78 @@ def test_concise_manuscript_retains_status_and_working_title_on_one_line():
     assert len(original.findall("p")) == 2
 
 
+def test_concise_published_note_stays_with_its_citation():
+    source = {
+        "publications": {
+            "publications": [
+                {
+                    "id": "paper",
+                    "title": "A published paper",
+                    "status": "published",
+                    "authors": [{"name": "A. Author"}],
+                    "venue": "Example Journal",
+                    "notes": "*Equal contribution.",
+                }
+            ]
+        }
+    }
+    entry = render_entries(source).find(".//*[@id='publication-paper']")
+    paragraphs = entry.findall("p")
+    assert len(paragraphs) == 1
+    assert "Equal contribution." in "".join(paragraphs[0].itertext())
+    text = "".join(paragraphs[0].itertext())
+    assert (
+        text.index("A. Author") < text.index("Equal contribution.") < text.index("Example Journal")
+    )
+
+
+@pytest.mark.parametrize("title", [None, "A known poster title"])
+def test_concise_conference_activity_shares_the_event_heading(title):
+    record = {
+        "id": "meeting",
+        "event": "Example Conference",
+        "year": 2024,
+        "presentation_type": "Poster",
+    }
+    if title:
+        record["title"] = title
+    source = {"conferences": {"conferences": [record]}}
+    entry = render_entries(source).find(".//*[@id='conference-meeting']")
+    assert "Poster, Example Conference" in "".join(
+        entry.find(".//*[@class='entry-heading']").itertext()
+    )
+    assert ["".join(p.itertext()) for p in entry.findall("p")] == ([title] if title else [])
+
+
+def test_concise_teaching_groups_role_and_course_above_term_evidence():
+    source = {
+        "teaching": {
+            "teaching": [
+                {
+                    "id": "fall",
+                    "course": "BIO 101",
+                    "role": "Teaching Fellow",
+                    "term": "Fall 2024",
+                    "enrollment": 39,
+                },
+                {
+                    "id": "spring",
+                    "course": "BIO 101",
+                    "role": "Teaching Fellow",
+                    "term": "Spring 2023",
+                    "enrollment": 45,
+                },
+            ]
+        }
+    }
+    tree = render_entries(source)
+    heading = tree.find(".//*[@class='entry-heading']")
+    assert heading is not None
+    assert "Teaching Fellow, BIO 101" in "".join(heading.itertext())
+    for id_, term in [("fall", "Fall 2024"), ("spring", "Spring 2023")]:
+        assert term in "".join(tree.find(f".//*[@id='teaching-{id_}']").itertext())
+
+
 @pytest.mark.parametrize(
     "metadata",
     [

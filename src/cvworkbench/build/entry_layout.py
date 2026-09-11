@@ -9,8 +9,8 @@ def entry_metadata(
     *details: str, role: str = "", issuer: str = "", location: str = "", dates: str = ""
 ) -> tuple[str, ...]:
     """Keep metadata roles through Pandoc without embedding format-specific spacing."""
-    parts = [(value, "detail") for value in details]
-    parts.extend(((role, "role"), (issuer, "issuer"), (location, "location"), (dates, "date")))
+    parts = [(role, "role"), *((value, "detail") for value in details)]
+    parts.extend(((issuer, "issuer"), (location, "location"), (dates, "date")))
     return tuple(f"[{value}]{{.entry-{kind}}}" for value, kind in parts if value)
 
 

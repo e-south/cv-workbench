@@ -73,7 +73,7 @@ def _entry_html(section, item, variant):
                 "presentation_type": "Talk",
                 "notes": "Invited presentation.",
             },
-            ["Talk - A useful talk | 2025", "Invited presentation."],
+            ["Talk | A useful talk | 2025", "Invited presentation."],
         ),
         (
             "honors",
