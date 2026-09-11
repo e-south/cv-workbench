@@ -441,6 +441,14 @@ Use a matching CSS custom property for `.cv-entry` margins and `li + li` spacing
 Set DOCX paragraph spacing in the reference styles; never insert empty source
 paragraphs to tune layout.
 
+Lists inside entry details or composed entry groups expose `.entry-items` and
+the scoped PDF hook `\cvwentryitems`. Use these for a smaller within-record gap
+while retaining separation between records and skill categories. DOCX uses
+the `Entry Bullet` paragraph style for these native list items; define it in
+the theme's reference document. This style is independent of `Compact`, which
+continues to control ordinary lists. Source bullets and reading order remain
+unchanged, and undefined PDF hooks retain the theme's list defaults.
+
 To add semantic bullets and hanging indentation to selected record kinds:
 
 ```yaml

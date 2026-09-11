@@ -62,6 +62,50 @@ def test_shared_details_style_applies_across_record_kinds_without_touching_prose
     assert not unstyled.findall(".//*[@class='entry-details']")
 
 
+def test_within_entry_lists_have_independent_theme_hooks_and_native_word_bullets(tmp_path):
+    from zipfile import ZipFile
+
+    source = """- Outer category
+
+::: {#role-example .role}
+### Example organization
+
+- First contribution
+- Second contribution
+:::
+
+::: {.entry-group}
+Shared context
+
+- First title
+- Second title
+:::
+"""
+    tree = ET.fromstring("<root>" + render(source) + "</root>")
+    lists = tree.findall(".//*[@class='entry-items']/ul")
+    assert len(lists) == 2
+    assert [len(items.findall("li")) for items in lists] == [2, 2]
+    assert tree.find("ul/li").text == "Outer category"
+    assert "entry-items" not in render(source, structured=False)
+    tex = render(source, target="latex")
+    assert tex.count(r"\ifdefined\cvwentryitems\cvwentryitems\fi") == 2
+    target = tmp_path / "entry-lists.docx"
+    render(source, target="docx", extra=("-o", str(target)))
+    with ZipFile(target) as archive:
+        doc = ET.fromstring(archive.read("word/document.xml"))
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    w = "{" + ns["w"] + "}"
+    bullets = [p for p in doc.findall(".//w:p", ns) if p.find("w:pPr/w:numPr", ns) is not None]
+    assert len(bullets) == 5
+    assert [p.find("w:pPr/w:pStyle", ns).get(w + "val") for p in bullets] == [
+        "Compact",
+        "EntryBullet",
+        "EntryBullet",
+        "EntryBullet",
+        "EntryBullet",
+    ]
+
+
 def test_selected_activities_use_real_lists_and_preserve_nested_teaching_ids(tmp_path):
     source = (
         """---

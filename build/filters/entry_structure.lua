@@ -10,7 +10,30 @@ local function entry_kind(div)
   return kinds[div.identifier:match('^([a-z]+)%-')]
 end
 
+-- Lists within a record have a different rhythm from lists of records.
+-- Supply semantic hooks; dimensions remain entirely theme-owned.
+local function entry_lists(blocks)
+  for index, block in ipairs(blocks) do
+    if block.t == 'BulletList' or block.t == 'OrderedList' then
+      if FORMAT == 'docx' then
+        -- Pandoc's tight lists force Compact, overriding a custom paragraph style.
+        block = pandoc.walk_block(block, {Plain=function(p) return pandoc.Para(p.content) end})
+      end
+      local content = {block}
+      if FORMAT:match('latex') then
+        table.insert(content, 1, pandoc.RawBlock('latex',
+          '\\begingroup\\ifdefined\\cvwentryitems\\cvwentryitems\\fi'))
+        table.insert(content, pandoc.RawBlock('latex', '\\par\\endgroup'))
+      end
+      blocks[index] = pandoc.Div(content,
+        pandoc.Attr('', {'entry-items'}, {['custom-style']='Entry Bullet'}))
+    end
+  end
+  return blocks
+end
+
 local function entry_details(blocks)
+  blocks = entry_lists(blocks)
   if FORMAT:match('latex') then
     table.insert(blocks, 1, pandoc.RawBlock('latex',
       '\\begingroup\\ifdefined\\cvwentrydetails\\cvwentrydetails\\fi'))
@@ -22,6 +45,7 @@ end
 
 local function structure_entry(div, bulleted)
   if div.classes:includes('entry-group') then
+    div.content = entry_lists(div.content)
     div.classes:insert('cv-entry')
     if FORMAT:match('latex') then
       div.content:insert(1, pandoc.RawBlock('latex', '\\ifdefined\\cvwentryspace\\cvwentryspace\\fi'))
