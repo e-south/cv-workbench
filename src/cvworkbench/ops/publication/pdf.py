@@ -76,6 +76,17 @@ class PublicPdfResult:
     review_path: Path
 
 
+def sanitize_public_metadata(document: pymupdf.Document) -> None:
+    """Strip hidden payloads and the catalog's automatic opening action."""
+    document.scrub(remove_links=False)
+    # xref_set_key(..., "null") retains the key in current PyMuPDF. Delete
+    # through its MuPDF dictionary API without rewriting unrelated catalog data.
+    pdf = pymupdf.mupdf.pdf_document_from_fz_document(document.this)
+    catalog = pymupdf.mupdf.pdf_load_object(pdf, document.pdf_catalog())
+    pymupdf.mupdf.pdf_dict_dels(catalog, "OpenAction")
+    document.set_metadata({})
+
+
 @dataclass(frozen=True)
 class _PdfCharacter:
     value: str
@@ -159,8 +170,7 @@ def _prepare_captured_public_pdf(
         _tighten_public_link_rectangles(document, person=person, variant=variant)
         for page in document:
             page.apply_redactions(images=0, graphics=0, text=0)
-        document.scrub(remove_links=False)
-        document.set_metadata({})
+        sanitize_public_metadata(document)
 
         temporary_pdf = _temporary_pdf_path(output_pdf)
         try:
@@ -243,13 +253,19 @@ def validate_public_pdf(
     variant: Variant,
     publish: PublishConfig,
     sot_path: Path,
+    allowed_links: frozenset[str] | None = None,
 ) -> None:
     """Fail closed when a PDF exposes contact or section data forbidden by policy."""
 
     person = _load_person(sot_path)
     document = _open_pdf(path)
     _validate_public_document(
-        document, person=person, variant=variant, publish=publish, label=str(path)
+        document,
+        person=person,
+        variant=variant,
+        publish=publish,
+        label=str(path),
+        allowed_links=allowed_links,
     )
 
 
@@ -259,6 +275,7 @@ def validate_public_pdf_content(
     variant: Variant,
     publish: PublishConfig,
     sot_path: Path,
+    allowed_links: frozenset[str] | None = None,
 ) -> None:
     """Validate captured PDF bytes without reopening a mutable artifact path."""
     person = _load_person(sot_path)
@@ -269,7 +286,12 @@ def validate_public_pdf_content(
     except (pymupdf.FileDataError, RuntimeError) as exc:
         raise PublicPdfError("Invalid PDF artifact") from exc
     _validate_public_document(
-        document, person=person, variant=variant, publish=publish, label="captured PDF"
+        document,
+        person=person,
+        variant=variant,
+        publish=publish,
+        label="captured PDF",
+        allowed_links=allowed_links,
     )
 
 
@@ -280,6 +302,7 @@ def _validate_public_document(
     variant: Variant,
     publish: PublishConfig,
     label: str,
+    allowed_links: frozenset[str] | None = None,
 ) -> None:
     try:
         if document.needs_pass:
@@ -287,7 +310,7 @@ def _validate_public_document(
         if document.embfile_count():
             raise PublicPdfError(f"Public PDF must not contain embedded files: {label}")
         _validate_source_visual_contract(document, publish)
-        _validate_pdf_links(document, person=person, variant=variant)
+        _validate_pdf_links(document, person=person, variant=variant, allowed_links=allowed_links)
         text = "\n".join(page.get_text() for page in document)
         try:
             text += "\n" + pdf_object_text(document)
@@ -459,33 +482,45 @@ def _validate_pdf_links(
     *,
     person: dict[str, Any],
     variant: Variant,
+    allowed_links: frozenset[str] | None = None,
 ) -> None:
-    allowed_urls = _allowed_public_links(person, variant)
+    allowed_urls = (
+        _allowed_public_links(person, variant) if allowed_links is None else allowed_links
+    )
+    named_destinations = document.resolve_names()
     for bookmark in document.get_toc(simple=False):
         destination = bookmark[3]
         xref = destination.get("xref")
         if not isinstance(xref, int) or xref <= 0:
             raise PublicPdfError("Public PDF bookmark action could not be inspected")
         action_present = document.xref_get_key(xref, "A")[0] != "null"
+        named = named_destinations.get(destination.get("nameddest"), {})
+        internal_named = (
+            destination.get("kind") == pymupdf.LINK_NAMED
+            and isinstance(named.get("page"), int)
+            and 0 <= named["page"] < len(document)
+        )
         if (
-            destination.get("kind") not in {pymupdf.LINK_NONE, pymupdf.LINK_GOTO}
+            (
+                destination.get("kind") not in {pymupdf.LINK_NONE, pymupdf.LINK_GOTO}
+                and not internal_named
+            )
             or (action_present and document.xref_get_key(xref, "A/S")[1] != "/GoTo")
             or document.xref_get_key(xref, "A/Next")[0] != "null"
             or document.xref_get_key(xref, "AA")[0] != "null"
         ):
             raise PublicPdfError("Public PDF contains an unsafe or external bookmark action")
     for page_index, page in enumerate(document):
-        word_rectangles = [pymupdf.Rect(*word[:4]) for word in page.get_text("words")]
+        text_rectangles = _link_glyph_rectangles(page)
         for link in page.get_links():
             uri = link.get("uri")
             parsed = urlsplit(uri) if isinstance(uri, str) else None
             link_rect = pymupdf.Rect(link["from"])
-            label_rect = _visible_link_label_rect(link_rect, word_rectangles)
+            label_rect = _visible_link_label_rect(link_rect, text_rectangles)
             if (
                 link.get("kind") != pymupdf.LINK_URI
                 or parsed is None
-                or parsed.scheme.casefold() != "https"
-                or not parsed.hostname
+                or not _safe_public_uri(uri, person, variant, allow_email=allowed_links is not None)
                 or uri not in allowed_urls
                 or label_rect is None
                 or not _rect_edges_match(link_rect, label_rect)
@@ -493,6 +528,22 @@ def _validate_pdf_links(
                 raise PublicPdfError(
                     f"Public PDF contains an unsafe or hidden link on page {page_index + 1}"
                 )
+
+
+def _safe_public_uri(
+    uri: str, person: dict[str, Any], variant: Variant, *, allow_email: bool
+) -> bool:
+    if any(ord(char) <= 32 or ord(char) == 127 for char in uri):
+        return False
+    parsed = urlsplit(uri)
+    if parsed.scheme == "https":
+        return bool(parsed.hostname) and parsed.username is None and parsed.password is None
+    return bool(
+        allow_email
+        and "email" in variant.contact_fields
+        and person.get("email")
+        and uri == "mailto:" + person["email"]
+    )
 
 
 def _allowed_public_links(person: dict[str, Any], variant: Variant) -> set[str]:
@@ -523,23 +574,32 @@ def _tighten_public_link_rectangles(
 
     allowed_urls = _allowed_public_links(person, variant)
     for page in document:
-        word_rectangles = [pymupdf.Rect(*word[:4]) for word in page.get_text("words")]
+        text_rectangles = _link_glyph_rectangles(page)
         for link in page.get_links():
             if link.get("kind") != pymupdf.LINK_URI or link.get("uri") not in allowed_urls:
                 continue
             link_rect = pymupdf.Rect(link["from"])
-            label_rect = _visible_link_label_rect(link_rect, word_rectangles)
+            label_rect = _visible_link_label_rect(link_rect, text_rectangles)
             if label_rect is not None and _rect_edges_match(link_rect, label_rect):
                 page.update_link({**link, "from": label_rect})
 
 
+def _link_glyph_rectangles(page: pymupdf.Page) -> list[pymupdf.Rect]:
+    # Word boxes include adjacent commas/periods even when they are not linked.
+    return [
+        pymupdf.Rect(character.bbox)
+        for character in _pdf_characters(page)
+        if not character.value.isspace()
+    ]
+
+
 def _visible_link_label_rect(
     link_rect: pymupdf.Rect,
-    word_rectangles: list[pymupdf.Rect],
+    text_rectangles: list[pymupdf.Rect],
 ) -> pymupdf.Rect | None:
     covered = [
         rect
-        for rect in word_rectangles
+        for rect in text_rectangles
         if link_rect.contains(pymupdf.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2))
     ]
     if not covered:
@@ -572,7 +632,10 @@ def _validate_verifiable_visual_content(document: pymupdf.Document) -> None:
                 f"Public PDF contains unsupported form widgets on page {page_index + 1}"
             )
         for drawing in page.get_drawings():
-            if any(item[0] != "re" for item in drawing.get("items", [])):
+            if any(
+                item[0] != "re" and not (item[0] == "l" and item[1].y == item[2].y)
+                for item in drawing.get("items", [])
+            ):
                 raise PublicPdfError(
                     f"Public PDF contains unverifiable vector content on page {page_index + 1}"
                 )

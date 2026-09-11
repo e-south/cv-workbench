@@ -67,6 +67,12 @@ echoing its contents.
 
 ## Source references and active selection
 
+`resolve_documents_root` resolves optional `documents.root` relative to the
+configuration directory. Absence leaves library discovery disabled. Empty or
+malformed settings fail explicitly. The library owns current and working files;
+build `paths.dist` must remain a generated-output location. See
+[document promotion](document-library.md) for the separate reviewed transition.
+
 `resolve_sot_reference(sot_path, configuration)` returns the absolute location
 selected by an explicit path or `paths.sot`, without reading `ACTIVE`. It accepts
 the same `ConfigSource` snapshot/path contract as other resolvers. An explicit

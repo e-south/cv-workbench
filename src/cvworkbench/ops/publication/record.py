@@ -68,9 +68,8 @@ class PreparationInputs(BaseModel):
     person: FileStamp
 
 
-class PreparationRecord(_VersionedRecord):
+class _PreparationRecord(_VersionedRecord):
     variant: str
-    authored_source: FileStamp
     exported_pdf: FileStamp
     policy: FileStamp
     variant_config: FileStamp
@@ -93,6 +92,28 @@ class PreparationRecord(_VersionedRecord):
         if any(Path(name).name != name or name in {".", ".."} for name in value):
             raise ValueError("Review packet entries must be filenames")
         return value
+
+
+class PreparationRecord(_PreparationRecord):
+    authored_source: FileStamp
+
+
+class NativePreparationRecord(_PreparationRecord):
+    kind: Literal["native-build"]
+    configuration: FileStamp
+    run_manifest: FileStamp
+    rendered_markdown: FileStamp
+    source_files: dict[str, FileStamp]
+
+
+def parse_preparation_record(content: bytes) -> PreparationRecord | NativePreparationRecord:
+    payload = json.loads(content)
+    model = (
+        NativePreparationRecord
+        if isinstance(payload, dict) and payload.get("kind") == "native-build"
+        else PreparationRecord
+    )
+    return model.model_validate(payload)
 
 
 class ReviewReceipt(_VersionedRecord):

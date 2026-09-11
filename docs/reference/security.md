@@ -12,6 +12,19 @@ navigation:
 - Personal SoT data must stay outside version control. Use the configured,
   ignored `local/` workspace or an explicitly configured external directory;
   tracked source data is limited to public examples.
+- External career libraries contain private sources, working files, current
+  documents, and promotion receipts. Discovery requires an explicit root or
+  configuration and never inventories the environment or home directory.
+  Local inventory output includes selected paths and identities, not document
+  text or environment values. Keep it private; it is not a publication manifest.
+- Local promotion rejects source/destination overlap, unsafe paths, conflicting
+  identities, and changed current files. Public promotion accepts only a reviewed,
+  prepared PDF through the existing publication policy. Private library data is
+  never copied into the package or sent to a site by document discovery/promotion.
+- Local library operations do not upload documents or read environment values.
+  Malformed source YAML diagnostics omit the private input line, and CLI exception
+  rendering is tested to omit local variable values. Diagnostic paths and local
+  review records still reveal workspace structure: do not publish them as logs.
 - `local/sot/`, `var/dist/`, `var/runs/`, `var/drafts/`, `var/registry/`, `var/reviews/`, and `var/projects/` are ignored by git.
 - Public variants must omit forbidden contact fields and sections in addition
   to excluding private tags. Tag filtering alone does not protect top-level

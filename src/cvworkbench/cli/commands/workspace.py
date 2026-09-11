@@ -161,6 +161,7 @@ def _compact_context_payload(summary: dict[str, Any]) -> dict[str, Any]:
     return {
         "config": summary["config"],
         "publication": summary["publication"],
+        "documents": summary["documents"],
         "sot": {
             "configured_path": summary["sot"]["configured_path"],
             "path": summary["sot"]["path"],

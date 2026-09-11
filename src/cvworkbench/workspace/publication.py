@@ -38,6 +38,7 @@ def publication_recipe(
     sot_path: Path | None = None,
 ) -> dict[str, Any]:
     steps = []
+    native = state.source_kind == "native"
 
     def command(argv: list[str], description: str, *, sync: bool = False) -> None:
         tokens = [*command_prefix, *argv, "--config", str(config_path)]
@@ -61,9 +62,14 @@ def publication_recipe(
 
     command(
         ["publication", "status", "--json"],
-        "Inspect authored source, export, artifact and review freshness.",
+        "Inspect source, prepared artifact and review freshness.",
     )
-    if state.state not in {"review_required", "reviewed"}:
+    if native and state.state not in {"review_required", "reviewed"}:
+        command(
+            ["publication", "prepare", "--run", "<current-native-build-run>"],
+            "Rebuild from current source and prepare the explicit run printed by build.",
+        )
+    elif state.state not in {"review_required", "reviewed"}:
         command(
             [
                 "prepare-public-pdf",
@@ -100,10 +106,14 @@ def publication_recipe(
         sync=True,
     )
     return {
-        "id": "authored.publish",
-        "title": "Prepare, review and publish the authored CV",
+        "id": "native.publish" if native else "authored.publish",
+        "title": "Prepare, review and publish the native CV"
+        if native
+        else "Prepare, review and publish the authored CV",
         "preconditions": [
-            "Explicit authored DOCX and local PDF export.",
+            "Explicit native run with current source hashes, Markdown and PDF."
+            if native
+            else "Explicit authored DOCX and local PDF export.",
             "Configured disclosure policy, approved graphics fingerprint and site destination.",
         ],
         "steps": steps,
@@ -115,6 +125,8 @@ def publication_recipe(
         "stop_conditions": [
             "Do not infer a source path or review approval.",
             "Stop at the manual review step until the exact PDF has been inspected.",
-            "Re-export after DOCX changes; re-prepare and review after input or packet changes.",
+            "Rebuild after source changes; re-prepare and review after input or packet changes."
+            if native
+            else "Re-export after DOCX changes; re-prepare and review after input or packet changes.",
         ],
     }

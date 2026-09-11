@@ -44,6 +44,12 @@ It ignores the operator's `CVW_TEMPLATE_DIR` only while initializing that fixtur
 Custom-template tests can still set their own environment explicitly. Operator
 `local/`, `var/`, workbench settings, and site-publication settings are not copied.
 
+Public tests use fictional fixtures and enforce reusable behavior. Personal
+fact-retention and editorial checks belong under `checks/` in the user's external
+authoring workspace, with their reports in the private library's `records/`.
+Do not copy personal source passages into a public regression test to reproduce
+a layout problem. Preserve the relevant structural shape with invented content.
+
 Use `tmp_path` for custom input/output fixtures. Checked-in examples can be read
 through paths resolved from `__file__`; writes belong to a temporary workspace.
 Working-directory isolation is not a filesystem sandbox: explicit paths still

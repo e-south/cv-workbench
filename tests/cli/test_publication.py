@@ -17,6 +17,30 @@ from cvworkbench.cli import app
 from tests.ops.publication.test_state import _prepare
 
 
+def test_native_publication_cli_prepares_an_explicit_build(tmp_path):
+    from tests.ops.publication.test_native import native_workspace
+
+    args = native_workspace(tmp_path)
+    result = CliRunner().invoke(
+        app,
+        [
+            "publication",
+            "prepare",
+            "--run",
+            str(args["run_path"]),
+            "--config",
+            str(args["config_path"]),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["command"] == "publication.prepare"
+    state = CliRunner().invoke(
+        app, ["publication", "status", "--config", str(args["config_path"]), "--json"]
+    )
+    assert json.loads(state.output)["publication"]["state"] == "review_required"
+
+
 def test_publication_default_does_not_follow_the_generated_document_default(tmp_path):
     config, *_ = _prepare(tmp_path)
     config.write_text(config.read_text().replace("default: base", "default: cover-letter"))

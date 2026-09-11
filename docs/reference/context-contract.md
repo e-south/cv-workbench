@@ -13,6 +13,12 @@ navigation:
 the current workspace state without guessing paths or falling back to defaults.
 Missing inputs are surfaced explicitly in the payload.
 
+When `documents.root` is configured, the `documents` block exposes the private
+library, current-file states, and an explicit `documents list` command. An absent
+setting reports `unconfigured`; context never searches the home directory for
+career files. Both full and compact JSON preserve this route. See the
+[document-library contract](document-library.md) for discovery and promotion.
+
 ## Guarantees
 
 - Local-only inspection (no network access).

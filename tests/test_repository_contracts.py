@@ -316,6 +316,10 @@ def test_non_page_pdf_disclosure_has_one_decoder_and_routed_contract() -> None:
 
 def test_publication_input_lifetime_routes_capture_and_provenance_owners() -> None:
     contract = (ROOT / "docs/reference/publication-contract.md").read_text()
+    assert "native_inputs.py::capture_native_build" in contract
+    assert "NativePreparationRecord" in contract
+    assert "tests/ops/publication/test_native.py" in contract
+    assert "## Native source builds" in (ROOT / "docs/howto/publish-site.md").read_text()
     assert "## Input lifetime" in contract
     assert "inputs.py::capture_publication_inputs" in contract
     assert "record.py::PreparationInputs" in contract

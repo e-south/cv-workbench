@@ -330,6 +330,20 @@ def resolve_var_root(config_path: ConfigSource) -> Path:
     return resolve_project_root(config_path) / "var"
 
 
+def resolve_documents_root(config_path: ConfigSource) -> Path | None:
+    """Optional external library; absence does not enable implicit discovery."""
+    configuration = read_config(config_path)
+    documents = configuration.data.get("documents")
+    if documents is None:
+        return None
+    if not isinstance(documents, Mapping):
+        raise ValueError("Config field documents must be a mapping")
+    value = documents.get("root")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Config field documents.root must be a non-empty string")
+    return _resolve_from_config(configuration.path, value)
+
+
 def resolve_project_path(path: Path, config_path: ConfigSource) -> Path:
     if path.is_absolute():
         return path

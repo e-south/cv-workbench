@@ -1,6 +1,10 @@
-# Authored publication ownership
+# Publication ownership
 
 - Start with [the lifecycle contract](../../../../docs/reference/publication-contract.md).
+- `inputs/native_run.py` is the shared native build attestation owner;
+  `native_inputs.py` adds publication policy and declared-link checks; `native.py` owns
+  their preparation. See the contract's native-build section. Do not relabel
+  generated PDFs as Word exports or infer the newest run as publication authority.
 - `pdf.py` owns sanitization and layout correspondence; `policy.py` owns disclosure policy loading; `manifest.py` owns authored provenance schemas/serialization; `artifact.py` owns manifest eligibility and immutable artifact reads.
 - `object_text.py` decodes PDF object strings for the shared disclosure checks;
   see [non-page disclosure](../../../../docs/reference/publication-contract.md#non-page-disclosure).

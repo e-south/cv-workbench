@@ -25,15 +25,21 @@ from cvworkbench.config import (
     resolve_sot_path,
     resolve_variant_path,
 )
-from cvworkbench.ops.publication.artifact import validate_public_artifact, validate_publish_policy
+from cvworkbench.ops.publication.artifact import read_public_artifact, validate_publish_policy
+from cvworkbench.ops.publication.manifest import (
+    NativePublicationManifest,
+    parse_publication_manifest,
+)
+from cvworkbench.ops.publication.native_inputs import capture_native_build
 from cvworkbench.ops.publication.pdf import PublicPdfError, validate_public_pdf
 from cvworkbench.ops.publication.policy import PublishError, load_publish_config
 from cvworkbench.ops.publication.record import (
     FileStamp,
-    PreparationRecord,
+    NativePreparationRecord,
     ReviewReceipt,
     hash_file,
     json_bytes,
+    parse_preparation_record,
 )
 from cvworkbench.storage import AtomicWriteError, replace_files_atomically
 from cvworkbench.variants import load_variant
@@ -68,6 +74,8 @@ class PublicationState:
     preparation_sha256: str | None = None
     review_path: str | None = None
     receipt_path: str | None = None
+    source_kind: Literal["authored", "native"] | None = None
+    build_run: str | None = None
 
 
 def inspect_publication(
@@ -97,30 +105,46 @@ def inspect_publication(
             return replace(
                 state, state=phase, reasons=("Prepare an explicit authored DOCX and PDF export.",)
             )
-        record = PreparationRecord.model_validate_json(record_path.read_bytes())
+        record = parse_preparation_record(record_path.read_bytes())
+        native = isinstance(record, NativePreparationRecord)
         if record.variant != variant_id:
             raise ValueError("Preparation record variant does not match the selected variant")
-        if (
-            Path(record.authored_source.path).suffix.lower() != ".docx"
-            or Path(record.exported_pdf.path).suffix.lower() != ".pdf"
-        ):
+        if (not native and Path(record.authored_source.path).suffix.lower() != ".docx") or Path(
+            record.exported_pdf.path
+        ).suffix.lower() != ".pdf":
             raise ValueError("Preparation record must identify a DOCX and PDF source pair")
         review_dir = resolve_reviews_path(configuration) / "publication" / record.pdf_sha256
         state = replace(
             state,
-            authored_source=record.authored_source.path,
+            source_kind="native" if native else "authored",
+            build_run=str(Path(record.run_manifest.path).parent) if native else None,
+            authored_source=None if native else record.authored_source.path,
             exported_pdf=record.exported_pdf.path,
             pdf_sha256=record.pdf_sha256,
             preparation_sha256=hash_file(record_path),
             review_path=str(review_dir / "review.html"),
         )
-        for stamp, phase in (
-            (record.authored_source, "stale_source"),
+        inputs = [
             (record.exported_pdf, "stale_export"),
             (record.policy, "stale_configuration"),
             (record.variant_config, "stale_configuration"),
-            (record.person, "stale_configuration"),
-        ):
+        ]
+        if native:
+            inputs = [(stamp, "stale_source") for stamp in record.source_files.values()] + inputs
+            inputs.extend(
+                [
+                    (record.configuration, "stale_configuration"),
+                    (record.run_manifest, "stale_export"),
+                    (record.rendered_markdown, "stale_export"),
+                ]
+            )
+        else:
+            inputs = [
+                (record.authored_source, "stale_source"),
+                *inputs,
+                (record.person, "stale_configuration"),
+            ]
+        for stamp, phase in inputs:
             problem = _changed_input(stamp)
             if problem:
                 return replace(
@@ -153,8 +177,37 @@ def inspect_publication(
         if hash_file(pdf) != record.pdf_sha256 or hash_file(manifest) != record.manifest_sha256:
             raise ValueError("Prepared artifact or manifest changed after preparation")
         validate_publish_policy(variant, policy)
-        validate_public_artifact(pdf, manifest, variant, policy)
-        validate_public_pdf(pdf, variant=variant, publish=policy, sot_path=person_path.parent)
+        artifact = read_public_artifact(pdf, manifest, variant, policy)
+        if native:
+            if record.configuration.path != str(configuration.path):
+                raise ValueError("Native publication configuration path changed; prepare again")
+            captured = capture_native_build(
+                configuration=configuration,
+                run_path=Path(record.run_manifest.path).parent,
+                variant_id=variant_id,
+                publish_config_path=policy_path,
+                sot_path=person_path.parent,
+            )
+            provenance = parse_publication_manifest(manifest.read_text())
+            if (
+                not isinstance(provenance, NativePublicationManifest)
+                or captured.source_files != record.source_files
+                or any(getattr(record, name) != stamp for name, stamp in captured.stamps.items())
+                or artifact.allowed_links != captured.allowed_links
+                or provenance.source.run_manifest_sha256 != record.run_manifest.sha256
+                or provenance.source.rendered_markdown_sha256 != record.rendered_markdown.sha256
+                or provenance.source.exported_pdf_sha256 != record.exported_pdf.sha256
+            ):
+                raise ValueError("Native publication provenance no longer matches its build")
+        elif artifact.allowed_links is not None:
+            raise ValueError("Authored preparation cannot attest native provenance")
+        validate_public_pdf(
+            pdf,
+            variant=variant,
+            publish=policy,
+            sot_path=person_path.parent,
+            allowed_links=artifact.allowed_links,
+        )
         for filename, digest in record.review_files.items():
             path = review_dir / filename
             if not path.is_file() or hash_file(path) != digest:

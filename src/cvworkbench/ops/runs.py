@@ -26,6 +26,8 @@ from cvworkbench.config import (
     resolve_runs_path,
     resolve_var_root,
 )
+from cvworkbench.ops.documents.retention import promotion_run_references
+from cvworkbench.ops.publication.retention import publication_run_references
 from cvworkbench.ops.review import ReviewError
 from cvworkbench.ops.review.catalog import load_review_sources
 from cvworkbench.ops.review.drafts import load_import_draft_sources
@@ -299,6 +301,18 @@ def gc_runs(
     reviews_root = resolve_reviews_path(configuration)
     source_paths = {run.path.resolve(): run.run_id for run in runs}
     source_paths.update({path.resolve(): _run_id(runs_root, path) for path in invalid})
+    try:
+        dependencies = [
+            promotion_run_references(configuration),
+            publication_run_references(configuration),
+        ]
+    except (ValueError, OSError) as exc:
+        raise RunError(str(exc)) from exc
+    for references in dependencies:
+        for path, reasons in references.items():
+            for candidate, run_id in source_paths.items():
+                if path == candidate or path.is_relative_to(candidate):
+                    reference_reasons.setdefault(run_id, []).extend(reasons)
     for directory, source in review_sources.items():
         run_id = source_paths.get(Path(source.run_path).resolve())
         if run_id is not None:

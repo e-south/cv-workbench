@@ -15,7 +15,10 @@ import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from cvworkbench.ops.publication.manifest import parse_publication_manifest
+from cvworkbench.ops.publication.manifest import (
+    NativePublicationManifest,
+    parse_publication_manifest,
+)
 from cvworkbench.ops.publication.policy import PublishConfig
 from cvworkbench.variants import Variant
 
@@ -29,6 +32,7 @@ class PublicArtifact:
     source: Path
     content: bytes = field(repr=False)
     sha256: str
+    allowed_links: frozenset[str] | None = None
 
 
 def validate_publish_policy(variant: Variant, publish: PublishConfig) -> None:
@@ -104,4 +108,9 @@ def read_public_artifact(
         raise PublicationArtifactError(
             "Build manifest section policy does not match publish policy"
         )
-    return PublicArtifact(source=source_pdf, content=content, sha256=pdf_hash)
+    links = (
+        frozenset(manifest.source.allowed_links)
+        if isinstance(manifest, NativePublicationManifest)
+        else None
+    )
+    return PublicArtifact(source=source_pdf, content=content, sha256=pdf_hash, allowed_links=links)

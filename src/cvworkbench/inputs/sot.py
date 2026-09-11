@@ -78,7 +78,10 @@ def load_sot_snapshot(sot_path: Path) -> SotSnapshot:
 
 
 def _load_yaml(content: bytes, path: Path) -> dict[str, Any]:
-    raw = yaml.safe_load(content.decode("utf-8"))
+    try:
+        raw = yaml.safe_load(content.decode("utf-8"))
+    except (yaml.YAMLError, UnicodeError) as exc:
+        raise ValueError(f"Source file is not valid UTF-8 YAML: {path.name}") from exc
     if raw is None:
         return {}
     if not isinstance(raw, dict):

@@ -19,6 +19,7 @@ that an artifact is disposable.
 | Generated run | Latest runs per workspace/project and variant, plus explicit retained IDs | `cvw runs gc --json` |
 | Draft or project proposal | Registered expiration and keep/discard decisions | [Variant lifecycle](variant-lifecycle.md) |
 | Content review copy | Editable bundle whose recorded source run is retained by GC | [Content review](review-contract.md) |
+| Promoted career document | Every exact native run referenced by its private receipt history is retained | [Document library](document-library.md) |
 | Authored public PDF and review packet | Preparation snapshot and exact-PDF review state | [Publication lifecycle](publication-contract.md) |
 
 ## Run Cleanup
@@ -71,6 +72,11 @@ needed to interpret edits.
 
 Authored publication uses a separate source/export pair and hash-addressed
 review packet outside the run store. `runs gc` does not remove those artifacts.
+Native publication preparation retains its exact source run, including an invalid
+containing directory that cleanup would otherwise remove. Promotion history also
+retains native runs through the configured document library. These dependencies
+remain protected after source edits; malformed records block cleanup. References
+outside the configured run store never retain a same-named unrelated run.
 
 ## Import Draft Dependencies
 

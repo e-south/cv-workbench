@@ -23,6 +23,7 @@ task instead of browsing the whole docs tree.
 
 ## Most Common Routes
 
+- Current files, manual variants, and local promotion: [reference/document-library.md](reference/document-library.md)
 - First local build: [howto/quickstart.md](howto/quickstart.md) -> [reference/preview-contract.md](reference/preview-contract.md)
 - Job tailoring and project preview: [howto/ingestion.md](howto/ingestion.md) -> [reference/project-contract.md](reference/project-contract.md)
 - Review/import loop: [reference/review-contract.md](reference/review-contract.md) -> [reference/project-contract.md](reference/project-contract.md)
@@ -78,6 +79,7 @@ Use these when the CLI contract matters more than the broader workflow:
 - [concepts/architecture.md](concepts/architecture.md): repo boundaries and design constraints
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
 - [reference/configuration-contract.md](reference/configuration-contract.md): settings lifetime, explicit snapshots, resolution, and build preflight
+- [reference/document-library.md](reference/document-library.md): external career files, discovery, reviewed promotion, and predecessor recovery
 - [reference/selection-contract.md](reference/selection-contract.md): document-specific tag decisions, explanations, and review checklist inputs
 - [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, session semantics, and UI control hooks
 - [reference/verify-contract.md](reference/verify-contract.md): test isolation and repo-local CLI journey verification

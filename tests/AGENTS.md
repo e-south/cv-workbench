@@ -9,5 +9,9 @@
   inputs, `local/`, or `var/` through repository-root paths.
 - Preserve negative-path intent: missing fixture data must not substitute for the
   configuration, validation, or runtime failure a test intends to exercise.
+- Use fictional names, institutions, documents, and example-domain contacts in
+  public fixtures. Regression tests demonstrate behavior, not a maintainer's CV.
+  Personal fact-retention checks belong to the selected external document
+  workspace; their inputs and reports must not enter this tree or distributions.
 - Run the workspace-isolation regression when changing fixtures or CLI test paths,
   then run the full suite. Keep subprocess output available for failed checks.

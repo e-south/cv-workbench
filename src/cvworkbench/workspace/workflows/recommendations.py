@@ -88,8 +88,8 @@ def build_recommended_workflows(
 
     if publication is not None and publication.state != "unconfigured":
         add(
-            "authored.publish",
-            "Inspect authored publication freshness and review before site handoff.",
+            "native.publish" if publication.source_kind == "native" else "authored.publish",
+            "Inspect publication freshness and review before site handoff.",
         )
 
     add(

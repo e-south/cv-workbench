@@ -10,3 +10,6 @@
   `docs/reference/patch-application.md` before changing this mutation boundary.
 - Read `projects/AGENTS.md` when changing project lifecycle, guidance, manifests, or guarded edits; it routes to the public operation contract and internal owners.
 - Add negative-path tests for malformed manifests, unsafe variants, invalid targets, and partial side effects.
+- `documents/` owns reviewed local promotion into an explicitly selected private
+  library. Start at `docs/reference/document-library.md`; do not equate promotion
+  with variant retention, publication, or application submission.

@@ -34,6 +34,7 @@ from cvworkbench.ops.variant_lifecycle import (
 )
 from cvworkbench.variants import load_variants_from_config
 from cvworkbench.workspace.commands import command_prefix
+from cvworkbench.workspace.documents import library_context
 from cvworkbench.workspace.projects import build_projects_context
 from cvworkbench.workspace.publication import inspect_workspace_publication, publication_recipe
 from cvworkbench.workspace.reviews import build_reviews_context
@@ -258,6 +259,11 @@ def inspect_workspace(
     )
 
     publication = inspect_workspace_publication(shared.configuration, sot_path=sot_path)
+    try:
+        documents = library_context(shared.configuration)
+    except (ValueError, OSError) as exc:
+        documents = {"state": "invalid", "root": None, "count": 0, "issues": [str(exc)]}
+        _record_context_issue(str(exc), shared.issues, strict)
     recipes.append(
         publication_recipe(
             publication,
@@ -295,6 +301,7 @@ def inspect_workspace(
         "projects": projects_section,
         "reviews": reviews_section,
         "publication": asdict(publication),
+        "documents": documents,
         "recipes": recipes,
         "recommended_workflows": build_recommended_workflows(
             recipes=recipes,

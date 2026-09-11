@@ -38,7 +38,11 @@ def load_publish_config(path: Path) -> PublishConfig:
     if not path.exists():
         raise PublishError(f"Publish config not found: {path}")
 
-    raw = yaml.safe_load(path.read_text())
+    return parse_publish_config(yaml.safe_load(path.read_bytes()))
+
+
+def parse_publish_config(raw: object) -> PublishConfig:
+    """Validate a captured policy without reopening its source."""
     if raw is None:
         raise PublishError("Publish config is empty")
     if not isinstance(raw, dict):

@@ -19,10 +19,15 @@ The site owns presentation only. It must not copy canonical CV Markdown or
 re-render a second HTML CV. The workbench owns selection, authored-artifact
 preparation, disclosure policy, and artifact provenance.
 
-For the public base CV, `cvw prepare-public-pdf` accepts the canonical editable
-DOCX and a faithful PDF export. It checks that they correspond, applies semantic
-redactions, strips hidden payloads, and emits the only PDF eligible for sync.
-See [Publish The Authored CV](../howto/publish-site.md).
+Native builds use `cvw publication prepare --run <run-directory>`; authored
+documents use `cvw prepare-public-pdf` with the canonical editable DOCX and a
+faithful PDF export. Both preparation paths validate their inputs, strip hidden
+payloads, and emit the reviewed PDF eligible for sync.
+See [Publish a CV](../howto/publish-site.md).
+
+`sync --config <workspace-config>` defaults to `site-sync.yaml` beside the selected
+workbench configuration. An explicit `--site-config` overrides that selection;
+the current directory does not choose another workspace's site configuration.
 
 Preparation commits the public PDF, provenance manifest, and local visual
 review packet as one recoverable update. The packet is indexed by the sanitized
@@ -40,8 +45,8 @@ Before its first write, sync verifies:
 - the selected source/export pair and publication inputs still match their
   private preparation record, and the current PDF has a matching review receipt;
 - the source is a parseable, unencrypted PDF without embedded files;
-- the manifest identifies an authored PDF publication produced by semantic
-  redaction and names the selected variant and PDF;
+- the manifest identifies a supported authored or native PDF publication and
+  names the selected variant and PDF;
 - the PDF SHA-256 matches the build manifest;
 - manifest selection fields match the current variant;
 - all required exclusion tags are present; and

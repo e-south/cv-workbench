@@ -26,6 +26,7 @@ from cvworkbench.cli.commands.documents.review import (
     import_docx,
     reviewpack,
 )
+from cvworkbench.cli.commands.library import documents_app
 from cvworkbench.cli.commands.maintenance import (
     clean_dist,
     clean_drafts,
@@ -88,6 +89,11 @@ from cvworkbench.cli.commands.workspace import (
 )
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
+app.add_typer(
+    documents_app,
+    name="documents",
+    help="Find career documents and promote reviewed files locally.",
+)
 app.add_typer(
     publication_app,
     name="publication",

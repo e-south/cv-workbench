@@ -173,6 +173,7 @@ def sync_site(
             variant=variant,
             publish=publish,
             sot_path=resolve_sot_path(None, configuration),
+            allowed_links=artifact.allowed_links,
         )
     except (PublicPdfError, ValueError) as exc:
         raise SyncError(str(exc)) from exc

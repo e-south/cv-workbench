@@ -174,7 +174,7 @@ def test_commit_failure_restores_the_complete_bundle(
     (run / "operator-note.txt").write_text("keep")
     (dist / "cv.md").chmod(0o640)
     before = _files(tmp_path)
-    plan = replace(plan, markdown=plan.markdown.replace("Eric", "Changed"))
+    plan = replace(plan, markdown=plan.markdown + "\nChanged test revision.\n")
     replace_file = storage.os.replace
     target = dist / "manifest.json"
 

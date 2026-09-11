@@ -138,12 +138,12 @@ def test_excluded_contacts_do_not_create_links_or_validate_destinations(sample_w
                 "email": "not an email",
                 "phone": "private",
                 "links": [{"label": "hidden", "url": "javascript:alert(1)"}],
-                "location": {"city": "Boston"},
+                "location": {"city": "Example City"},
             }
         },
         variant,
     )
-    assert "Boston" in markdown
+    assert "Example City" in markdown
     assert all(
         value not in markdown for value in ("private", "not an email", "hidden", "javascript")
     )

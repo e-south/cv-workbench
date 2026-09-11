@@ -1,13 +1,46 @@
 ---
 id: howto-publish-site
-intent: Prepare and publish a faithful authored CV without exposing private contact or reference data.
+intent: Prepare and publish native or authored CVs without exposing private contact or reference data.
 audience: [operator, agent]
 status: active
 navigation:
   parent: ../readme.md
 ---
 
-# Publish The Authored CV
+# Publish a CV
+
+## Native source builds
+
+Keep one private source version and separate contact profiles, for example
+`cv-application` with phone and `cv-public` without it. Both can use one theme
+and identical content selection. Permit only the public profile in
+`publish.yaml` and set `site-sync.yaml`'s `publish_variant` to that profile.
+
+```bash
+cvw build --variant cv-public --format md,pdf,docx,ats --config <workspace-config>
+cvw publication prepare --run <run-directory-printed-by-build> --config <workspace-config>
+cvw publication status --config <workspace-config> --json
+```
+
+Use the current source and an explicit native run. An older build, changed source,
+phone-bearing variant, or mismatched manifest fails before publication writes.
+Prepare prints the exact PDF and a local visual packet. Review every page and
+check bookmarks, links, typography, and disclosure. If section-rule graphics
+changed, visually inspect them before updating the policy fingerprint.
+
+```bash
+cvw publication review --pdf-sha256 <reviewed-pdf-sha256> --config <workspace-config>
+cvw sync --mode local --config <workspace-config> --site-config <workspace-site-sync>
+```
+
+The prepared PDF preserves native text and geometry while removing metadata.
+It retains approved HTTPS links declared in selected Markdown and the exact
+selected email link. No DOCX, source YAML, build manifest, or phone-bearing file
+is sent to the site. `publication status` and the `native.publish` workflow
+describe subsequent freshness/review needs. Keep generated outputs disposable;
+make later edits in the source, variant, or theme and rebuild both profiles.
+
+## Word-authored CVs
 
 Use this lane when the public artifact must retain the layout of an editable
 Word CV. It is distinct from the generated resume lane: the DOCX remains the
@@ -55,7 +88,7 @@ authored export changes its non-text rectangle layout, preparation reports the
 observed fingerprint and stops. Compare the new export visually with the DOCX;
 only after that review should you update the approved fingerprint and rerun.
 This keeps table rules and underlines possible without treating arbitrary
-rectangle compositions as automatically safe. Text-only redactions use a
+rectangle or horizontal-rule compositions as automatically safe. Text-only redactions use a
 transparent overlay and the saved public PDF must retain the source rectangle
 fingerprint exactly.
 

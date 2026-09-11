@@ -1,13 +1,56 @@
 ---
 id: reference-publication-contract
-intent: Define authored publication provenance, freshness, and recorded review before site handoff.
+intent: Define native and authored publication provenance, freshness, and recorded review before site handoff.
 audience: [operator, agent, maintainer]
 status: active
 navigation:
   parent: ../readme.md
 ---
 
-# Authored Publication Lifecycle
+# Publication Lifecycle
+
+Native source builds use `publication prepare --run <explicit-run-directory>`.
+Word-authored CVs use `prepare-public-pdf` with an explicit DOCX/PDF pair.
+Both paths produce a checked PDF, private preparation record, visual packet,
+and hash-bound review receipt before the same site sync boundary.
+
+## Native build publication
+
+`native_inputs.py::capture_native_build` requires a run beneath configured
+`paths.runs`, containing Markdown, PDF, and a build manifest. It checks output
+hashes, source/snippet hashes, variant identity and hash, and workbench settings
+against current inputs. It never selects a run by timestamp or filename.
+The public variant must exclude forbidden contact fields and sections before
+rendering. Application and public variants can share one source and theme.
+
+`native.py::prepare_native_public_pdf` captures those bytes, checks disclosure
+and link eligibility, removes metadata, and proves that sanitization preserves
+every glyph and graphic. Standard PDF creation/modification timestamps are
+removed before phone-pattern checks; other metadata, page text, and non-page
+strings remain subject to disclosure checks. Native publication does not redact
+visible contact data or reflow a phone-bearing document into a public version.
+
+Native link eligibility comes from Pandoc-parsed links in the selected,
+hash-verified Markdown. Only absolute HTTPS URLs without credentials and the
+selected person's exact email `mailto:` target are eligible. PDF annotations
+cannot supply their own allowlist. Every click area must match visible glyphs;
+unlinked adjacent punctuation is excluded from label geometry.
+
+The `native-pdf-publication` manifest records native run, Markdown and PDF hashes,
+the approved graphics fingerprint, link targets, and `native-sanitization` with
+zero redactions. It does not assert Word authorship. `NativePreparationRecord`
+owns all private input paths and source-file stamps. Input changes during
+preparation reject replacement; later changes invalidate review. Adding source
+files or changing active source selection also requires rebuilding/preparing.
+
+The `native.publish` recipe appears for recorded native preparations. Status,
+review, and sync verify native provenance against current inputs, including the
+Markdown link declarations. Only the PDF and smaller sanitized site manifest
+cross the site boundary; source manifests, link attestations, and private
+preparation/receipt files do not. See `tests/ops/publication/test_native.py` and
+the [publication guide](../howto/publish-site.md#native-source-builds).
+
+## Authored source pair
 
 The editable DOCX and its authoring-app PDF export are explicit inputs to
 `prepare-public-pdf`. Generated resume builds do not update this source pair.
@@ -121,7 +164,8 @@ retain their separate responsibilities. This is not a general malware scanner.
 
 Public bookmarks and accessibility descriptions remain intact when they satisfy
 the disclosure policy. Bookmarks may navigate within the document or group other
-bookmarks; external, unsupported, or chained bookmark actions are rejected. Both
+bookmarks. Named destinations must resolve to a page in the same PDF;
+external, unsupported, or chained bookmark actions are rejected. Both
 the resolved destination and underlying action dictionary are checked, because
 the summary can omit JavaScript or a subsequent action. Page links still require the
 approved visible-label and exact-target checks.
@@ -148,6 +192,11 @@ the former flat `ops/public_pdf.py`, `ops/publish.py`, and
 sync remain unchanged. `cli/commands/publication.py` owns their adapters plus the
 `publication status` and `publication review` commands; `workspace/publication.py`
 owns the workflow description. Site writes remain in `ops/syncing.py`.
+
+Approved graphics may contain rectangles and horizontal section rules, pinned
+by their exact geometry/style fingerprint. Curves, diagonal paths, rasters,
+widgets, and unsupported annotations remain rejected. The fingerprint is a
+review declaration about non-text graphics, not a proof of document aesthetics.
 
 ## Authored provenance schema
 

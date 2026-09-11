@@ -101,7 +101,7 @@ def test_markdown_only_renders_configured_contact_fields(tmp_path: Path) -> None
             "label": "Private label",
             "email": "alex@example.com",
             "phone": "+1 555 555 0100",
-            "location": {"city": "Boston", "region": "MA"},
+            "location": {"city": "Example City", "region": "EX"},
             "links": [{"label": "Profile", "url": "https://example.com"}],
         }
     }
@@ -109,7 +109,7 @@ def test_markdown_only_renders_configured_contact_fields(tmp_path: Path) -> None
     content = build_markdown(sot, variant)
 
     assert "alex@example.com" in content
-    assert "Boston, MA" in content
+    assert "Example City, EX" in content
     assert "+1 555 555 0100" not in content
     assert "Private label" not in content
     assert "https://example.com" not in content

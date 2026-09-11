@@ -82,15 +82,12 @@ class PublicationTransformation(_ManifestFields):
     redaction_count: Annotated[int, Field(ge=0)]
 
 
-class PublicationManifest(_ManifestFields):
+class _PublicationManifest(_ManifestFields):
     schema_version: Literal[1]
-    artifact_kind: Literal["authored-pdf-publication"]
     variant: PublicationVariant
     formats: Annotated[list[Literal["pdf"]], Field(min_length=1, max_length=1)]
     outputs: PdfOutput
     output_hashes: PdfDigest
-    source: AuthoredSource
-    transformation: PublicationTransformation
 
     @field_validator("schema_version", mode="before")
     @classmethod
@@ -100,12 +97,43 @@ class PublicationManifest(_ManifestFields):
         return value
 
 
-def parse_publication_manifest(content: str) -> PublicationManifest:
+class PublicationManifest(_PublicationManifest):
+    artifact_kind: Literal["authored-pdf-publication"]
+    source: AuthoredSource
+    transformation: PublicationTransformation
+
+
+class NativeSource(_ManifestFields):
+    run_manifest_sha256: Digest
+    rendered_markdown_sha256: Digest
+    exported_pdf_sha256: Digest
+    visual_fingerprint_sha256: Digest
+    allowed_links: list[str]
+
+
+class NativeTransformation(_ManifestFields):
+    kind: Literal["native-sanitization"]
+    forbidden_contact_fields: list[str]
+    forbidden_sections: list[str]
+    redaction_count: Annotated[int, Field(ge=0, le=0)]
+
+
+class NativePublicationManifest(_PublicationManifest):
+    artifact_kind: Literal["native-pdf-publication"]
+    source: NativeSource
+    transformation: NativeTransformation
+
+
+def parse_publication_manifest(content: str) -> PublicationManifest | NativePublicationManifest:
     payload = json.loads(content, object_pairs_hook=_unique_fields)
-    if isinstance(payload, dict) and payload.get("artifact_kind") != "authored-pdf-publication":
+    kind = payload.get("artifact_kind") if isinstance(payload, dict) else None
+    if kind not in {"authored-pdf-publication", "native-pdf-publication"}:
         raise ValueError("Build manifest is not an authored PDF publication")
     try:
-        return PublicationManifest.model_validate(payload)
+        model = (
+            NativePublicationManifest if kind == "native-pdf-publication" else PublicationManifest
+        )
+        return model.model_validate(payload)
     except ValidationError as exc:
         messages = "; ".join(
             f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"

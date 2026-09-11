@@ -224,6 +224,7 @@ workflow data rather than depending on command adapters or their private helpers
 | Variant inventory, promotion, and lifecycle | `variants.py` |
 | Run retention and generated-artifact cleanup | `maintenance.py` |
 | Document build/render, comparison, and content review | Corresponding modules in `documents/` |
+| External document inventory and reviewed local promotion | `library.py` |
 | Job ingestion, draft tailoring, and draft application | `tailoring.py` |
 | Project creation/inspection, guidance, patch authoring, and presentation | Corresponding modules in `projects/` |
 | Authored publication preparation, status, review, and sync | `publication.py` |

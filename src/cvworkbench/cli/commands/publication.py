@@ -28,6 +28,7 @@ from cvworkbench.config import (
     resolve_sot_path,
     resolve_sync_mode,
 )
+from cvworkbench.ops.publication.native import prepare_native_public_pdf
 from cvworkbench.ops.publication.pdf import PublicPdfError, PublicPdfResult
 from cvworkbench.ops.publication.pdf import prepare_public_pdf as prepare_authored_public_pdf
 from cvworkbench.ops.publication.policy import PublishError
@@ -38,6 +39,7 @@ from cvworkbench.ops.publication.state import (
     record_publication_review,
 )
 from cvworkbench.ops.syncing import SyncError, SyncResult, sync_site
+from cvworkbench.storage import AtomicWriteError
 
 publication_app = typer.Typer(no_args_is_help=True)
 
@@ -132,9 +134,9 @@ def _print_sync_summary(result: SyncResult) -> None:
     print_summary("sync", rows)
 
 
-def _print_public_pdf_summary(result: PublicPdfResult) -> None:
+def _print_public_pdf_summary(result: PublicPdfResult, command: str = "prepare-public-pdf") -> None:
     print_summary(
-        "prepare-public-pdf",
+        command,
         [
             ("status", "prepared"),
             ("output_pdf", result.output_pdf),
@@ -145,6 +147,38 @@ def _print_public_pdf_summary(result: PublicPdfResult) -> None:
             ("review", result.review_path),
         ],
     )
+
+
+@publication_app.command("prepare")
+def prepare_native_publication(
+    run: Annotated[
+        Path,
+        typer.Option(
+            "--run", help="Explicit native build run containing PDF, Markdown, and manifest"
+        ),
+    ],
+    config: Annotated[Path, typer.Option("--config")] = Path("config/workbench.yaml"),
+    variant: Annotated[str | None, typer.Option("--variant")] = None,
+    sot_path: Annotated[Path | None, typer.Option("--sot-path")] = None,
+    publish_config: Annotated[Path | None, typer.Option("--publish-config")] = None,
+    plain: Annotated[bool, typer.Option("--plain")] = False,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Prepare a native build for disclosure checks and exact-PDF review."""
+    configure_output_mode(plain, json_output)
+    try:
+        configuration = read_config(config)
+        result = prepare_native_public_pdf(
+            run_path=run.expanduser(),
+            config_path=configuration,
+            variant_id=variant or resolve_publication_variant(configuration),
+            publish_config_path=publish_config or configuration.path.parent / "publish.yaml",
+            sot_path=resolve_sot_path(sot_path, configuration),
+        )
+    except (OSError, PublicPdfError, PublishError, ValueError, AtomicWriteError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _print_public_pdf_summary(result, "publication.prepare")
 
 
 def prepare_public_pdf_command(
@@ -244,12 +278,12 @@ def sync(
         ),
     ] = Path("config/workbench.yaml"),
     site_config: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--site-config",
-            help="Path to site sync config",
+            help="Site sync config; defaults beside the selected workbench config",
         ),
-    ] = Path("config/site-sync.yaml"),
+    ] = None,
     plain: Annotated[
         bool,
         typer.Option(
@@ -269,7 +303,11 @@ def sync(
     try:
         configuration = read_config(config)
         resolved_config = configuration.path
-        resolved_site = resolve_config_path(site_config)
+        resolved_site = (
+            resolve_config_path(site_config)
+            if site_config is not None
+            else resolved_config.parent / "site-sync.yaml"
+        )
         selected_mode = mode or resolve_sync_mode(configuration)
         result = sync_site(
             config_path=configuration,

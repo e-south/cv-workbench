@@ -92,7 +92,7 @@ def _write_workspace(root: Path) -> tuple[Path, Path, Path, Path]:
         "  - label: Profile\n"
         "    url: https://example.com/profile\n"
         "location:\n"
-        "  city: Boston\n"
+        "  city: Example City\n"
     )
     return config_path, variant_path, publish_path, person_path.parent
 
