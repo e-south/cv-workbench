@@ -8,7 +8,7 @@ local function simple_list_items(block)
   return block.content
 end
 
-local function aligned_entry(div, concise)
+local function aligned_entry(div, concise, structured)
   if not (div.classes:includes('section') or div.classes:includes('role')
       or div.classes:includes('teaching-course')) then
     return nil
@@ -106,7 +106,9 @@ local function aligned_entry(div, concise)
     pandoc.Attr('', {'entry-heading'}, {['custom-style']='Entry Heading'}))
   local result = {heading}
   if FORMAT:match('latex') then
-    table.insert(result, 1, pandoc.RawBlock('latex', '\\ifdefined\\cvwentryspace\\cvwentryspace\\fi'))
+    if not structured then
+      table.insert(result, 1, pandoc.RawBlock('latex', '\\ifdefined\\cvwentryspace\\cvwentryspace\\fi'))
+    end
     table.insert(result, pandoc.RawBlock('latex', '\\nopagebreak[4]'))
   end
   local detail_start = #result + 1
@@ -126,7 +128,7 @@ local function aligned_entry(div, concise)
     end
   end
   for index = 3, last_block do table.insert(result, blocks[index]) end
-  if concise and div.identifier:match('^education%-') and #result >= detail_start then
+  if concise and not structured and div.identifier:match('^education%-') and #result >= detail_start then
     local body = {}
     for index = detail_start, #result do table.insert(body, result[index]) end
     for index = #result, detail_start, -1 do table.remove(result, index) end
@@ -237,7 +239,7 @@ function Pandoc(doc)
   if doc.meta['cvw-aligned-entries'] == true then
     local concise = doc.meta['cvw-concise-entries'] == true
     local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {
-      Div = function(div) return aligned_entry(div, concise) end,
+      Div = function(div) return aligned_entry(div, concise, doc.meta['cvw-entry-structure'] == true) end,
     })
     doc = pandoc.Pandoc(transformed.content, doc.meta)
   end

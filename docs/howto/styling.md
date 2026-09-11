@@ -271,7 +271,8 @@ highlights keep their list structure. Publication notes marked
 `entry-note` join the preceding citation or status paragraph, preserving working-title
 qualifications or contribution explanations without adding a paragraph.
 When authors are present, their `entry-authors` span keeps the note beside the
-author list, before the venue details.
+author list, before the venue details. Its source may use ordinary Markdown
+emphasis, for example a bold authorship contribution note.
 The note compaction also works without aligned dates. These are presentation
 changes: canonical source records, IDs, selection, and ordinary text exports
 retain their fields. With the option disabled, existing detail lines remain.
@@ -308,3 +309,47 @@ defines tracked files, filter fingerprints, and concurrency limits. Templates
 and defaults retain their existing path resolution; this check does not package
 or freeze their indirect dependencies. PDF engine metadata follows the selected
 theme route. Other formats do not require probing a PDF engine.
+
+### Shared entry rhythm and activity lists
+
+Set `metadata.cvw-entry-structure: true` alongside aligned entries to apply one
+entry/detail structure across Education, Experience, Publications, Projects,
+Teaching, Service, Conferences, and Honors. The separate `entry_structure.lua`
+filter runs after presentation and is included in the build's filter hashes.
+It preserves source IDs, wording, links, and ordering. Existing themes that do
+not opt in retain their previous structure and Education-specific hook.
+
+The shared structure provides `.cv-entry`, `.entry-kind-<kind>`, `.entry-heading`,
+and `.entry-details`; DOCX paragraphs use `Entry Heading` and `Entry Details`.
+PDF invokes `\cvwentryspace` before records and scopes `\cvwentrydetails` to the
+details. Undefined hooks leave the theme's defaults in place. With this option,
+these generic hooks replace the Education-specific details hook.
+
+Keep the numeric settings in the theme. For example, define `\cvwentrygap` once,
+use it in `\cvwentryspace`, and reuse it as `enumitem`'s `itemsep` for skills lists.
+Use a matching CSS custom property for `.cv-entry` margins and `li + li` spacing.
+Set DOCX paragraph spacing in the reference styles; never insert empty source
+paragraphs to tune layout.
+
+To add semantic bullets and hanging indentation to selected record kinds:
+
+```yaml
+metadata:
+  cvw-entry-structure: true
+  cvw-bulleted-entries: [service, honors, conferences, teaching]
+```
+
+The allowed kinds are `education`, `experience`, `publications`, `projects`,
+`teaching`, `service`, `conferences`, and `honors`. The value must be a YAML list;
+unknown kinds fail instead of silently ignoring a typo. Grouped teaching keeps
+one course heading and lists its individual terms. Narrative remains a paragraph
+within each activity, while nested source lists retain their hierarchy. Bullets
+are native lists in HTML, PDF, and DOCX, not manually inserted glyphs. Verify the
+reference DOCX's list indentation and right date tab against the text area, and
+inspect actual wrapping at the selected font size.
+
+For a short label that must not split, use `[label text]{.keep-together}` with
+entry structure enabled. HTML uses `white-space: nowrap`, PDF uses a TeX box,
+and DOCX uses nonbreaking spaces and native nonbreaking hyphens. The ordinary
+source text stays readable in text exports. Reserve this for labels shorter
+than the available line; it cannot make an overlong phrase fit a narrow column.
