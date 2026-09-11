@@ -14,6 +14,11 @@ specific build run. It is separate from
 [publication review](publication-contract.md), which records inspection of a
 prepared public PDF.
 
+Review conversion selects the ATX-heading option advertised by the installed
+Pandoc: `--markdown-headings=atx` on current versions, or the older
+`--atx-headers` spelling where supported. It fails before conversion when neither
+option is available; a failed conversion never falls back to unverified text.
+
 ## Review and Import
 
 ```bash

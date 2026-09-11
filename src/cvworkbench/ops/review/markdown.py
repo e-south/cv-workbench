@@ -22,6 +22,17 @@ def _convert(reader: str, arguments: list[str], input_text: str | None) -> str:
     if executable is None:
         raise ReviewError("pandoc is required to convert review documents")
     try:
+        options = subprocess.run(
+            [executable, "--help"], capture_output=True, text=True, check=False
+        )
+        if options.returncode != 0:
+            raise ReviewError("Pandoc review options could not be inspected")
+        if "--markdown-headings" in options.stdout:
+            heading_option = "--markdown-headings=atx"
+        elif "--atx-headers" in options.stdout:
+            heading_option = "--atx-headers"
+        else:
+            raise ReviewError("Pandoc lacks a supported Markdown heading option")
         result = subprocess.run(
             [
                 executable,
@@ -29,7 +40,7 @@ def _convert(reader: str, arguments: list[str], input_text: str | None) -> str:
                 reader,
                 "--to",
                 "markdown",
-                "--atx-headers",
+                heading_option,
                 "--wrap=none",
                 *arguments,
             ],
