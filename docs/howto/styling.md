@@ -239,6 +239,30 @@ After editing packaged filters in a checkout, run
 installation does not automatically refresh the wheel's copied filter resources;
 the build manifest records the filter hashes actually used.
 
+### Concise entry details
+
+Set `metadata.cvw-concise-entries: true` alongside aligned entries to place a
+service role before its organization and an award issuer after its title on the
+identity line. The shared metadata helper emits `entry-role` and `entry-issuer`
+spans; presentation uses those roles rather than parsing names or display text.
+Dates keep the existing right-alignment and narrow-view stacking behavior.
+Substantive descriptions remain separate paragraphs. Missing or duplicated
+metadata does not justify dropping text; ambiguous entries are left intact.
+
+With this option, simple Education highlights join the degree line with
+semicolons; advisors and thesis remain separate. Nested or multi-paragraph
+highlights keep their list structure. In-preparation publication notes marked
+`entry-note` join the preceding status paragraph, preserving working-title
+qualifications without adding a line. Other publication notes are unchanged.
+The note compaction also works without aligned dates. These are presentation
+changes: canonical source records, IDs, selection, and ordinary text exports
+retain their fields. With the option disabled, existing detail lines remain.
+
+Keep factual restoration and removal of redundant prose in the source version;
+the filter never decides which assertions are dispensable. Verify native output
+with `tests/build/test_concise_entries.py`, including unknown presentation titles,
+optional dates, ambiguous metadata, and actual PDF/DOCX/text builds.
+
 ## Build-time changes and provenance
 
 Finish theme/style edits before starting a build. If a recorded asset changes

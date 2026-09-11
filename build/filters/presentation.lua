@@ -1,6 +1,14 @@
 -- Optional presentation only: keep source IDs, links and all selected wording.
 -- Themes opt in with metadata.cvw-compact-entries: true.
-local function aligned_entry(div)
+local function simple_list_items(block)
+  if block.t ~= 'BulletList' then return nil end
+  for _, item in ipairs(block.content) do
+    if #item ~= 1 or (item[1].t ~= 'Para' and item[1].t ~= 'Plain') then return nil end
+  end
+  return block.content
+end
+
+local function aligned_entry(div, concise)
   if not (div.classes:includes('section') or div.classes:includes('role')) then
     return nil
   end
@@ -8,10 +16,19 @@ local function aligned_entry(div)
   if #blocks < 2 or blocks[1].t ~= 'Header' or blocks[1].level ~= 3
       or blocks[2].t ~= 'Para' then return nil end
   local details, location, date, found = {}, nil, nil, false
+  local position, issuer = nil, nil
   for _, inline in ipairs(blocks[2].content) do
     if inline.t == 'Span' and inline.classes:includes('entry-detail') then
       table.insert(details, inline)
       found = true
+    elseif inline.t == 'Span' and inline.classes:includes('entry-role') then
+      if position then return nil end
+      position, found = inline, true
+      if not concise then table.insert(details, inline) end
+    elseif inline.t == 'Span' and inline.classes:includes('entry-issuer') then
+      if issuer then return nil end
+      issuer, found = inline, true
+      if not concise then table.insert(details, inline) end
     elseif inline.t == 'Span' and inline.classes:includes('entry-location') then
       if location then return nil end
       location, found = inline, true
@@ -24,6 +41,18 @@ local function aligned_entry(div)
     end
   end
   if not found then return nil end
+  local last_block = #blocks
+  if concise and div.identifier:match('^education%-') and #details > 0 then
+    local highlights = simple_list_items(blocks[last_block])
+    if highlights then
+      for _, item in ipairs(highlights) do
+        table.insert(details[1].content, pandoc.Str(';'))
+        table.insert(details[1].content, pandoc.Space())
+        for _, inline in ipairs(item[1].content) do table.insert(details[1].content, inline) end
+      end
+      last_block = last_block - 1
+    end
+  end
   local heading_content = blocks[1].content
   local organization, role = nil, nil
   if div.classes:includes('role') then
@@ -44,6 +73,15 @@ local function aligned_entry(div)
     end
   end
   local identity = {pandoc.Span({pandoc.Strong(heading_content)}, blocks[1].attr)}
+  if concise and position then
+    identity = {pandoc.Strong(position), pandoc.Str(','), pandoc.Space(),
+                pandoc.Span(heading_content, blocks[1].attr)}
+  end
+  if concise and issuer then
+    table.insert(identity, pandoc.Str(','))
+    table.insert(identity, pandoc.Space())
+    table.insert(identity, issuer)
+  end
   if location then
     table.insert(identity, pandoc.Str(','))
     table.insert(identity, pandoc.Space())
@@ -84,7 +122,7 @@ local function aligned_entry(div)
       table.insert(result, pandoc.RawBlock('latex', '\\nopagebreak[4]'))
     end
   end
-  for index = 3, #blocks do table.insert(result, blocks[index]) end
+  for index = 3, last_block do table.insert(result, blocks[index]) end
   div.content = result
   return div
 end
@@ -126,6 +164,21 @@ local function compact_entry(div)
   return div
 end
 
+local function concise_publication_note(div)
+  if not div.identifier:match('^publication%-') then return nil end
+  local blocks = div.content
+  if #blocks < 3 then return nil end
+  local note, metadata = blocks[#blocks], blocks[#blocks - 1]
+  if note.t ~= 'Para' or metadata.t ~= 'Para' or #note.content ~= 1 then return nil end
+  local span = note.content[1]
+  if span.t ~= 'Span' or not span.classes:includes('entry-note') then return nil end
+  table.insert(metadata.content, pandoc.Str(';'))
+  table.insert(metadata.content, pandoc.Space())
+  table.insert(metadata.content, span)
+  blocks:remove(#blocks)
+  return div
+end
+
 local function contact_rows(blocks)
   if #blocks < 2 or blocks[1].t ~= 'Header' or blocks[1].level ~= 1
       or blocks[2].t ~= 'Para' then return end
@@ -154,8 +207,15 @@ local function contact_rows(blocks)
 end
 
 function Pandoc(doc)
+  if doc.meta['cvw-concise-entries'] == true then
+    local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {Div = concise_publication_note})
+    doc = pandoc.Pandoc(transformed.content, doc.meta)
+  end
   if doc.meta['cvw-aligned-entries'] == true then
-    local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {Div = aligned_entry})
+    local concise = doc.meta['cvw-concise-entries'] == true
+    local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {
+      Div = function(div) return aligned_entry(div, concise) end,
+    })
     doc = pandoc.Pandoc(transformed.content, doc.meta)
   end
   if doc.meta['cvw-compact-entries'] == true then

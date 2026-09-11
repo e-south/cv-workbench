@@ -397,6 +397,8 @@ def _build_publications(
         status_text = "Manuscript in preparation" if status == "in_preparation" else ""
         if status == "published" and "status" in item:
             status_text = "Published"
+        if status == "in_preparation" and notes:
+            notes = f"[{notes}]{{.entry-note}}"
         append_entry_text(
             lines, metadata=(authors_text, venue_line, status_text), paragraphs=(notes,)
         )
@@ -482,7 +484,9 @@ def _build_honors(
         issuer = _string(item.get("issuer"))
         year = _date_string(item.get("year"))
         summary = _string(item.get("summary"))
-        append_entry_text(lines, metadata=entry_metadata(issuer, dates=year), paragraphs=(summary,))
+        append_entry_text(
+            lines, metadata=entry_metadata(issuer=issuer, dates=year), paragraphs=(summary,)
+        )
 
         lines.append(":::")
         lines.append("")
@@ -522,7 +526,7 @@ def _build_service(
         summary = _string(item.get("summary"))
         append_entry_text(
             lines,
-            metadata=entry_metadata(role if organization else "", dates=dates),
+            metadata=entry_metadata(role=role if organization else "", dates=dates),
             paragraphs=(summary,),
         )
 

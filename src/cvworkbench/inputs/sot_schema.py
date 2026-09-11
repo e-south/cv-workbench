@@ -250,7 +250,7 @@ class Teaching(StrictModel):
 
 class ConferenceEntry(StrictModel):
     id: NonEmptyStr
-    title: NonEmptyStr
+    title: NonEmptyStr | None = None
     event: NonEmptyStr
     year: DateValue | None = None
     location: NonEmptyStr | None = None

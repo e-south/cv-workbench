@@ -102,6 +102,11 @@ directory. `notes` can identify a working title without inventing bibliographic
 fields. Keep manuscripts in `publications.yaml`; `projects.yaml` accepts
 `projects: []` when no separate projects remain.
 
+Conference records require the event name but may omit an unknown presentation
+title. `presentation_type: Poster` establishes the activity, not a title. Keep
+the conference's topic in `event`; do not invent a title or repeat the event name
+to satisfy the schema. Supplied titles must remain nonempty.
+
 ## Dependency management
 
 - Locked install (recommended): `uv sync --locked`
