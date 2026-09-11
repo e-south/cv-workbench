@@ -183,9 +183,17 @@ failure, literal-label, and contact-selection behavior.
 Education, publication, conference, honor, service, teaching, and reference
 entries use `build/entry_layout.py` to emit a compact metadata paragraph followed
 by separate narrative paragraphs. Nonempty metadata values are separated by
-` | `; missing values do not leave empty separators or labels. Section builders
+` | `, except publication citations; missing values do not leave empty separators or labels. Section builders
 retain field meaning, selection, heading levels, IDs, and tags. Themes control
 typography and paragraph spacing.
+
+Publication citations use sentence punctuation between authors, venue details,
+and any required status. Journal details render as `Journal (year), volume(issue): pages`;
+absent fields leave no empty punctuation. The native source owns citation order
+and journal names, including any preferred standard abbreviations. Authorship
+roles, DOI links, and preparation status survive this presentation change.
+`tests/build/test_publication_status.py` verifies citation punctuation and missing
+metadata; `tests/build/test_concise_entries.py` checks inline contribution notes.
 
 Education keeps degree, location, and dates as distinct semantic spans, then gives advisors and
 thesis their own paragraphs. Teaching labels optional metrics as `Enrollment`

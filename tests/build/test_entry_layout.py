@@ -62,7 +62,7 @@ def _entry_html(section, item, variant):
                 "year": 2025,
                 "notes": "Equal contribution.",
             },
-            ["Example Author | Example Journal | 2025", "Equal contribution."],
+            ["Example Author. Example Journal (2025)", "Equal contribution."],
         ),
         (
             "conferences",

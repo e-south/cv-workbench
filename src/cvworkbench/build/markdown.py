@@ -410,9 +410,8 @@ def _build_publications(
             notes = f"[{notes}]{{.entry-note}}"
             if authors_text:
                 authors_text = f"[{authors_text}]{{.entry-authors}}"
-        append_entry_text(
-            lines, metadata=(authors_text, venue_line, status_text), paragraphs=(notes,)
-        )
+        citation = ". ".join(part for part in (authors_text, venue_line, status_text) if part)
+        append_entry_text(lines, metadata=(citation,), paragraphs=(notes,))
 
         lines.append(":::")
         lines.append("")
@@ -731,12 +730,14 @@ def _format_publication_venue(item: dict[str, Any]) -> str:
     volume = _string(item.get("volume"))
     issue = _string(item.get("issue"))
     pages = _string(item.get("pages"))
-    venue_bits = [bit for bit in [venue, year] if bit]
-    if volume or issue or pages:
-        details = ", ".join(bit for bit in [volume, issue, pages] if bit)
-        if details:
-            venue_bits.append(details)
-    return " | ".join(venue_bits)
+    locator = volume
+    if issue:
+        locator += f"({issue})" if volume else f"issue {issue}"
+    if pages:
+        locator = f"{locator}: {pages}" if locator else pages
+    if year:
+        venue = f"{venue} ({year})" if venue else year
+    return ", ".join(part for part in (venue, locator) if part)
 
 
 def _format_dates(item: dict[str, Any]) -> str:

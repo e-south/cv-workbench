@@ -65,3 +65,31 @@ def test_publication_venue_makes_published_label_redundant():
 
 def test_migrating_all_manuscripts_does_not_require_placeholder_projects():
     assert Projects.model_validate({"projects": []}).projects == []
+
+
+@pytest.mark.parametrize(
+    ("details", "citation"),
+    [
+        (
+            {
+                "venue": "Example Journal",
+                "year": 2024,
+                "volume": "7",
+                "issue": "2",
+                "pages": "10–20",
+            },
+            "A. Author. Example Journal (2024), 7(2): 10–20",
+        ),
+        ({"status": "in_preparation", "year": 2026}, "A. Author. 2026. Manuscript in preparation"),
+        (
+            {"venue": "Example Journal", "issue": "2", "pages": "e123"},
+            "A. Author. Example Journal, issue 2: e123",
+        ),
+    ],
+)
+def test_publication_metadata_uses_readable_citation_punctuation(details, citation):
+    record = {"id": "paper", "title": "A paper", "authors": [{"name": "A. Author"}], **details}
+    variant = parse_variant({"variant": {"id": "cv", "outputs": ["md"], "order": ["publications"]}})
+    markdown = build_markdown({"publications": {"publications": [record]}}, variant)
+    assert citation.replace("A. Author", "[A. Author]{.author}") in markdown
+    assert " | " not in markdown

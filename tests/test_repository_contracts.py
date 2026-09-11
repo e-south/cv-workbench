@@ -332,6 +332,7 @@ def test_entry_layout_and_review_normalization_have_routed_owners() -> None:
     review = (ROOT / "docs/reference/review-contract.md").read_text()
     rules = (ROOT / "src/cvworkbench/ops/review/AGENTS.md").read_text()
     assert "build/entry_layout.py" in styling
+    assert "tests/build/test_publication_status.py" in styling
     assert "review-contract.md#markdown-comparison" in styling
     assert "ops/review/markdown.py" in review
     assert "tests/ops/review/test_conversion.py" in review
