@@ -102,6 +102,8 @@ def _render_document(
     }
     if variant.max_bullets_per_role is not None:
         metadata["max_bullets_per_role"] = variant.max_bullets_per_role
+    if variant.render_page_break_before:
+        metadata["cvw-page-break-before"] = variant.render_page_break_before
 
     resolved_filter_paths = (
         tuple(filter_paths) if filter_paths is not None else resolve_filter_paths(filters_dir)
@@ -234,8 +236,10 @@ def resolve_filter_paths(filters_dir: Path) -> tuple[Path, ...]:
             filters_dir / "select.lua",
             filters_dir / "author_roles.lua",
             filters_dir / "limits.lua",
+            filters_dir / "teaching_layout.lua",
             filters_dir / "presentation.lua",
             filters_dir / "entry_structure.lua",
+            filters_dir / "page_breaks.lua",
         )
         if path.exists()
     )

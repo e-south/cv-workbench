@@ -122,3 +122,46 @@ def test_structural_course_group_survives_the_tag_filter():
     assert "Teaching Fellow, BIO 101 Biology" in "".join(tree.itertext())
     for id_ in ("autumn", "spring"):
         assert tree.find(f".//*[@id='teaching-{id_}']") is not None
+
+
+def test_inline_teaching_keeps_terms_bound_to_scores_and_falls_back_for_narrative(tmp_path):
+    from cvworkbench.build.rendering import resolve_filter_paths
+
+    records = offerings()
+    records[1].pop("summary")
+    variant = parse_variant({"variant": {"id": "cv", "outputs": ["md"], "order": ["teaching"]}})
+    filters = Path(__file__).resolve().parents[2] / "build/filters"
+
+    def output():
+        md = build_markdown({"teaching": {"teaching": records}}, variant)
+        args = [
+            "pandoc",
+            "-t",
+            "html5",
+            "-M",
+            "cvw-inline-teaching=true",
+            "-M",
+            "cvw-aligned-entries=true",
+            "-M",
+            "cvw-concise-entries=true",
+            "-M",
+            "cvw-entry-structure=true",
+        ]
+        for path in resolve_filter_paths(filters):
+            args.extend(["--lua-filter", str(path)])
+        result = subprocess.run(args, input=md, text=True, capture_output=True, check=True)
+        return ET.fromstring("<root>" + result.stdout + "</root>")
+
+    tree = output()
+    assert len(tree.findall(".//p")) == 2
+    for identity, expected in [
+        ("autumn", "Fall 2024 | 39 students | evaluation 4.5/5"),
+        ("spring", "Spring 2023 | 45 students | evaluation 4.9/5"),
+    ]:
+        span = tree.find(f".//span[@id='teaching-{identity}']")
+        assert span is not None
+        assert " ".join("".join(span.itertext()).split()) == expected
+    records[1]["summary"] = "Led laboratory sessions."
+    tree = output()
+    assert tree.find(".//span[@id='teaching-spring']") is None
+    assert "Led laboratory sessions." in "".join(tree.itertext())

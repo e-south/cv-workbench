@@ -39,9 +39,23 @@ class Variant:
     render_style_preset: str | None
     contact_fields: list[str] = field(default_factory=lambda: list(CONTACT_FIELDS))
     section_titles: dict[str, str] = field(default_factory=dict)
+    render_page_break_before: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         validate_variant_id(self.id)
+        starts = self.render_page_break_before
+        if (
+            not isinstance(starts, list)
+            or any(
+                not isinstance(value, str)
+                or re.fullmatch(r"[A-Za-z][A-Za-z0-9._-]*", value) is None
+                for value in starts
+            )
+            or len(set(starts)) != len(starts)
+        ):
+            raise ValueError(
+                "Variant render.page_break_before must be a list of unique heading IDs"
+            )
         if (
             not isinstance(self.output_name, str)
             or not self.output_name.strip()
@@ -135,6 +149,7 @@ def parse_variant(raw: object) -> Variant:
         render_style_preset=render_style,
         contact_fields=contact_fields,
         section_titles=_section_titles(variant_data.get("section_titles")),
+        render_page_break_before=render_data.get("page_break_before", []) if render_data else [],
     )
 
 
@@ -247,6 +262,7 @@ def load_variants_from_config(config_path: Path) -> list[dict[str, Any]]:
                 "letter_id": variant.letter_id,
                 "render_theme": variant.render_theme,
                 "render_style_preset": variant.render_style_preset,
+                "render_page_break_before": list(variant.render_page_break_before),
                 "max_bullets_per_role": variant.max_bullets_per_role,
                 "section_titles": dict(variant.section_titles),
                 "path": str(path),

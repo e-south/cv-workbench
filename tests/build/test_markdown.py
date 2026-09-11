@@ -113,3 +113,40 @@ def test_markdown_only_renders_configured_contact_fields(tmp_path: Path) -> None
     assert "+1 555 555 0100" not in content
     assert "Private label" not in content
     assert "https://example.com" not in content
+
+
+def test_adjacent_sections_can_share_one_explicit_display_heading():
+    from cvworkbench.variants import parse_variant
+
+    variant = parse_variant(
+        {
+            "variant": {
+                "id": "cv",
+                "outputs": ["md"],
+                "order": ["service", "conferences", "honors"],
+                "section_titles": {
+                    "service": "Professional Activities",
+                    "conferences": "Professional Activities",
+                },
+            }
+        }
+    )
+    source = {
+        "service": {
+            "service": [{"id": "chair", "organization": "Seminar", "role": "Chair", "start": 2027}]
+        },
+        "conferences": {
+            "conferences": [
+                {"id": "poster", "event": "Conference", "year": 2024, "presentation_type": "Poster"}
+            ]
+        },
+        "honors": {"honors": [{"id": "prize", "title": "Prize", "year": 2023}]},
+    }
+    text = build_markdown(source, variant)
+    assert text.count("## Professional Activities\n") == 1
+    assert text.index("service-chair") < text.index("conference-poster") < text.index("honor-prize")
+    assert "Chair" in text and "Poster" in text and "2027" in text and "2024" in text
+    from dataclasses import replace
+
+    variant = replace(variant, order=["service", "honors", "conferences"])
+    assert build_markdown(source, variant).count("## Professional Activities\n") == 2

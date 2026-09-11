@@ -210,6 +210,38 @@ headings only; section order, IDs, tags, and selection remain unchanged. Catalog
 and build manifests record the labels. Content selection belongs in variants;
 fonts, rules, alignment, and spacing belong in themes.
 
+Adjacent rendered sections with the same explicit `section_titles` value share
+one visible heading. Their records keep their source IDs, selection, and order.
+Use this to present service and conference records together without moving
+conference facts into the service collection. An intervening visible section
+starts a new heading, even if a later section repeats the same title.
+
+### Deliberate page starts
+
+Set `variant.render.page_break_before` to a list of Pandoc heading IDs for a
+specific document, for example:
+
+```yaml
+variant:
+  render:
+    page_break_before: [education]
+```
+
+This optional rendering choice is recorded in the variant catalog and build
+manifest. It does not change another variant using the same theme. PDF inserts
+a page break, DOCX inserts a native page break, and HTML uses `break-before:
+page` for printing while retaining continuous screen flow. Ordinary text and
+source records retain their reading order. Heading IDs start with an ASCII
+letter and contain only letters, digits, dots, underscores, or hyphens.
+Duplicate, missing, or ambiguous targets fail rendering.
+Renaming a heading can change its automatically generated ID, so update this
+setting and verify pagination when changing section labels.
+
+The underlying `page_breaks.lua` filter also accepts a theme metadata list named
+`cvw-page-break-before`. Reserve theme-wide settings for layouts whose headings
+are shared by every consuming variant. A break fixes a section start; it cannot
+guarantee earlier content fits on one page. Check the actual PDF after edits.
+
 ### Aligned entry dates
 
 Set `metadata.cvw-aligned-entries: true` in a theme's common Pandoc defaults to
@@ -290,6 +322,17 @@ term, enrollment, evaluation, and summary. Selection happens first; different
 roles or nonadjacent courses remain separate. This structure also reaches plain
 text without a layout table. Source records and machine-readable exports retain
 the individual offerings.
+
+Set theme metadata `cvw-inline-teaching: true` to present adjacent offerings on
+one evidence paragraph under their shared course/role heading. Each term keeps
+its own ID, enrollment, and evaluation; the source still has separate records.
+If any offering has narrative or unsupported block content, the whole group
+keeps its expanded layout. With teaching bullets enabled, an inline group uses
+one native bullet for the course and its evidence. Inspect wrapping at the
+selected font size; a single paragraph is not a promise of a single line.
+As with other aligned layouts, DOCX import can produce a review-only diff; apply
+content changes through native source unless the importer explicitly supplies
+an applyable patch.
 
 An explicitly published paper with a journal/venue omits the redundant
 `Published` display label. Without a venue the label remains; manuscripts in

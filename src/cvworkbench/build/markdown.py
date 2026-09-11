@@ -62,15 +62,23 @@ def _build_resume_markdown(
         "references": _build_references,
     }
 
+    previous_explicit_title = None
     for section in variant.order:
         builder = section_builders.get(section)
         if builder is None:
             continue
         start = len(lines)
         builder(lines, sot, variant, snippets)
-        if section in variant.section_titles and len(lines) > start:
+        if len(lines) == start:
+            continue
+        if section in variant.section_titles:
             title = literal_text(variant.section_titles[section])
             lines[start] = f"## {title}"
+            if title == previous_explicit_title:
+                del lines[start : start + 2]
+            previous_explicit_title = title
+        else:
+            previous_explicit_title = None
 
     content = "\n".join(lines).strip()
     if not content.endswith("\n"):

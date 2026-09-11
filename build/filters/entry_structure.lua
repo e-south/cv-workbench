@@ -40,7 +40,8 @@ local function structure_entry(div, bulleted)
     for index = 2, #blocks do table.insert(body, blocks[index]) end
     table.insert(result, entry_details(body))
   end
-  if bulleted[kind] and not div.classes:includes('teaching-course') then
+  if bulleted[kind] and (not div.classes:includes('teaching-course')
+      or div.classes:includes('teaching-inline')) then
     result = {pandoc.BulletList({result})}
     div.classes:insert('entry-bulleted')
   end

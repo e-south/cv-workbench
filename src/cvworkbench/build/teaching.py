@@ -11,9 +11,14 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _evidence(item: dict[str, Any]) -> tuple[str, ...]:
+def _evidence(item: dict[str, Any], *, grouped: bool = False) -> tuple[str, ...]:
     enrollment = item.get("enrollment")
     evaluation = _text(item.get("evaluation"))
+    if grouped:
+        return (
+            f"{enrollment} students" if isinstance(enrollment, int) else "",
+            f"evaluation {evaluation}" if evaluation else "",
+        )
     return (
         f"Enrollment: {enrollment}" if isinstance(enrollment, int) else "",
         f"Evaluation: {evaluation}" if evaluation else "",
@@ -44,7 +49,7 @@ def append_teaching_entries(lines: list[str], selected: list[dict[str, Any]]) ->
             if course and not grouped:
                 lines.append(f"### {course}")
             term = _text(item.get("term"))
-            evidence = _evidence(item)
+            evidence = _evidence(item, grouped=grouped)
             if grouped:
                 # Terms remain separate paragraphs and retain their source IDs.
                 metadata = (term, *evidence)
