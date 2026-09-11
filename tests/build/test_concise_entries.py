@@ -73,7 +73,7 @@ def test_concise_service_keeps_role_organization_and_date_together(dates):
                     "id": "mentor",
                     "role": "Mentor",
                     "organization": "Example University",
-                    "summary": "Supervised three students.",
+                    "summary": "Guided eight volunteers.",
                     **dates,
                 }
             ]
@@ -83,7 +83,7 @@ def test_concise_service_keeps_role_organization_and_date_together(dates):
     entry = tree.find(".//*[@id='service-mentor']")
     heading = entry.find(".//*[@class='entry-heading']")
     assert "Mentor, Example University" in "".join(heading.itertext())
-    assert ["".join(p.itertext()) for p in entry.findall("p")] == ["Supervised three students."]
+    assert ["".join(p.itertext()) for p in entry.findall("p")] == ["Guided eight volunteers."]
     assert len(entry.findall(".//*[@class='entry-date']")) == bool(dates)
     original = render_entries(source, concise=False)
     assert "Mentor" not in "".join(original.find(".//*[@class='entry-heading']").itertext())
@@ -212,14 +212,14 @@ def test_concise_teaching_groups_role_and_course_above_term_evidence():
                     "course": "BIO 101",
                     "role": "Teaching Fellow",
                     "term": "Fall 2024",
-                    "enrollment": 39,
+                    "enrollment": 18,
                 },
                 {
                     "id": "spring",
                     "course": "BIO 101",
                     "role": "Teaching Fellow",
                     "term": "Spring 2023",
-                    "enrollment": 45,
+                    "enrollment": 27,
                 },
             ]
         }
@@ -310,7 +310,7 @@ def test_installed_concise_filter_preserves_native_export_fields(sample_workspac
                 "role": "Mentor",
                 "start": 2024,
                 "end": 2024,
-                "summary": "Supervised three students.",
+                "summary": "Guided eight volunteers.",
                 "tags": ["core"],
             }
         ],
@@ -385,7 +385,7 @@ def test_installed_concise_filter_preserves_native_export_fields(sample_workspac
         "Example Foundation",
         "Example Conference",
         "Poster",
-        "Supervised three students.",
+        "Guided eight volunteers.",
         "Manuscript in preparation",
         "Working title.",
     ):

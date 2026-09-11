@@ -260,6 +260,7 @@ def resolve_filter_paths(filters_dir: Path) -> tuple[Path, ...]:
             filters_dir / "entry_projection.lua",
             filters_dir / "presentation.lua",
             filters_dir / "entry_structure.lua",
+            filters_dir / "body_alignment.lua",
             filters_dir / "page_breaks.lua",
         )
         if path.exists()

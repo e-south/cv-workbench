@@ -30,21 +30,21 @@ def offerings():
     return [
         {
             "id": "autumn",
-            "course": "BIO 101 Biology",
-            "role": "Teaching Fellow",
-            "term": "Fall 2024",
-            "enrollment": 39,
-            "evaluation": "4.5/5",
+            "course": "DES 110 Design Studio",
+            "role": "Workshop Tutor",
+            "term": "Winter 2030",
+            "enrollment": 18,
+            "evaluation": "4.1/5",
             "tags": ["public"],
         },
         {
             "id": "spring",
-            "course": "BIO 101 Biology",
-            "role": "Teaching Fellow",
-            "term": "Spring 2023",
-            "enrollment": 45,
-            "evaluation": "4.9/5",
-            "summary": "Led laboratory sessions.",
+            "course": "DES 110 Design Studio",
+            "role": "Workshop Tutor",
+            "term": "Summer 2029",
+            "enrollment": 27,
+            "evaluation": "4.3/5",
+            "summary": "Led studio sessions.",
             "tags": ["private"],
         },
     ]
@@ -53,10 +53,10 @@ def offerings():
 def test_adjacent_matching_offerings_share_a_course_and_preserve_each_term():
     tree = render(offerings())
     assert len(tree.findall(".//h3")) == 1
-    assert "".join(tree.itertext()).count("Teaching Fellow") == 1
+    assert "".join(tree.itertext()).count("Workshop Tutor") == 1
     for id_, values in [
-        ("autumn", ["Fall 2024", "39", "4.5/5"]),
-        ("spring", ["Spring 2023", "45", "4.9/5", "Led laboratory sessions."]),
+        ("autumn", ["Winter 2030", "18", "4.1/5"]),
+        ("spring", ["Summer 2029", "27", "4.3/5", "Led studio sessions."]),
     ]:
         text = "".join(tree.find(f".//*[@id='teaching-{id_}']").itertext())
         assert all(value in text for value in values)
@@ -66,19 +66,19 @@ def test_grouping_follows_selection_and_keeps_distinct_roles_separate():
     records = offerings()
     selected = render(records, exclude_tags=["private"])
     assert selected.find(".//*[@id='teaching-spring']") is None
-    assert "45" not in "".join(selected.itertext())
+    assert "27" not in "".join(selected.itertext())
     records[1]["role"] = "Instructor"
     assert len(render(records).findall(".//h3")) == 2
 
 
 def test_grouping_does_not_reorder_nonadjacent_courses():
     records = offerings()
-    records.insert(1, {"id": "other", "course": "BIO 202 Genetics", "role": "Teaching Fellow"})
+    records.insert(1, {"id": "other", "course": "DES 220 Prototyping", "role": "Workshop Tutor"})
     tree = render(records)
     assert [x.text for x in tree.findall(".//h3")] == [
-        "BIO 101 Biology",
-        "BIO 202 Genetics",
-        "BIO 101 Biology",
+        "DES 110 Design Studio",
+        "DES 220 Prototyping",
+        "DES 110 Design Studio",
     ]
 
 
@@ -119,7 +119,7 @@ def test_structural_course_group_survives_the_tag_filter():
         check=True,
     )
     tree = ET.fromstring("<root>" + result.stdout + "</root>")
-    assert "Teaching Fellow, BIO 101 Biology" in "".join(tree.itertext())
+    assert "Workshop Tutor, DES 110 Design Studio" in "".join(tree.itertext())
     for id_ in ("autumn", "spring"):
         assert tree.find(f".//*[@id='teaching-{id_}']") is not None
 
@@ -155,13 +155,13 @@ def test_inline_teaching_keeps_terms_bound_to_scores_and_falls_back_for_narrativ
     tree = output()
     assert len(tree.findall(".//p")) == 2
     for identity, expected in [
-        ("autumn", "Fall 2024 | 39 students | evaluation 4.5/5"),
-        ("spring", "Spring 2023 | 45 students | evaluation 4.9/5"),
+        ("autumn", "(Winter 2030) | 18 students | evaluation 4.1/5"),
+        ("spring", "(Summer 2029) | 27 students | evaluation 4.3/5"),
     ]:
         span = tree.find(f".//span[@id='teaching-{identity}']")
         assert span is not None
         assert " ".join("".join(span.itertext()).split()) == expected
-    records[1]["summary"] = "Led laboratory sessions."
+    records[1]["summary"] = "Led studio sessions."
     tree = output()
     assert tree.find(".//span[@id='teaching-spring']") is None
-    assert "Led laboratory sessions." in "".join(tree.itertext())
+    assert "Led studio sessions." in "".join(tree.itertext())

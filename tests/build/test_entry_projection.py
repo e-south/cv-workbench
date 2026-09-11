@@ -23,13 +23,13 @@ def document(rules):
                     "role": "Mentor",
                     "organization": "Example Lab",
                     "start": 2022,
-                    "summary": "Supervised three students.",
+                    "summary": "Guided eight volunteers.",
                 },
                 {
                     "id": "team",
                     "role": "Team Supervisor",
                     "organization": "Example Lab",
-                    "summary": "Five students built an image-analysis pipeline.",
+                    "summary": "Seven volunteers prepared a documentation guide.",
                 },
             ]
         },
@@ -83,7 +83,8 @@ def test_groups_and_attachments_preserve_each_record_and_unknown_dates(tmp_path)
     assert "Research mentoring" in html
     for identity in ("honor-award", "service-mentor", "service-team"):
         assert html.count(f'id="{identity}"') == 1
-    assert "Supervised three students." in html and "Five students built" in html
+    assert "Guided eight volunteers." in html and "Seven volunteers prepared" in html
+    assert "2022–Present" in html
     assert html.count("2022") == 1
     assert "Honors &amp; Awards" not in html  # no empty section after relocation
 
@@ -121,6 +122,100 @@ def test_variant_projection_is_retained_and_validated():
         )
 
 
+def test_conference_series_grouping_preserves_topics_dates_and_source_ids(tmp_path):
+    from cvworkbench.build.resume import build_resume
+    from cvworkbench.inputs.sot_schema import ConferenceEntry
+
+    source = {
+        "conferences": {
+            "conferences": [
+                {
+                    "id": "cells",
+                    "series": "Design Congress",
+                    "event": "Materials",
+                    "year": "2030, 2032",
+                    "presentation_type": "Poster",
+                },
+                {
+                    "id": "stress",
+                    "series": "Design Congress",
+                    "event": "Ceramics",
+                    "year": 2031,
+                    "presentation_type": "Poster",
+                },
+                {
+                    "id": "local",
+                    "event": "Local Symposium",
+                    "year": 2030,
+                    "presentation_type": "Poster",
+                },
+            ]
+        }
+    }
+    rule = {
+        "sources": ["conference-cells", "conference-stress", "conference-local"],
+        "target": "conferences-workshops",
+        "placement": "section",
+        "label": "Posters",
+        "fields": ["heading", "date"],
+        "group_by": "series",
+    }
+    for entry in source["conferences"]["conferences"]:
+        # Exercise native intake, not only the renderer's intermediate dict.
+        validated = ConferenceEntry.model_validate({**entry, "tags": ["public"]})
+        assert validated.model_dump().get("series") == entry.get("series")
+    records = build_resume(source)["meta"]["cvworkbench"]["conferences"]
+    assert [record.get("series") for record in records] == [
+        "Design Congress",
+        "Design Congress",
+        None,
+    ]
+    variant = parse_variant(
+        {"variant": {"id": "base", "outputs": ["html"], "render": {"entry_layout": [rule]}}}
+    )
+    markdown = build_markdown(source, variant)
+    from lxml import html as H
+
+    # Ungrouped source text still carries each topic's conference family.
+    assert markdown.count("Design Congress") == 2
+    metadata = {"cvw-entry-layout": [rule]}
+    document = "---\n" + yaml.safe_dump(metadata) + "---\n" + markdown
+    path = tmp_path / "out.html"
+    render(document, path)
+    dom = H.fromstring(path.read_text())
+    text = " ".join(dom.text_content().split())
+    assert (
+        "Design Congress—Materials (2030, 2032) and Ceramics (2031); Local Symposium (2030)" in text
+    )
+    assert text.count("Design Congress") == 1
+    for key in ["cells", "stress", "local"]:
+        assert len(dom.xpath(f'//*[@id="conference-{key}"]')) == 1
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"placement": "details"},
+        {"date_position": "right"},
+        {"fields": ["date"]},
+        {"group_by": "guessed-name"},
+    ],
+)
+def test_series_grouping_rejects_incompatible_presentation(change):
+    rule = {
+        "sources": ["conference-first"],
+        "target": "conferences-workshops",
+        "placement": "section",
+        "fields": ["heading", "date"],
+        "group_by": "series",
+        **change,
+    }
+    with pytest.raises(ValueError, match="entry_layout"):
+        parse_variant(
+            {"variant": {"id": "base", "outputs": ["html"], "render": {"entry_layout": [rule]}}}
+        )
+
+
 def test_explicit_attachment_fields_keep_scope_and_date_without_repeating_role(tmp_path):
     source = document(
         [
@@ -135,7 +230,7 @@ def test_explicit_attachment_fields_keep_scope_and_date_without_repeating_role(t
     output = tmp_path / "out.html"
     render(source, output)
     html = output.read_text()
-    assert "Supervised three students." in html and "2022" in html
+    assert "Guided eight volunteers." in html and "2022" in html
     assert "Mentor," not in html
     assert html.count('id="service-mentor"') == 1
 
@@ -260,7 +355,7 @@ def test_compact_records_survive_native_writers(tmp_path, extension):
     else:
         text = path.read_text()
     normalized = " ".join(text.split())
-    assert "Supervised three students." in normalized and "Five students built" in normalized
+    assert "Guided eight volunteers." in normalized and "Seven volunteers prepared" in normalized
     assert normalized.count("2022") == 1
     assert normalized.index("Research Award") < normalized.index("Service & Leadership")
 
@@ -282,8 +377,8 @@ def test_variant_fields_reject_invalid_values(value):
 def test_unknown_source_structure_is_not_silently_discarded(tmp_path):
     source = document([{"sources": ["service-team"], "target": "role-lab", "placement": "details"}])
     source = source.replace(
-        "Five students built an image-analysis pipeline.",
-        "Five students built an image-analysis pipeline.\n\n- Extra evidence",
+        "Seven volunteers prepared a documentation guide.",
+        "Seven volunteers prepared a documentation guide.\n\n- Extra evidence",
     )
     with pytest.raises(subprocess.CalledProcessError) as exc:
         render(source, tmp_path / "out.html")
@@ -326,7 +421,7 @@ def test_native_build_records_layout_and_preserves_source_and_review_identity(sa
                         "organization": "Example Institute",
                         "role": "Mentor",
                         "start": 2022,
-                        "summary": "Supervised three researchers.",
+                        "summary": "Trained six curators.",
                         "tags": ["leadership"],
                     }
                 ]
@@ -426,3 +521,122 @@ def test_explicit_null_label_fails_variant_validation():
                 }
             }
         )
+
+
+def test_standalone_projected_date_aligns_without_parentheses(tmp_path):
+    from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
+
+    rule = {
+        "sources": ["honor-award"],
+        "target": "service-leadership",
+        "placement": "section",
+        "date_position": "right",
+    }
+    parse_variant({"variant": {"id": "cv", "outputs": ["pdf"], "render": {"entry_layout": [rule]}}})
+    source = document([rule])
+    path = tmp_path / "dates.html"
+    render(source, path)
+    tree = ET.fromstring("<root>" + path.read_text() + "</root>")
+    row = next(
+        x
+        for x in tree.iter("div")
+        if "entry-heading" in x.get("class", "") and x.find(".//*[@id='honor-award']") is not None
+    )
+    assert "(2021)" not in "".join(row.itertext())
+    assert "Research Award" in "".join(row.itertext())
+    assert row.find(".//*[@class='entry-date keep-together']").text == "2021"
+    assert tree.find(".//li//*[@id='honor-award']") is not None
+    target = tmp_path / "dates.docx"
+    render(source, target)
+    with ZipFile(target) as archive:
+        doc = ET.fromstring(archive.read("word/document.xml"))
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    paragraph = next(
+        p
+        for p in doc.findall(".//w:p", ns)
+        if "Research Award" in "".join(t.text or "" for t in p.findall(".//w:t", ns))
+    )
+    assert paragraph.find(".//w:tab", ns) is not None
+    assert paragraph.find("w:pPr/w:pStyle", ns).get(f"{{{ns['w']}}}val") == "EntryHeading"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"sources": ["service-mentor", "service-team"]},
+        {"placement": "details", "target": "role-lab"},
+        {"date_position": "center"},
+        {"fields": ["heading"]},
+    ],
+)
+def test_right_date_rejects_ambiguous_or_missing_date_selection(changes, tmp_path):
+    rule = {
+        "sources": ["honor-award"],
+        "target": "service-leadership",
+        "placement": "section",
+        "date_position": "right",
+        **changes,
+    }
+    with pytest.raises(ValueError, match="entry_layout"):
+        parse_variant(
+            {"variant": {"id": "cv", "outputs": ["pdf"], "render": {"entry_layout": [rule]}}}
+        )
+    with pytest.raises(subprocess.CalledProcessError):
+        render(document([rule]), tmp_path / "invalid.html")
+
+
+def test_compact_entry_emphasis_matches_role_identity_without_bolding_details(tmp_path):
+    from xml.etree import ElementTree as ET
+
+    source = document(
+        [
+            {
+                "sources": ["service-mentor", "honor-award"],
+                "target": "service-leadership",
+                "placement": "section",
+            },
+            {
+                "sources": ["service-team"],
+                "target": "service-leadership",
+                "placement": "section",
+                "label": "Team mentoring",
+            },
+        ]
+    )
+    path = tmp_path / "emphasis.html"
+    render(source, path)
+    tree = ET.fromstring("<root>" + path.read_text() + "</root>")
+    mentor = tree.find(".//*[@id='service-mentor']")
+    assert ["".join(x.itertext()) for x in mentor.findall(".//strong")] == ["Mentor"]
+    award = tree.find(".//*[@id='honor-award']")
+    assert ["".join(x.itertext()) for x in award.findall(".//strong")] == ["Research Award"]
+    # A group label already supplies its emphasis; avoid a wall of bold metadata.
+    assert not tree.find(".//*[@id='service-team']").findall(".//strong")
+    assert "Guided eight volunteers." in "".join(mentor.itertext())
+    assert "2022" in "".join(mentor.itertext())
+
+
+def test_shared_manuscript_titles_keep_the_same_emphasis_as_other_publications(tmp_path):
+    from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
+
+    source = publications_source().replace("---\n", "---\ncvw-entry-structure: true\n", 1)
+    path = tmp_path / "publications.html"
+    render(source, path)
+    tree = ET.fromstring("<root>" + path.read_text() + "</root>")
+    for identity, title in [("one", "First complete title"), ("two", "Second complete title")]:
+        entry = tree.find(f".//*[@id='publication-{identity}']")
+        assert ["".join(x.itertext()) for x in entry.findall(".//strong")] == [title]
+    target = tmp_path / "publications.docx"
+    render(source, target)
+    with ZipFile(target) as archive:
+        doc = ET.fromstring(archive.read("word/document.xml"))
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    for title in ["First complete title", "Second complete title"]:
+        run = next(
+            x
+            for x in doc.findall(".//w:r", ns)
+            if "".join(t.text or "" for t in x.findall("w:t", ns)) == title
+        )
+        assert run.find("w:rPr/w:b", ns) is not None

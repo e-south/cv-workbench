@@ -84,7 +84,7 @@ def test_variant_page_starts_do_not_affect_other_variants_and_survive_review(sam
                 "course": "BIO 101",
                 "role": "Instructor",
                 "term": "Fall 2024",
-                "enrollment": 39,
+                "enrollment": 18,
                 "evaluation": "4.5/5",
             },
             {
@@ -92,7 +92,7 @@ def test_variant_page_starts_do_not_affect_other_variants_and_survive_review(sam
                 "course": "BIO 101",
                 "role": "Instructor",
                 "term": "Spring 2023",
-                "enrollment": 45,
+                "enrollment": 27,
                 "evaluation": "4.9/5",
             },
         ]
@@ -111,7 +111,7 @@ def test_variant_page_starts_do_not_affect_other_variants_and_survive_review(sam
     with pymupdf.open(result.dist_dir / "cv.pdf") as doc:
         assert len(doc) == 2
         assert doc[1].get_text().startswith("Education")
-        assert "39 students" in doc[1].get_text() and "45 students" in doc[1].get_text()
+        assert "18 students" in doc[1].get_text() and "27 students" in doc[1].get_text()
     manifest = json.loads((result.run_dir / "manifest.json").read_text())
     assert manifest["variant"]["page_break_before"] == ["education"]
     pack = build_review_pack(config_path=config, variant_id="base", run=str(result.run_dir))

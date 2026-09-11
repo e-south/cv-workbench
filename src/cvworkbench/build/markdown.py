@@ -16,7 +16,7 @@ from typing import Any
 
 from cvworkbench.build.contacts import build_contact_line
 from cvworkbench.build.entry_layout import append_entry_text, entry_metadata
-from cvworkbench.build.links import http_link, literal_text
+from cvworkbench.build.links import http_link, literal_text, title_text
 from cvworkbench.build.selection import select_letter
 from cvworkbench.build.teaching import append_teaching_entries
 from cvworkbench.text import slugify, tag_classes
@@ -297,15 +297,16 @@ def _build_skills(
     lines.append("## Skills")
     lines.append("")
     _append_section_intro(lines, "skills", variant, snippets)
+    lines.extend(("::: {.skills-list}", ""))
     for item in items:
         if not isinstance(item, dict):
             continue
         name = _string(item.get("name"))
         keywords = item.get("keywords")
         if name and isinstance(keywords, list):
-            keywords_text = ", ".join(_string(keyword) for keyword in keywords if _string(keyword))
+            keywords_text = "; ".join(_string(keyword) for keyword in keywords if _string(keyword))
             lines.append(f"- **{name}**: {keywords_text}")
-    lines.append("")
+    lines.extend(("", ":::", ""))
 
 
 def _build_education(
@@ -402,7 +403,11 @@ def _build_publications(
         if title:
             url = _string(item.get("url"))
             if url:
-                title = http_link(title, url, field="Publication URL")
+                title = http_link(
+                    title, url, field="Publication URL", italics=item.get("title_italics") or ()
+                )
+            elif item.get("title_italics"):
+                title = title_text(title, item["title_italics"])
             lines.append(f"### {title}")
 
         authors_text = _format_authors(item.get("authors"))
@@ -448,7 +453,15 @@ def _build_conferences(
 
         event = _string(item.get("event"))
         title = _string(item.get("title"))
-        if event or title:
+        series = _string(item.get("series"))
+        if series:
+            if not event:
+                raise ValueError("Conference series requires an explicit meeting event")
+            lines.append(
+                f"### [{literal_text(series)}]{{.entry-series}}: "
+                f"[{literal_text(event)}]{{.entry-topic}}"
+            )
+        elif event or title:
             lines.append(f"### {event or title}")
         year = _date_string(item.get("year"))
         presentation_type = _string(item.get("presentation_type"))

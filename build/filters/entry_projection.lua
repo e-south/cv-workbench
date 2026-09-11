@@ -19,7 +19,24 @@ end
 local allowed_fields = {heading=true, role=true, issuer=true, location=true, detail=true,
                         date=true, summary=true}
 
-local function record_span(div, fields)
+local function conference_series(div)
+  if not div.identifier:match('^conference%-') then
+    fail('series grouping requires conference records: ' .. div.identifier)
+  end
+  local series, topic
+  local heading = div.content[1]
+  if not heading or heading.t ~= 'Header' then fail('missing conference heading') end
+  for _, inline in ipairs(heading.content) do
+    if inline.t == 'Span' then
+      if inline.classes:includes('entry-series') then series = inline end
+      if inline.classes:includes('entry-topic') then topic = inline end
+    end
+  end
+  if (series ~= nil) ~= (topic ~= nil) then fail('incomplete conference series heading') end
+  return series, topic
+end
+
+local function record_span(div, fields, labelled, right_date, topic_only)
   if not (div.identifier:match('^service%-') or div.identifier:match('^honor%-')
       or div.identifier:match('^conference%-')) then
     fail('only simple service, honor and conference records can be compacted: ' .. div.identifier)
@@ -29,6 +46,10 @@ local function record_span(div, fields)
     fail('expected a simple source heading: ' .. div.identifier)
   end
   local values = {heading={pandoc.Span(blocks[1].content, blocks[1].attr)}}
+  if topic_only then
+    local _, topic = conference_series(div)
+    values.heading = {topic}
+  end
   local default_fields = {'heading'}
   for index = 2, #blocks do
     local block = blocks[index]
@@ -55,7 +76,13 @@ local function record_span(div, fields)
       table.insert(default_fields, 'summary')
     end
   end
-  local content = {}
+  -- Retain the entry's identifying field after its heading becomes inline.
+  -- A group label already supplies this role; descriptive fields stay unmarked.
+  if not labelled then
+    local identity = values.role or values.heading
+    identity[1].classes:insert('entry-label')
+  end
+  local content, date = {}, nil
   for _, field in ipairs(fields or default_fields) do
     local value = values[field]
     if not value and field ~= 'date' then fail('missing requested field: ' .. div.identifier .. '/' .. field) end
@@ -65,16 +92,59 @@ local function record_span(div, fields)
       for _, inline in ipairs(value) do
         if inline.t == 'Span' then inline.classes:insert('keep-together') end
       end
-      if #content > 0 then table.insert(content, pandoc.Space()) end
-      table.insert(content, pandoc.Str('('))
-      append(content, value)
-      table.insert(content, pandoc.Str(')'))
+      if right_date then date = value[1]
+      else
+        -- Compact only displayed inline ranges; source dates and aligned headings
+        -- retain their own representation.
+        value[1].content = {pandoc.Str(pandoc.utils.stringify(value[1]):gsub('%s+—%s+', '–'))}
+        if #content > 0 then table.insert(content, pandoc.Space()) end
+        table.insert(content, pandoc.Str('('))
+        append(content, value)
+        table.insert(content, pandoc.Str(')'))
+      end
     else
       separator(content, field == 'summary' and ':' or ',')
       append(content, value)
     end
   end
-  return pandoc.Span(content, div.attr)
+  if right_date and not date then fail('right-aligned date is missing: ' .. div.identifier) end
+  return pandoc.Span(content, div.attr), date
+end
+
+local function joined_records(rule)
+  local chunks, seen = {}, {}
+  for _, source in ipairs(rule.sources) do
+    local series = rule.group_series and conference_series(source) or nil
+    local key = series and pandoc.utils.stringify(series) or nil
+    local last = chunks[#chunks]
+    if key and last and last.key == key then
+      table.insert(last.sources, source)
+    else
+      if key and seen[key] then fail('conference series must be contiguous in source order') end
+      if key then seen[key] = true end
+      table.insert(chunks, {key=key, series=series, sources={source}})
+    end
+  end
+  local content, date = {}, nil
+  for _, chunk in ipairs(chunks) do
+    separator(content, ';')
+    if chunk.series then
+      table.insert(content, chunk.series)
+      table.insert(content, pandoc.Str('—'))
+    end
+    for index, source in ipairs(chunk.sources) do
+      if index > 1 then
+        if index == #chunk.sources then
+          append(content, {pandoc.Space(), pandoc.Str('and'), pandoc.Space()})
+        else separator(content, ',') end
+      end
+      local record
+      record, date = record_span(source, rule.fields,
+        rule.label ~= nil or rule.placement ~= 'section', rule.right_date, chunk.series ~= nil)
+      table.insert(content, record)
+    end
+  end
+  return content, date
 end
 
 local function attach(target, content)
@@ -112,8 +182,9 @@ local function shared_citation(sources)
       fail('shared citations differ: ' .. source.identifier)
     end
     citation = blocks[2]
-    table.insert(items, {pandoc.Plain({pandoc.Span({pandoc.Span(blocks[1].content,
-      blocks[1].attr)}, source.attr)})})
+    local title = pandoc.Span(blocks[1].content, blocks[1].attr)
+    title.classes:insert('entry-label')
+    table.insert(items, {pandoc.Plain({pandoc.Span({title}, source.attr)})})
   end
   citation = pandoc.walk_block(citation, {Str=function(str)
     if str.text == 'Manuscript' then return pandoc.Str('Manuscripts') end
@@ -141,7 +212,8 @@ function Pandoc(doc)
   for _, rule in ipairs(rules) do
     if rule.t ~= 'MetaMap' then fail('each rule must be a mapping') end
     for key, _ in pairs(rule) do
-      if key ~= 'sources' and key ~= 'target' and key ~= 'placement' and key ~= 'label' and key ~= 'fields' then
+      if key ~= 'sources' and key ~= 'target' and key ~= 'placement' and key ~= 'label'
+          and key ~= 'fields' and key ~= 'date_position' and key ~= 'group_by' then
         fail('unknown rule key: ' .. key)
       end
     end
@@ -186,7 +258,28 @@ function Pandoc(doc)
         table.insert(fields, field)
       end
     end
-    table.insert(parsed, {sources=sources, target=target, placement=placement, label=label, fields=fields})
+    local right_date = rule.date_position ~= nil
+    if right_date and (pandoc.utils.stringify(rule.date_position) ~= 'right'
+        or placement ~= 'section' or #sources ~= 1) then
+      fail('right dates require one section record')
+    end
+    if right_date and fields then
+      local found = false
+      for _, field in ipairs(fields) do if field == 'date' then found = true end end
+      if not found then fail('right date must be included in fields') end
+    end
+    local group_series = rule.group_by ~= nil
+    if group_series and (pandoc.utils.stringify(rule.group_by) ~= 'series'
+        or placement ~= 'section' or right_date) then
+      fail('series grouping requires an inline section group')
+    end
+    if group_series and fields then
+      local heading = false
+      for _, field in ipairs(fields) do if field == 'heading' then heading = true end end
+      if not heading then fail('series grouping must retain topic headings') end
+    end
+    table.insert(parsed, {sources=sources, target=target, placement=placement, label=label,
+                         fields=fields, right_date=right_date, group_series=group_series})
   end
   for id, _ in pairs(consumed) do
     if targets[id] then fail('target is also consumed: ' .. id) end
@@ -196,18 +289,23 @@ function Pandoc(doc)
     if rule.placement == 'shared_citation' then
       replacements[rule.sources[1].identifier] = shared_citation(rule.sources)
     else
-      local content = {}
+      local content, date = {}, nil
       if rule.label then
         append(content, {pandoc.Strong({pandoc.Str(rule.label)}), pandoc.Str(':'), pandoc.Space()})
       end
-      for index, source in ipairs(rule.sources) do
-        if index > 1 then separator(content, ';') end
-        table.insert(content, record_span(source, rule.fields))
-      end
+      local records_content
+      records_content, date = joined_records(rule)
+      append(content, records_content)
       if rule.placement == 'details' then attach(records[rule.target], content)
       else
         groups[rule.target] = groups[rule.target] or {}
-        local group = pandoc.Div({pandoc.BulletList({{pandoc.Para(content)}})},
+        local body = pandoc.Para(content)
+        if date then
+          body = pandoc.Div({pandoc.Para({
+            pandoc.Span(content, pandoc.Attr('', {'entry-identity'})), date})},
+            pandoc.Attr('', {'entry-projected-heading'}))
+        end
+        local group = pandoc.Div({pandoc.BulletList({{body}})},
           pandoc.Attr('', {'entry-group'}))
         if owners[rule.sources[1].identifier] == rule.target then
           replacements[rule.sources[1].identifier] = group

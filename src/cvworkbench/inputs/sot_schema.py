@@ -15,6 +15,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from cvworkbench.text import title_italic_spans
+
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 DateValue = (
     Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
@@ -182,6 +184,7 @@ class Author(StrictModel):
 class Publication(StrictModel):
     id: NonEmptyStr
     title: NonEmptyStr
+    title_italics: NonEmptyStrList | None = None
     authors: Annotated[list[Author], Field(min_length=1)] | None = None
     status: Literal["published", "in_preparation"] = "published"
     venue: NonEmptyStr | None = None
@@ -198,6 +201,7 @@ class Publication(StrictModel):
     def _require_published_authors(self) -> "Publication":
         if self.status == "published" and not self.authors:
             raise ValueError("published publications require authors")
+        title_italic_spans(self.title, self.title_italics or ())
         return self
 
 
@@ -251,6 +255,7 @@ class Teaching(StrictModel):
 class ConferenceEntry(StrictModel):
     id: NonEmptyStr
     title: NonEmptyStr | None = None
+    series: NonEmptyStr | None = None
     event: NonEmptyStr
     year: DateValue | None = None
     location: NonEmptyStr | None = None

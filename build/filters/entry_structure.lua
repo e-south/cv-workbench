@@ -115,6 +115,14 @@ local function keep_together(span)
   return span
 end
 
+local function structure_inline(span)
+  if span.classes:includes('entry-label')
+      and not (#span.content == 1 and span.content[1].t == 'Strong') then
+    span.content = {pandoc.Strong(span.content)}
+  end
+  return keep_together(span) or span
+end
+
 function Pandoc(doc)
   if doc.meta['cvw-entry-structure'] ~= true then return nil end
   local selected = doc.meta['cvw-bulleted-entries']
@@ -127,7 +135,7 @@ function Pandoc(doc)
     bulleted[kind] = true
   end
   local transformed = pandoc.walk_block(pandoc.Div(doc.blocks), {
-    Span=keep_together,
+    Span=structure_inline,
     Div=function(div) return structure_entry(div, bulleted) end,
   })
   return pandoc.Pandoc(transformed.content, doc.meta)

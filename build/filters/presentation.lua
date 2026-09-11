@@ -8,7 +8,30 @@ local function simple_list_items(block)
   return block.content
 end
 
+local function date_row(identity, date)
+  local row = {identity}
+  if date then
+    if FORMAT:match('latex') then
+      table.insert(row, pandoc.RawInline('latex', '\\quad\\hfill\\mbox{'))
+      table.insert(row, date)
+      table.insert(row, pandoc.RawInline('latex', '}'))
+    elseif FORMAT == 'docx' then
+      table.insert(row, pandoc.RawInline('openxml', '<w:r><w:tab/></w:r>'))
+      table.insert(row, date)
+    else
+      table.insert(row, pandoc.Space())
+      table.insert(row, date)
+    end
+  end
+  return pandoc.Div({pandoc.Para(row)},
+    pandoc.Attr('', {'entry-heading'}, {['custom-style']='Entry Heading'}))
+end
+
 local function aligned_entry(div, concise, structured)
+  if div.classes:includes('entry-projected-heading') then
+    local row = div.content[1].content
+    return date_row(row[1], row[2])
+  end
   if not (div.classes:includes('section') or div.classes:includes('role')
       or div.classes:includes('teaching-course')) then
     return nil
@@ -88,22 +111,7 @@ local function aligned_entry(div, concise, structured)
     table.insert(identity, pandoc.Space())
     table.insert(identity, location)
   end
-  local row = {pandoc.Span(identity, pandoc.Attr('', {'entry-identity'}))}
-  if date then
-    if FORMAT:match('latex') then
-      table.insert(row, pandoc.RawInline('latex', '\\quad\\hfill\\mbox{'))
-      table.insert(row, date)
-      table.insert(row, pandoc.RawInline('latex', '}'))
-    elseif FORMAT == 'docx' then
-      table.insert(row, pandoc.RawInline('openxml', '<w:r><w:tab/></w:r>'))
-      table.insert(row, date)
-    else
-      table.insert(row, pandoc.Space())
-      table.insert(row, date)
-    end
-  end
-  local heading = pandoc.Div({pandoc.Para(row)},
-    pandoc.Attr('', {'entry-heading'}, {['custom-style']='Entry Heading'}))
+  local heading = date_row(pandoc.Span(identity, pandoc.Attr('', {'entry-identity'})), date)
   local result = {heading}
   if FORMAT:match('latex') then
     if not structured then

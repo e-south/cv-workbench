@@ -52,7 +52,7 @@ def append_teaching_entries(lines: list[str], selected: list[dict[str, Any]]) ->
             evidence = _evidence(item, grouped=grouped)
             if grouped:
                 # Terms remain separate paragraphs and retain their source IDs.
-                metadata = (term, *evidence)
+                metadata = (*entry_metadata(dates=term), *evidence)
             else:
                 metadata = entry_metadata(role, *evidence, dates=term)
             append_entry_text(

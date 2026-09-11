@@ -105,8 +105,17 @@ def load_variant(path: Path) -> Variant:
 def load_variant_snapshot(path: Path) -> VariantSnapshot:
     """Parse and fingerprint one captured variant definition."""
     content = path.read_bytes()
-    variant = parse_variant(yaml.safe_load(content.decode("utf-8")))
+    variant = parse_variant_bytes(content)
     return VariantSnapshot(variant, hashlib.sha256(content).hexdigest())
+
+
+def parse_variant_bytes(content: bytes) -> Variant:
+    """Parse captured input without copying malformed private text into diagnostics."""
+    try:
+        payload = yaml.safe_load(content.decode("utf-8"))
+    except (yaml.YAMLError, UnicodeError) as exc:
+        raise ValueError("Variant is not valid UTF-8 YAML") from exc
+    return parse_variant(payload)
 
 
 def parse_variant(raw: object) -> Variant:
@@ -170,6 +179,8 @@ def _validate_entry_layout(value: object) -> None:
             "placement",
             "label",
             "fields",
+            "date_position",
+            "group_by",
         }:
             raise ValueError(error)
         sources, target = rule.get("sources"), rule.get("target")
@@ -196,6 +207,21 @@ def _validate_entry_layout(value: object) -> None:
         ):
             raise ValueError(error)
         fields = rule.get("fields")
+        if "group_by" in rule and (
+            rule["group_by"] != "series"
+            or rule["placement"] != "section"
+            or "date_position" in rule
+            or (fields is not None and "heading" not in fields)
+            or any(not source.startswith("conference-") for source in sources)
+        ):
+            raise ValueError(error)
+        if "date_position" in rule and (
+            rule["date_position"] != "right"
+            or rule["placement"] != "section"
+            or len(sources) != 1
+            or (fields is not None and "date" not in fields)
+        ):
+            raise ValueError(error)
         if "fields" in rule and (
             not isinstance(fields, list)
             or not fields

@@ -210,6 +210,10 @@ Equal start/end values render once; ISO year-month values render as English mont
 and year. Education labels a start-only date `Started`; an end date alone does
 not assert graduation. Other ongoing entries retain `Present`. Publication titles with a URL
 become literal-label HTTP(S) links using the same destination checks as profiles.
+Optional publication `title_italics` lists exact phrases to italicize in the title,
+including within its link. Keep `title` as ordinary citation text. Source validation
+rejects missing, repeated, or overlapping phrases; the renderer escapes all other
+markup. Use ordinary Markdown emphasis in authored narrative paragraphs.
 
 Variants may set `section_titles`, for example `experience: Research Experience`
 or `skills: Technical Skills`. Keys must name existing semantic sections and
@@ -260,6 +264,13 @@ Requested fields must exist, except unknown dates remain absent. A neighboring
 record never supplies a missing date. Unsupported body structure, duplicate or
 missing references, and targets consumed by another rule fail rendering.
 
+For a standalone `section` projection, set `date_position: right` to use the
+same date alignment as ordinary entries, without parentheses. It requires one
+source with a known date; explicit `fields` must include `date`. Grouped entries
+retain dates in parentheses beside each source so a year cannot be mistaken for
+the whole group's date. The aligned-entry theme supplies the shared HTML row,
+PDF alignment, and native DOCX `Entry Heading` tab stop.
+
 For multiple manuscripts with identical authors, year, and preparation status,
 use `placement: shared_citation` with their publication IDs and the Publications
 section ID. Their source records remain separate. The render shows one citation
@@ -268,6 +279,31 @@ requires complete authorship/year, matching citation structure, explicit
 `in_preparation` status, and no extra notes. It rejects differing metadata and
 cannot omit fields or supply a replacement label. Published papers remain
 individual citations.
+
+Conference records may declare a `series` separately from their meeting `event`.
+The canonical heading retains both; `title` remains the presentation title and
+must not substitute for the meeting topic. A `section` rule with `group_by: series`
+shows contiguous records under one shared conference-family label, retaining
+each topic, date, and source ID. For example:
+
+```yaml
+conferences:
+  - id: cells
+    series: Research Conferences
+    event: Cell Biology
+    year: 2025
+  - id: stress
+    series: Research Conferences
+    event: Stress Responses
+    year: 2024
+```
+
+Use `fields: [heading, date]` with the conference references and a label such as
+`Posters`. Records without a series remain independent items. Topic headings
+cannot be omitted, right-aligned dates cannot be combined with series grouping,
+and repeated series must be contiguous in the explicitly selected source order.
+Grouping is a presentation choice; do not combine unrelated service roles merely
+to save a bullet or turn award-recipient language into an action claim.
 
 The native `entry_projection.lua` filter runs before theme presentation. All
 rendered formats use the same projection; `canonical.md`, `resume.json`, source
@@ -279,6 +315,14 @@ Groups use `.entry-group.cv-entry` and the same PDF `\cvwentryspace` hook as
 ordinary records when entry structure is enabled. Keep responsive date stacking
 scoped to `.entry-heading .entry-date` so dates inside grouped text stay inline.
 Check actual PDF/DOCX wrapping: consolidation does not guarantee fewer lines.
+
+With entry structure enabled, compacted records retain bold identifying labels:
+the role when present, otherwise the heading. A supplied group label provides
+the emphasis instead, and metadata attached to another record stays regular.
+Shared manuscript titles retain the same emphasis as individual publication
+titles. Projection marks these identities with `.entry-label`; the shared
+structure filter applies emphasis across HTML, PDF, and DOCX. Dates and summaries
+are not promoted to labels, and source wording is unchanged.
 
 Verification: `tests/build/test_entry_projection.py` exercises native writers,
 source and review retention, literal metadata labels, and invalid references.
@@ -392,7 +436,10 @@ the individual offerings.
 
 Set theme metadata `cvw-inline-teaching: true` to present adjacent offerings on
 one evidence paragraph under their shared course/role heading. Each term keeps
-its own ID, enrollment, and evaluation; the source still has separate records.
+its own ID, enrollment, and evaluation; displayed terms use parentheses, while
+the source still has separate records. Compact section projections also use
+parenthesized dates and unspaced en dashes for ranges. A projection explicitly
+configured with `date_position: right` retains the aligned date presentation.
 If any offering has narrative or unsupported block content, the whole group
 keeps its expanded layout. With teaching bullets enabled, an inline group uses
 one native bullet for the course and its evidence. Inspect wrapping at the
@@ -400,6 +447,23 @@ selected font size; a single paragraph is not a promise of a single line.
 As with other aligned layouts, DOCX import can produce a review-only diff; apply
 content changes through native source unless the importer explicitly supplies
 an applyable patch.
+
+### Justified prose lists
+
+Themes can set `cvw-justify-lists: [skills, experience]` to style prose lists
+independently of heading/date rows. These are the supported section keys; unknown
+values fail instead of broadening alignment. Skills have a semantic `skills-list`
+container, so styling does not depend on the displayed section title or a person's
+record ID. Experience alignment applies only to its `entry-items` bodies.
+
+`body_alignment.lua` supplies `body-justified`, the optional LaTeX hook
+`\cvwjustifiedlist`, and Word styles `Justified List` / `Justified Entry Bullet`.
+The theme owns justification, hyphenation, paragraph rhythm, and list insets. Base
+the Word styles on the existing list styles with `<w:jc w:val="both"/>`; avoid changing
+the heading style. For LaTeX, a local alignment macro can change list alignment
+without resetting the existing `enumitem` geometry. In HTML, keep the final line
+left aligned and consider a left-aligned fallback on narrow screens. Inspect real
+wrapping and word spacing; justification alone cannot guarantee no short last line.
 
 An explicitly published paper with a journal/venue omits the redundant
 `Published` display label. Without a venue the label remains; manuscripts in

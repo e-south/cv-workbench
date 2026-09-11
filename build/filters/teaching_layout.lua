@@ -13,7 +13,17 @@ function Pandoc(doc)
         table.insert(terms, pandoc.Str(';'))
         table.insert(terms, pandoc.Space())
       end
-      table.insert(terms, pandoc.Span(term.content[1].content, term.attr))
+      local evidence = pandoc.walk_inline(pandoc.Span(term.content[1].content, term.attr), {
+        Span=function(span)
+          if not span.classes:includes('entry-date') then return nil end
+          local dated = {pandoc.Str('(')}
+          for _, inline in ipairs(span.content) do table.insert(dated, inline) end
+          table.insert(dated, pandoc.Str(')'))
+          span.content = dated
+          return span
+        end
+      })
+      table.insert(terms, evidence)
     end
     div.content = {div.content[1], div.content[2], pandoc.Para(terms)}
     div.classes:insert('teaching-inline')

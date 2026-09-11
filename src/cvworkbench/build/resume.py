@@ -310,6 +310,7 @@ def _build_conferences_meta(raw: Any) -> list[dict[str, Any]]:
             continue
         record = {
             "title": _text(entry.get("title")),
+            "series": _text(entry.get("series")),
             "event": _text(entry.get("event")),
             "year": _date_text(entry.get("year")),
             "location": _text(entry.get("location")),
