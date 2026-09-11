@@ -233,6 +233,16 @@ with HTML entry margins and the DOCX `Entry Heading` style, rather than insertin
 blank source paragraphs. Name alignment belongs to each theme's top-level heading
 style; contact alignment is independent.
 
+With concise entries enabled, education paragraphs are grouped in
+`.education-details`, using the DOCX `Education Details` paragraph style.
+This keeps degree, advisor, and thesis paragraphs available for separate styling.
+To remove extra paragraph space within each degree while preserving entry gaps,
+style `.education-details p` in HTML, set paragraph spacing in `Education Details`
+for DOCX, and define `\cvweducationdetails` in the PDF theme (for example,
+`\newcommand{\cvweducationdetails}{\setlength{\parskip}{0pt}}`). The PDF hook is
+scoped to the education details; it does not alter subsequent paragraphs. An
+undefined hook preserves the surrounding theme's paragraph spacing.
+
 This option takes precedence over `cvw-compact-entries` for semantic entries;
 unaligned legacy entries retain the existing compact behavior. Disable compact
 entries when publication titles and full author lists need separate paragraphs.

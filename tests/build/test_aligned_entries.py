@@ -85,6 +85,48 @@ def test_aligned_role_preserves_inline_identity_and_literal_content():
     assert "Measured a response." in "".join(tree.itertext())
 
 
+def test_education_details_spacing_is_scoped_to_the_entry(tmp_path):
+    source = education_markdown({"start": "2020-09"}) + "\nAfter education.\n\nNormal paragraph.\n"
+    gaps = []
+    for tight in (False, True):
+        header = tmp_path / f"details-{tight}.tex"
+        tex = r"\setlength{\parskip}{8pt}"
+        if tight:
+            tex += r"\newcommand{\cvweducationdetails}{\setlength{\parskip}{0pt}}"
+        header.write_text(tex)
+        target = tmp_path / f"details-{tight}.pdf"
+        subprocess.run(
+            [
+                "pandoc",
+                "--pdf-engine=xelatex",
+                "--lua-filter",
+                str(FILTER),
+                "-M",
+                "cvw-aligned-entries=true",
+                "-M",
+                "cvw-concise-entries=true",
+                "-H",
+                str(header),
+                "-o",
+                str(target),
+            ],
+            input=source,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        with pymupdf.open(target) as pdf:
+            page = pdf[0]
+            degree = page.search_for("PhD Candidate")[0]
+            advisor = page.search_for("Advisors:")[0]
+            after = page.search_for("After education.")[0]
+            normal = page.search_for("Normal paragraph.")[0]
+            assert "cellular regulation" in page.get_text()
+            gaps.append((advisor.y0 - degree.y0, normal.y0 - after.y0))
+    assert 7 < gaps[0][0] - gaps[1][0] < 9
+    assert abs(gaps[0][1] - gaps[1][1]) < 0.1
+
+
 def education_markdown(dates):
     variant = parse_variant({"variant": {"id": "test", "outputs": ["md"], "order": ["education"]}})
     return build_markdown(
@@ -146,7 +188,8 @@ def test_aligned_education_retains_detail_lines_and_optional_dates(dates):
     assert len(date_spans) == bool(dates)
 
 
-def test_aligned_docx_uses_a_tab_without_layout_tables(tmp_path):
+@pytest.mark.parametrize("concise", [False, True])
+def test_aligned_docx_uses_a_tab_without_layout_tables(tmp_path, concise):
     target = tmp_path / "education.docx"
     subprocess.run(
         [
@@ -159,6 +202,8 @@ def test_aligned_docx_uses_a_tab_without_layout_tables(tmp_path):
             str(FILTER),
             "-M",
             "cvw-aligned-entries=true",
+            "-M",
+            f"cvw-concise-entries={str(concise).lower()}",
         ],
         input=education_markdown({"start": "2020-09"}),
         text=True,
@@ -177,6 +222,17 @@ def test_aligned_docx_uses_a_tab_without_layout_tables(tmp_path):
     assert heading.find(".//w:tab", ns) is not None
     assert heading.find("w:pPr/w:pStyle", ns).get(f"{{{ns['w']}}}val") == "EntryHeading"
     assert "Started Sept. 2020" in "".join(heading.itertext()).replace("\xa0", " ")
+    detail_paragraphs = [
+        p
+        for p in tree.findall(".//w:body/w:p", ns)
+        if any(text in "".join(p.itertext()) for text in ("PhD Candidate", "Advisors:", "Thesis:"))
+    ]
+    assert len(detail_paragraphs) == 3
+    if concise:
+        assert all(
+            p.find("w:pPr/w:pStyle", ns).get(f"{{{ns['w']}}}val") == "EducationDetails"
+            for p in detail_paragraphs
+        )
 
 
 def test_native_build_uses_packaged_alignment_and_retains_manuscript_status(sample_workspace):

@@ -128,7 +128,9 @@ def test_concise_education_keeps_advisors_and_thesis_separate_from_short_highlig
         }
     }
     entry = render_entries(source).find(".//*[@id='education-degree']")
-    assert ["".join(p.itertext()) for p in entry.findall("p")] == [
+    details = entry.find(".//*[@class='education-details']")
+    assert details.attrib["data-custom-style"] == "Education Details"
+    assert ["".join(p.itertext()) for p in details.findall("p")] == [
         "MSc - Biology; GPA: 3.8; Distinction",
         "Advisors: A. Mentor",
         "Thesis: “Cellular regulation”",

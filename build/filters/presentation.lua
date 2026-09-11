@@ -109,6 +109,7 @@ local function aligned_entry(div, concise)
     table.insert(result, 1, pandoc.RawBlock('latex', '\\ifdefined\\cvwentryspace\\cvwentryspace\\fi'))
     table.insert(result, pandoc.RawBlock('latex', '\\nopagebreak[4]'))
   end
+  local detail_start = #result + 1
   if #details > 0 then
     local text = {}
     for _, detail in ipairs(details) do
@@ -125,6 +126,18 @@ local function aligned_entry(div, concise)
     end
   end
   for index = 3, last_block do table.insert(result, blocks[index]) end
+  if concise and div.identifier:match('^education%-') and #result >= detail_start then
+    local body = {}
+    for index = detail_start, #result do table.insert(body, result[index]) end
+    for index = #result, detail_start, -1 do table.remove(result, index) end
+    if FORMAT:match('latex') then
+      table.insert(body, 1, pandoc.RawBlock('latex',
+        '\\begingroup\\ifdefined\\cvweducationdetails\\cvweducationdetails\\fi'))
+      table.insert(body, pandoc.RawBlock('latex', '\\par\\endgroup'))
+    end
+    table.insert(result, pandoc.Div(body,
+      pandoc.Attr('', {'education-details'}, {['custom-style']='Education Details'})))
+  end
   div.content = result
   return div
 end
