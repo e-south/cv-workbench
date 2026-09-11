@@ -387,7 +387,15 @@ def _build_publications(
             continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
-        div_attr = _format_div_attributes(f"publication-{entry_id}", ["section", *tag_list])
+        status = item.get("status", "published")
+        if status not in {"published", "in_preparation"}:
+            raise ValueError(f"Unsupported publication status: {status}")
+        publication_classes = ["section", *tag_list]
+        if status == "in_preparation":
+            publication_classes.append("publication-in-preparation")
+            if _format_authors(item.get("authors")) and _date_string(item.get("year")):
+                publication_classes.append("publication-citation-complete")
+        div_attr = _format_div_attributes(f"publication-{entry_id}", publication_classes)
         lines.append(f"::: {div_attr}")
 
         title = _string(item.get("title"))
@@ -400,9 +408,6 @@ def _build_publications(
         authors_text = _format_authors(item.get("authors"))
         venue_line = _format_publication_venue(item)
         notes = _string(item.get("notes"))
-        status = item.get("status", "published")
-        if status not in {"published", "in_preparation"}:
-            raise ValueError(f"Unsupported publication status: {status}")
         status_text = "Manuscript in preparation" if status == "in_preparation" else ""
         if status == "published" and "status" in item and not _string(item.get("venue")):
             status_text = "Published"

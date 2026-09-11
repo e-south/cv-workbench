@@ -224,6 +224,65 @@ Use this to present service and conference records together without moving
 conference facts into the service collection. An intervening visible section
 starts a new heading, even if a later section repeats the same title.
 
+### Referenced record layout
+
+Use `variant.render.entry_layout` when one document should place recognition
+beside a related role or group short activities. References use selected record
+IDs from `canonical.md`; section targets use Pandoc heading IDs.
+
+```yaml
+variant:
+  render:
+    entry_layout:
+      - sources: [honor-research-award]
+        target: role-researcher
+        placement: details
+        fields: [heading]
+      - sources: [service-rotations, service-project-team]
+        target: teaching-mentoring
+        placement: section
+        label: Research mentoring
+        fields: [summary, date]
+```
+
+`details` appends to a role or degree's semantic detail line. `section` creates
+one native bullet at the first source's position when it belongs to that section,
+or at the destination section's end otherwise. Labels are literal text. Each
+consumed record keeps its ID on a span; unrelated prose remains in place, and
+empty sections disappear. There are no layout tables or copied source records.
+
+By default, simple service, honor, and conference records retain all metadata
+and their summary. Optional `fields` chooses and orders `heading`, `role`,
+`issuer`, `location`, `detail`, `date`, or `summary` for this presentation only.
+Use it to avoid repeating a role or organization already clear from context;
+review responsibility, scope, recognition, and attribution after any omission.
+Requested fields must exist, except unknown dates remain absent. A neighboring
+record never supplies a missing date. Unsupported body structure, duplicate or
+missing references, and targets consumed by another rule fail rendering.
+
+For multiple manuscripts with identical authors, year, and preparation status,
+use `placement: shared_citation` with their publication IDs and the Publications
+section ID. Their source records remain separate. The render shows one citation
+followed by all titles as bullets, preserving title links and record IDs. This
+requires complete authorship/year, matching citation structure, explicit
+`in_preparation` status, and no extra notes. It rejects differing metadata and
+cannot omit fields or supply a replacement label. Published papers remain
+individual citations.
+
+The native `entry_projection.lua` filter runs before theme presentation. All
+rendered formats use the same projection; `canonical.md`, `resume.json`, source
+selection, and source files retain the original records. Variant catalogs and
+manifests record the layout rules. DOCX review of a changed presentation remains
+a review diff, without manufacturing source edits from regrouped text.
+
+Groups use `.entry-group.cv-entry` and the same PDF `\cvwentryspace` hook as
+ordinary records when entry structure is enabled. Keep responsive date stacking
+scoped to `.entry-heading .entry-date` so dates inside grouped text stay inline.
+Check actual PDF/DOCX wrapping: consolidation does not guarantee fewer lines.
+
+Verification: `tests/build/test_entry_projection.py` exercises native writers,
+source and review retention, literal metadata labels, and invalid references.
+
 ### Deliberate page starts
 
 Set `variant.render.page_break_before` to a list of Pandoc heading IDs for a

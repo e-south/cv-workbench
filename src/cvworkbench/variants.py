@@ -40,9 +40,11 @@ class Variant:
     contact_fields: list[str] = field(default_factory=lambda: list(CONTACT_FIELDS))
     section_titles: dict[str, str] = field(default_factory=dict)
     render_page_break_before: list[str] = field(default_factory=list)
+    render_entry_layout: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         validate_variant_id(self.id)
+        _validate_entry_layout(self.render_entry_layout)
         starts = self.render_page_break_before
         if (
             not isinstance(starts, list)
@@ -150,7 +152,72 @@ def parse_variant(raw: object) -> Variant:
         contact_fields=contact_fields,
         section_titles=_section_titles(variant_data.get("section_titles")),
         render_page_break_before=render_data.get("page_break_before", []) if render_data else [],
+        render_entry_layout=render_data.get("entry_layout", []) if render_data else [],
     )
+
+
+def _validate_entry_layout(value: object) -> None:
+    """Validate presentation references; selected-record existence is checked by Pandoc."""
+    error = "Variant render.entry_layout must contain valid, nonoverlapping record references"
+    if not isinstance(value, list):
+        raise ValueError(error)
+    consumed: set[str] = set()
+    targets: set[str] = set()
+    for rule in value:
+        if not isinstance(rule, dict) or set(rule) - {
+            "sources",
+            "target",
+            "placement",
+            "label",
+            "fields",
+        }:
+            raise ValueError(error)
+        sources, target = rule.get("sources"), rule.get("target")
+        if not isinstance(sources, list) or not sources:
+            raise ValueError(error)
+        for identity in [*sources, target]:
+            if (
+                not isinstance(identity, str)
+                or re.fullmatch(r"[A-Za-z][A-Za-z0-9._-]*", identity) is None
+            ):
+                raise ValueError(error)
+        if len(set(sources)) != len(sources) or consumed.intersection(sources):
+            raise ValueError(error)
+        consumed.update(sources)
+        targets.add(target)
+        if not isinstance(rule.get("placement"), str) or rule["placement"] not in {
+            "details",
+            "section",
+            "shared_citation",
+        }:
+            raise ValueError(error)
+        if rule["placement"] == "shared_citation" and (
+            len(sources) < 2 or "fields" in rule or "label" in rule
+        ):
+            raise ValueError(error)
+        fields = rule.get("fields")
+        if "fields" in rule and (
+            not isinstance(fields, list)
+            or not fields
+            or any(
+                not isinstance(name, str)
+                or name
+                not in {"heading", "role", "issuer", "location", "detail", "date", "summary"}
+                for name in fields
+            )
+            or len(set(fields)) != len(fields)
+        ):
+            raise ValueError(error)
+        label = rule.get("label")
+        if "label" in rule and (
+            rule["placement"] != "section"
+            or not isinstance(label, str)
+            or not label.strip()
+            or any(ord(char) < 32 or ord(char) == 127 for char in label)
+        ):
+            raise ValueError(error)
+    if consumed.intersection(targets):
+        raise ValueError(error)
 
 
 def _section_titles(value: object) -> dict[str, str]:
@@ -263,6 +330,7 @@ def load_variants_from_config(config_path: Path) -> list[dict[str, Any]]:
                 "render_theme": variant.render_theme,
                 "render_style_preset": variant.render_style_preset,
                 "render_page_break_before": list(variant.render_page_break_before),
+                "render_entry_layout": list(variant.render_entry_layout),
                 "max_bullets_per_role": variant.max_bullets_per_role,
                 "section_titles": dict(variant.section_titles),
                 "path": str(path),

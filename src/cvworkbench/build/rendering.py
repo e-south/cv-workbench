@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import os
+import string
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +21,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Sequence
+
+import yaml
 
 from cvworkbench.build.docx import validate_docx
 from cvworkbench.themes import RenderPlan
@@ -104,10 +107,33 @@ def _render_document(
         metadata["max_bullets_per_role"] = variant.max_bullets_per_role
     if variant.render_page_break_before:
         metadata["cvw-page-break-before"] = variant.render_page_break_before
+    if variant.render_entry_layout:
+        # Pandoc reads metadata strings as Markdown. Keep labels literal and do
+        # not mutate the variant snapshot used by the manifest.
+        metadata["cvw-entry-layout"] = [
+            {
+                **rule,
+                **(
+                    {
+                        "label": "".join(
+                            f"\\{char}" if char in string.punctuation else char
+                            for char in rule["label"]
+                        )
+                    }
+                    if "label" in rule
+                    else {}
+                ),
+            }
+            for rule in variant.render_entry_layout
+        ]
 
     resolved_filter_paths = (
         tuple(filter_paths) if filter_paths is not None else resolve_filter_paths(filters_dir)
     )
+    if variant.render_entry_layout and not any(
+        path.name == "entry_projection.lua" for path in resolved_filter_paths
+    ):
+        raise RenderError("Requested entry_layout requires entry_projection.lua")
     args = [
         resolved_pandoc_path,
         "--from",
@@ -139,13 +165,7 @@ def _render_document(
         args.extend(["--lua-filter", str(filter_path)])
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as handle:
-        for key, value in metadata.items():
-            handle.write(f"{key}:\n")
-            if isinstance(value, list):
-                for item in value:
-                    handle.write(f"  - {item}\n")
-            else:
-                handle.write(f"  {value}\n")
+        yaml.safe_dump(metadata, handle, sort_keys=False, allow_unicode=True)
         metadata_path = Path(handle.name)
 
     args.extend(["--metadata-file", str(metadata_path), str(input_path)])
@@ -237,6 +257,7 @@ def resolve_filter_paths(filters_dir: Path) -> tuple[Path, ...]:
             filters_dir / "author_roles.lua",
             filters_dir / "limits.lua",
             filters_dir / "teaching_layout.lua",
+            filters_dir / "entry_projection.lua",
             filters_dir / "presentation.lua",
             filters_dir / "entry_structure.lua",
             filters_dir / "page_breaks.lua",

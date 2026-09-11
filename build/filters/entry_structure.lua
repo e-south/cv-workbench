@@ -21,6 +21,13 @@ local function entry_details(blocks)
 end
 
 local function structure_entry(div, bulleted)
+  if div.classes:includes('entry-group') then
+    div.classes:insert('cv-entry')
+    if FORMAT:match('latex') then
+      div.content:insert(1, pandoc.RawBlock('latex', '\\ifdefined\\cvwentryspace\\cvwentryspace\\fi'))
+    end
+    return div
+  end
   local kind = entry_kind(div)
   if not kind then return nil end
   local blocks = div.content

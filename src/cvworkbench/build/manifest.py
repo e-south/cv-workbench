@@ -93,6 +93,7 @@ def build_manifest(
             "order": list(variant.order),
             "section_titles": dict(variant.section_titles),
             "page_break_before": list(variant.render_page_break_before),
+            "entry_layout": list(variant.render_entry_layout),
         },
         "formats": list(formats),
         "outputs": {fmt: output_paths[fmt].name for fmt in formats if fmt in output_paths},
