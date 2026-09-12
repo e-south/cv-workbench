@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -39,15 +40,14 @@ def bootstrap_sample_workspace_recipe(
                     workspace_root=workspace_root,
                 ),
                 "description": (
-                    "Create or update the local scaffold so config/workbench.yaml "
-                    "points at ./sot.sample."
+                    "Create missing scaffold files; retain any existing source configuration."
                 ),
             },
             {
                 "command": recipe_command(
                     "context --json",
                     config_path=config_path,
-                    sot_path=None,
+                    sot_path=sample_sot_path,
                     configured_sot_path=configured_sot_path,
                 ),
                 "description": "Confirm the workspace now resolves the sample SoT.",
@@ -56,17 +56,17 @@ def bootstrap_sample_workspace_recipe(
                 "command": recipe_command(
                     f"build --variant {variant_label} --format md,pdf",
                     config_path=config_path,
-                    sot_path=None,
+                    sot_path=sample_sot_path,
                     configured_sot_path=configured_sot_path,
                 ),
                 "description": (
-                    "Build using the configured sample SoT without passing --sot-path."
+                    "Build using the explicit sample SoT without changing the private source selection."
                 ),
             },
         ],
         "outputs": [
-            "config/workbench.yaml",
-            "sot.sample/",
+            str(config_path),
+            str(sample_sot_path),
             "var/dist/<variant>/cv.md",
             "var/runs/<run-id>/manifest.json",
         ],
@@ -148,7 +148,7 @@ def repair_sot_path_recipe(*, config_path: Path, configured_sot_path: str | None
                 ),
             },
             {
-                "command": "edit config/workbench.yaml",
+                "command": shlex.join(["edit", str(config_path)]),
                 "description": (
                     "Set paths.sot to the correct relative SoT path, or keep using --sot-path explicitly."
                 ),
@@ -165,7 +165,7 @@ def repair_sot_path_recipe(*, config_path: Path, configured_sot_path: str | None
         ],
         "outputs": [
             "validated SoT path",
-            "config/workbench.yaml",
+            str(config_path),
             "context payload (JSON)",
         ],
         "stop_conditions": [

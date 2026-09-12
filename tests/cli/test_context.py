@@ -310,7 +310,7 @@ def test_context_recipe_steps_expose_machine_actionable_metadata(tmp_path: Path)
     review_edit_step = review_recipe["steps"][1]
     assert review_edit_step["kind"] == "manual"
     assert review_edit_step["runnable"] is False
-    assert review_edit_step["placeholders"] == ["<variant>"]
+    assert review_edit_step["placeholders"] == []
 
 
 def test_bootstrap_json_matches_compact_context_payload(tmp_path: Path) -> None:
@@ -638,11 +638,13 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         config_path=config_path,
     )
     assert review_recipe["steps"][2]["command"] == _recipe_command(
-        "import-docx --from var/reviews/base/cv.docx --variant base",
+        f"import-docx --from {shlex.quote(str(tmp_path / 'var/reviews/base/cv.docx'))} --variant base",
         config_path=config_path,
     )
-    assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
-    assert "var/drafts/import-*/draft.json" in review_recipe["outputs"]
+    assert review_recipe["steps"][3]["command"] == shlex.join(
+        ["edit", str(tmp_path / "var/drafts/import-*/notes.md")]
+    )
+    assert str(tmp_path / "var/drafts/import-*/draft.json") in review_recipe["outputs"]
     assert review_recipe["steps"][4]["command"] == _recipe_command(
         "apply --draft <draft-dir>",
         sot_path=sot_path,
@@ -846,11 +848,13 @@ def test_context_recipes_preserve_external_config_for_review_and_project(tmp_pat
         config_path=config_path,
     )
     assert review_recipe["steps"][2]["command"] == _recipe_command(
-        "import-docx --from var/reviews/base/cv.docx --variant base",
+        f"import-docx --from {shlex.quote(str(tmp_path / 'var/reviews/base/cv.docx'))} --variant base",
         config_path=config_path,
     )
-    assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
-    assert "var/drafts/import-*/draft.json" in review_recipe["outputs"]
+    assert review_recipe["steps"][3]["command"] == shlex.join(
+        ["edit", str(tmp_path / "var/drafts/import-*/notes.md")]
+    )
+    assert str(tmp_path / "var/drafts/import-*/draft.json") in review_recipe["outputs"]
     assert review_recipe["steps"][4]["command"] == _recipe_command(
         "apply --draft <draft-dir>",
         sot_path=sot_path,

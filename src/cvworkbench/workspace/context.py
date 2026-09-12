@@ -249,7 +249,7 @@ def inspect_workspace(
     recipe_configured_sot = None if sot_path is not None else shared.configured_sot
 
     recipes = build_context_recipes(
-        config_path=shared.config_path,
+        config_path=shared.configuration,
         workspace_root=resolve_project_root(shared.configuration),
         sot_path=recipe_sot_path,
         configured_sot_path=recipe_configured_sot,

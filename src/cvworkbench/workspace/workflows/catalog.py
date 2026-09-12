@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from cvworkbench.config import ConfigSource, read_config, resolve_drafts_path, resolve_reviews_path
 from cvworkbench.workspace.source import is_local_scaffold_sot
 from cvworkbench.workspace.workflows.build import (
     automation_verify_recipe,
@@ -37,7 +38,7 @@ from cvworkbench.workspace.workflows.steps import finalize_recipe_steps
 
 def build_context_recipes(
     *,
-    config_path: Path,
+    config_path: ConfigSource,
     workspace_root: Path,
     sot_path: Path | None,
     configured_sot_path: str | None,
@@ -45,6 +46,8 @@ def build_context_recipes(
     sample_sot_path: Path | None,
     default_variant: str | None,
 ) -> list[dict[str, Any]]:
+    configuration = read_config(config_path)
+    config_path = configuration.path
     variant_label = default_variant or "<variant-id>"
     project_label = "<project-id>"
     recipes: list[dict[str, Any]] = []
@@ -97,6 +100,8 @@ def build_context_recipes(
             ),
             review_import_recipe(
                 config_path=config_path,
+                reviews_path=resolve_reviews_path(configuration),
+                drafts_path=resolve_drafts_path(configuration),
                 sot_path=sot_path,
                 configured_sot_path=configured_sot_path,
                 variant_label=variant_label,

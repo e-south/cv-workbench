@@ -198,3 +198,8 @@ Recipe ordering prioritizes:
 
 `uv run cvw context --strict` fails fast if required inputs are missing or invalid.
 Use this when automation depends on a valid SoT.
+
+Source recovery recipes preserve the selected configuration: sample builds pass
+its explicit `--sot-path`, and manual repair names the inspected config file.
+Review/import recipes resolve review and draft stores from the same captured
+configuration used by context, including paths outside the checkout.
