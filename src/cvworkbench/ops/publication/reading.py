@@ -41,6 +41,11 @@ class ReadingParser(HTMLParser):
                 raise PublicPdfError("Public HTML link is not declared by its native build")
             safe += f' href="{html.escape(href, quote=True)}"'
         classes = (attributes.get("class") or "").split()
+        if re.search(
+            r"(?:^|;)\s*break-before\s*:\s*page\s*(?:;|$)", attributes.get("style") or "", re.I
+        ):
+            if "cv-page-break-before" not in classes:
+                classes.append("cv-page-break-before")
         if any(not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]{0,80}", item) for item in classes):
             raise PublicPdfError("Public HTML contains an invalid layout class")
         if classes:
@@ -91,6 +96,7 @@ def build_reading_html(
     if parser.stack or parser.in_head:
         raise PublicPdfError("Public HTML structure is incomplete")
     css = "\n".join(parser.styles) + "\n" + stylesheet.decode("utf-8")
+    css += "\n.cv-page-break-before{break-before:page}\n"
     if re.search(r"[<\\]|url\s*\(|expression\s*\(|@(?:import|font-face|namespace)", css, re.I):
         raise PublicPdfError("Public HTML stylesheet must be passive and self-contained")
     for value in ("".join(parser.text), css):

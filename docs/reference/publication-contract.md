@@ -61,7 +61,9 @@ rendering path as the workbench preview. A PDF-only run has no reading view.
 emphasis, and approved HTTPS/email links. It strips unrelated attributes and
 head metadata, rejects active/embedded content and network-dependent CSS, and
 applies the shared contact/section disclosure checks to text and styles. The
-result is a self-contained UTF-8 HTML document with its captured theme.
+result is a self-contained UTF-8 HTML document with its captured theme. Native
+`break-before: page` declarations become the semantic `cv-page-break-before`
+class; consumers may separate pages there without guessing section names.
 
 The optional `reading_html` descriptor records its filename and SHA-256 separately
 from the primary PDF output. Preparation stores identical HTML in the review

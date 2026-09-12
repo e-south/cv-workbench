@@ -77,3 +77,11 @@ def test_reading_rejects_external_or_private_styles(tmp_path, css):
             variant=load_variant(variant),
             publish=load_publish_config(policy),
         )
+
+
+def test_reading_preserves_declared_native_page_boundary(tmp_path):
+    result = render(
+        tmp_path,
+        '<h1>Example</h1><p>First page</p><h2 style="break-before: page">Training</h2><p>Second page</p>',
+    )
+    assert '<h2 class="cv-page-break-before">Training</h2>' in result
