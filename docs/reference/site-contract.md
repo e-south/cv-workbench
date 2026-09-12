@@ -16,7 +16,11 @@ Default sync expects a site repository with:
 - `src/content/page-cv/cv.md` (frontmatter references the PDF)
 
 The site owns presentation only. It must not copy canonical CV Markdown or
-re-render a second HTML CV. The workbench owns selection, authored-artifact
+re-render a second HTML CV. An optional `site.cv_html_name` selects a
+workbench-prepared self-contained native HTML reading document beside the PDF. The filename must be a
+single distinct `.html` filename; it requires a reviewed native preparation.
+The sanitized site manifest adds `html_path` and `html_sha256`. The site must
+validate that digest and passive markup before embedding it. The workbench owns selection, authored-artifact
 preparation, disclosure policy, and artifact provenance.
 
 Native builds use `cvw publication prepare --run <run-directory>`; authored
@@ -58,7 +62,7 @@ an explicit policy path, it resolves `publish.yaml` beside the workbench config;
 a missing file fails before any site write. Sync also recomputes the actual PDF
 rectangle fingerprint, rather than relying on its declaration in the manifest.
 
-Sync copies only the PDF, updates its configured page-frontmatter path, and
+Sync copies the PDF and explicitly configured reading HTML, updates its configured page-frontmatter path, and
 writes a sanitized manifest containing the public path, artifact hash, variant,
 and disclosure policy. Source paths, SoT hashes, and private content never cross
 the site boundary.
@@ -74,7 +78,7 @@ operation; it does not lock source files or configuration against other writers.
 
 All changed outputs are staged before replacement. If any replacement fails,
 sync restores every previously replaced artifact before returning an error, so
-the PDF, frontmatter, and manifest cannot remain at mixed generations.
+the PDF, reading HTML, frontmatter, and manifest cannot remain at mixed generations.
 
 If filesystem errors prevent rollback itself, the command reports an incomplete
 rollback and retains the affected backup files at the paths in the error. Stop

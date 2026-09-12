@@ -33,6 +33,9 @@ class PublicArtifact:
     content: bytes = field(repr=False)
     sha256: str
     allowed_links: frozenset[str] | None = None
+    reading_source: Path | None = None
+    reading_content: bytes | None = field(default=None, repr=False)
+    reading_sha256: str | None = None
 
 
 def validate_publish_policy(variant: Variant, publish: PublishConfig) -> None:
@@ -113,4 +116,21 @@ def read_public_artifact(
         if isinstance(manifest, NativePublicationManifest)
         else None
     )
-    return PublicArtifact(source=source_pdf, content=content, sha256=pdf_hash, allowed_links=links)
+    reading_source, reading_content, reading_sha = None, None, None
+    if isinstance(manifest, NativePublicationManifest) and manifest.reading_html is not None:
+        reading_source = source_pdf.parent / manifest.reading_html.name
+        if reading_source.is_symlink() or not reading_source.is_file():
+            raise PublicationArtifactError("Public reading view must be a regular file")
+        reading_content = reading_source.read_bytes()
+        reading_sha = hashlib.sha256(reading_content).hexdigest()
+        if reading_sha != manifest.reading_html.sha256:
+            raise PublicationArtifactError("Public reading view hash does not match its manifest")
+    return PublicArtifact(
+        source=source_pdf,
+        content=content,
+        sha256=pdf_hash,
+        allowed_links=links,
+        reading_source=reading_source,
+        reading_content=reading_content,
+        reading_sha256=reading_sha,
+    )

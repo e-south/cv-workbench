@@ -26,11 +26,17 @@ class PublicationReviewError(RuntimeError):
     pass
 
 
-def publication_review_files(pdf_bytes: bytes) -> dict[str, bytes]:
+def publication_review_files(
+    pdf_bytes: bytes, *, reading_html: bytes | None = None
+) -> dict[str, bytes]:
     """Return a self-contained review packet without private source metadata."""
 
     pdf_hash = hashlib.sha256(pdf_bytes).hexdigest()
     files = {"cv.pdf": pdf_bytes}
+    reading_link = ""
+    if reading_html is not None:
+        files["reading.html"] = reading_html
+        reading_link = ' · <a href="reading.html">Read native HTML</a>'
     pages = []
     figures = []
     with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
@@ -95,7 +101,7 @@ def publication_review_files(pdf_bytes: bytes) -> dict[str, bytes]:
         "code{overflow-wrap:anywhere;font-size:.8rem}</style><main>"
         "<h1>Public CV review</h1><p><strong>Review this PDF.</strong> "
         "Check header alignment, contact spacing, line wraps and page breaks before sync.</p>"
-        '<p><a href="cv.pdf">Open PDF</a> · <a href="review.json">Review measurements</a></p>'
+        f'<p><a href="cv.pdf">Open PDF</a> · <a href="review.json">Review measurements</a>{reading_link}</p>'
         "<p>This packet preserves review evidence. Use <code>cvw publication status</code> "
         "in the workbench to check current freshness and recorded review.</p>"
         f"<p>PDF SHA-256: <code>{pdf_hash}</code></p>" + "".join(figures) + "</main></html>\n"

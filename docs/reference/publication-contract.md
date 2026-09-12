@@ -45,10 +45,34 @@ files or changing active source selection also requires rebuilding/preparing.
 
 The `native.publish` recipe appears for recorded native preparations. Status,
 review, and sync verify native provenance against current inputs, including the
-Markdown link declarations. Only the PDF and smaller sanitized site manifest
+Markdown link declarations. Only the PDF, optional prepared reading HTML, and smaller sanitized site manifest
 cross the site boundary; source manifests, link attestations, and private
 preparation/receipt files do not. See `tests/ops/publication/test_native.py` and
 the [publication guide](../howto/publish-site.md#native-source-builds).
+
+## Native HTML reading view
+
+When the explicit native run includes HTML, preparation captures that completed
+output and its manifest-hashed CSS. It never reconverts intermediate Markdown:
+contact rows, entry projections, typography, and spacing come from the same
+rendering path as the workbench preview. A PDF-only run has no reading view.
+
+`reading.py` preserves native heading/list structure, layout classes, scientific
+emphasis, and approved HTTPS/email links. It strips unrelated attributes and
+head metadata, rejects active/embedded content and network-dependent CSS, and
+applies the shared contact/section disclosure checks to text and styles. The
+result is a self-contained UTF-8 HTML document with its captured theme.
+
+The optional `reading_html` descriptor records its filename and SHA-256 separately
+from the primary PDF output. Preparation stores identical HTML in the review
+packet; review and sync bind its hash to the preparation receipt. Changing the
+native HTML, its stylesheet, or the prepared document invalidates review.
+
+A site opts in through `site.cv_html_name` and receives reviewed HTML plus its
+sanitized path/hash. The consumer may scope that completed theme within its page;
+it must not reconstruct entry layout or compile Markdown. Inspect both native
+HTML and PDF before recording review. This does not add PDF structure tags or
+establish PDF/UA conformance. Authored DOCX/PDF preparation does not infer HTML.
 
 ## Authored source pair
 
@@ -139,7 +163,7 @@ Sync requires current inputs and a matching receipt in addition to the existing
 disclosure, fidelity, manifest and destination checks. It fails before any site
 write when preparation is stale, missing or unreviewed. A reviewed state means
 the local artifact is eligible for the sync checks; it does not claim that the
-site has already been updated. Only the PDF and sanitized site manifest cross
+site has already been updated. Only the PDF, optional prepared reading HTML, and sanitized site manifest cross
 that boundary.
 
 Older prepared artifacts without a preparation record must be prepared again

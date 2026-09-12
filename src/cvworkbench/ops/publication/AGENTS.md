@@ -6,6 +6,7 @@
   their preparation. See the contract's native-build section. Do not relabel
   generated PDFs as Word exports or infer the newest run as publication authority.
 - `pdf.py` owns sanitization and layout correspondence; `policy.py` owns disclosure policy loading; `manifest.py` owns authored provenance schemas/serialization; `artifact.py` owns manifest eligibility and immutable artifact reads.
+- `reading.py` owns passive native HTML and reuses the shared text disclosure policy; the site never compiles private Markdown.
 - `object_text.py` decodes PDF object strings for the shared disclosure checks;
   see [non-page disclosure](../../../../docs/reference/publication-contract.md#non-page-disclosure).
   Keep object decoding separate from policy decisions and page redaction.

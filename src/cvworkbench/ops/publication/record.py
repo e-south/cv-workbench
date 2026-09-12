@@ -103,6 +103,8 @@ class NativePreparationRecord(_PreparationRecord):
     configuration: FileStamp
     run_manifest: FileStamp
     rendered_markdown: FileStamp
+    rendered_html: FileStamp | None = None
+    html_stylesheet: FileStamp | None = None
     source_files: dict[str, FileStamp]
 
 

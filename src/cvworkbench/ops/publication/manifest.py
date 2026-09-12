@@ -118,10 +118,24 @@ class NativeTransformation(_ManifestFields):
     redaction_count: Annotated[int, Field(ge=0, le=0)]
 
 
+class ReadingHtml(_ManifestFields):
+    name: str
+    sha256: Digest
+
+    @field_validator("name")
+    @classmethod
+    def html_filename(cls, value: str) -> str:
+        value = _filename(value)
+        if Path(value).suffix != ".html":
+            raise ValueError("Reading view requires an HTML filename")
+        return value
+
+
 class NativePublicationManifest(_PublicationManifest):
     artifact_kind: Literal["native-pdf-publication"]
     source: NativeSource
     transformation: NativeTransformation
+    reading_html: ReadingHtml | None = None
 
 
 def parse_publication_manifest(content: str) -> PublicationManifest | NativePublicationManifest:

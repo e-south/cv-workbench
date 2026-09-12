@@ -17,14 +17,16 @@ and identical content selection. Permit only the public profile in
 `publish.yaml` and set `site-sync.yaml`'s `publish_variant` to that profile.
 
 ```bash
-cvw build --variant cv-public --format md,pdf,docx,ats --config <workspace-config>
+cvw build --variant cv-public --format md,pdf,docx,ats,html --config <workspace-config>
 cvw publication prepare --run <run-directory-printed-by-build> --config <workspace-config>
 cvw publication status --config <workspace-config> --json
 ```
 
 Use the current source and an explicit native run. An older build, changed source,
 phone-bearing variant, or mismatched manifest fails before publication writes.
-Prepare prints the exact PDF and a local visual packet. Review every page and
+Prepare prints the exact PDF and a local visual packet with a native HTML
+reading view when the explicit run includes HTML. To send that view to a site, set `site.cv_html_name: cv.html` in
+its sync configuration. Review the HTML and every PDF page, and
 check bookmarks, links, typography, and disclosure. If section-rule graphics
 changed, visually inspect them before updating the policy fingerprint.
 

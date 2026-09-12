@@ -20,6 +20,7 @@ from cvworkbench.ops.publication.pdf import (
     sanitize_public_metadata,
     validate_public_pdf_layout,
 )
+from cvworkbench.ops.publication.reading import build_reading_html
 from cvworkbench.ops.publication.record import NativePreparationRecord, json_bytes
 from cvworkbench.storage import replace_files_atomically
 
@@ -80,10 +81,29 @@ def prepare_native_public_pdf(
         validate_public_pdf_layout(source, public)
     digest = hashlib.sha256(content).hexdigest()
     output = output_path(resolve_publish_path(configuration) / variant_id, inputs.variant, "pdf")
+    reading = (
+        build_reading_html(
+            inputs.rendered_html,
+            stylesheet=inputs.html_stylesheet,
+            allowed_links=inputs.allowed_links,
+            person=inputs.person,
+            variant=inputs.variant,
+            publish=inputs.policy,
+        )
+        if inputs.rendered_html is not None
+        else None
+    )
+    reading_path = output.with_suffix(".html")
     manifest = NativePublicationManifest.model_validate(
         {
             "schema_version": 1,
             "artifact_kind": "native-pdf-publication",
+            "reading_html": {
+                "name": reading_path.name,
+                "sha256": hashlib.sha256(reading).hexdigest(),
+            }
+            if reading is not None
+            else None,
             "variant": {
                 key: getattr(inputs.variant, key)
                 for key in ("id", "exclude_tags", "contact_fields", "order")
@@ -107,7 +127,7 @@ def prepare_native_public_pdf(
         }
     )
     manifest_bytes = json_bytes(manifest.model_dump())
-    packet = publication_review_files(content)
+    packet = publication_review_files(content, reading_html=reading)
     record = NativePreparationRecord(
         schema_version=1,
         kind="native-build",
@@ -125,6 +145,8 @@ def prepare_native_public_pdf(
         (output.parent / "preparation.json", json_bytes(record.model_dump())),
         *((review_dir / name, data) for name, data in packet.items()),
     ]
+    if reading is not None:
+        writes.append((reading_path, reading))
     input_paths = {
         Path(stamp.path) for stamp in [*inputs.stamps.values(), *inputs.source_files.values()]
     }

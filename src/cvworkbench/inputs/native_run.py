@@ -20,6 +20,7 @@ class CapturedRun:
     output_paths: dict[str, Path]
     stamps: dict[str, tuple[Path, str]]
     source_files: dict[str, tuple[Path, str]]
+    styles: dict[str, bytes] = field(default_factory=dict, repr=False)
 
 
 def capture_native_run(
@@ -29,6 +30,7 @@ def capture_native_run(
     variant_id: str,
     sot_path: Path,
     formats: tuple[str, ...],
+    optional_formats: tuple[str, ...] = (),
 ) -> CapturedRun:
     run = run_path.resolve()
     root = resolve_runs_path(configuration).resolve()
@@ -80,7 +82,11 @@ def capture_native_run(
         if variant.id != variant_id:
             raise ValueError("Native build variant identity does not match selection")
         outputs, paths = {}, {}
-        for fmt in formats:
+        selected_formats = (
+            *formats,
+            *(fmt for fmt in optional_formats if fmt in manifest["outputs"]),
+        )
+        for fmt in selected_formats:
             name = manifest["outputs"][fmt]
             if (
                 not isinstance(name, str)
@@ -98,4 +104,22 @@ def capture_native_run(
                 raise ValueError("Native output hash does not match its build manifest")
     except (KeyError, TypeError) as exc:
         raise ValueError("Native build manifest is incomplete or malformed") from exc
-    return CapturedRun(variant, source.data, outputs, paths, stamps, source_files)
+    styles = {}
+    if "html" in outputs:
+        details = manifest.get("render", {}).get("formats", {}).get("html", {})
+        relative = details.get("style_path")
+        if relative is not None:
+            if (
+                not isinstance(relative, str)
+                or Path(relative).is_absolute()
+                or ".." in Path(relative).parts
+                or "\\" in relative
+            ):
+                raise ValueError("Native HTML stylesheet must remain inside its run")
+            style_path = run / relative
+            if not style_path.resolve().is_relative_to(run) or style_path.suffix != ".css":
+                raise ValueError("Native HTML stylesheet must remain inside its run")
+            styles["html"] = capture("style:html", style_path)
+            if stamps["style:html"][1] != details.get("style_hash"):
+                raise ValueError("Native HTML stylesheet hash does not match its build manifest")
+    return CapturedRun(variant, source.data, outputs, paths, stamps, source_files, styles)

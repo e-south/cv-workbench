@@ -319,6 +319,18 @@ def _validate_public_document(
     finally:
         document.close()
 
+    validate_public_text(text, person=person, variant=variant, publish=publish)
+
+
+def validate_public_text(
+    text: str,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+    publish: PublishConfig,
+    label: str = "Public PDF",
+) -> None:
+    """Apply the same contact and section disclosure policy to public text views."""
     forbidden_phone_digits = _forbidden_phone_digits(person, publish)
     if forbidden_phone_digits and any(
         _matches_forbidden_phone(
@@ -328,7 +340,7 @@ def _validate_public_document(
         )
         for match in PHONE_CANDIDATE_PATTERN.finditer(text)
     ):
-        raise PublicPdfError("Public PDF contains a forbidden phone number")
+        raise PublicPdfError(f"{label} contains a forbidden phone number")
 
     observed_emails = {match.casefold() for match in EMAIL_PATTERN.findall(text)}
     allowed_emails: set[str] = set()
@@ -339,13 +351,13 @@ def _validate_public_document(
                 allowed_emails.add(email.strip().casefold())
     unauthorized_emails = sorted(observed_emails - allowed_emails)
     if unauthorized_emails:
-        raise PublicPdfError("Public PDF contains an unauthorized email address")
+        raise PublicPdfError(f"{label} contains an unauthorized email address")
 
     normalized_lines = {line.strip().casefold() for line in text.splitlines()}
     for section in publish.forbidden_sections:
         marker = _section_label(section).casefold()
         if marker in normalized_lines:
-            raise PublicPdfError(f"Public PDF contains forbidden section heading: {section}")
+            raise PublicPdfError(f"{label} contains forbidden section heading: {section}")
 
 
 def validate_public_pdf_layout(

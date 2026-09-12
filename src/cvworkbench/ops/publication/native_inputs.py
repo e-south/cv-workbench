@@ -26,6 +26,8 @@ class NativeBuildInputs:
     policy: PublishConfig
     person: dict[str, Any] = field(repr=False)
     pdf: bytes = field(repr=False)
+    rendered_html: bytes | None = field(repr=False)
+    html_stylesheet: bytes = field(repr=False)
     allowed_links: frozenset[str]
     stamps: dict[str, FileStamp]
     source_files: dict[str, FileStamp]
@@ -59,6 +61,7 @@ def capture_native_build(
             variant_id=variant_id,
             sot_path=sot_path,
             formats=("md", "pdf"),
+            optional_formats=("html",),
         )
     except ValueError as exc:
         raise PublicPdfError(str(exc)) from exc
@@ -68,7 +71,12 @@ def capture_native_build(
     validate_publish_policy(variant, policy)
     if variant.id not in policy.variants or "pdf" not in variant.outputs:
         raise PublicPdfError("Native publication variant is not an eligible PDF publication")
-    names = {"output:md": "rendered_markdown", "output:pdf": "exported_pdf"}
+    names = {
+        "output:md": "rendered_markdown",
+        "output:pdf": "exported_pdf",
+        "output:html": "rendered_html",
+        "style:html": "html_stylesheet",
+    }
     stamps = {
         names.get(name, name): FileStamp(path=str(path), sha256=sha)
         for name, (path, sha) in captured.stamps.items()
@@ -84,7 +92,15 @@ def capture_native_build(
     person = captured.source_data["person"]
     links = markdown_links(captured.outputs["md"], person=person, variant=variant)
     return NativeBuildInputs(
-        variant, policy, person, captured.outputs["pdf"], links, stamps, source_files
+        variant,
+        policy,
+        person,
+        captured.outputs["pdf"],
+        captured.outputs.get("html"),
+        captured.styles.get("html", b""),
+        links,
+        stamps,
+        source_files,
     )
 
 

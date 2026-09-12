@@ -138,6 +138,11 @@ def inspect_publication(
                     (record.rendered_markdown, "stale_export"),
                 ]
             )
+            inputs.extend(
+                (stamp, "stale_export")
+                for stamp in (record.rendered_html, record.html_stylesheet)
+                if stamp is not None
+            )
         else:
             inputs = [
                 (record.authored_source, "stale_source"),
@@ -178,6 +183,11 @@ def inspect_publication(
             raise ValueError("Prepared artifact or manifest changed after preparation")
         validate_publish_policy(variant, policy)
         artifact = read_public_artifact(pdf, manifest, variant, policy)
+        if (
+            artifact.reading_sha256 is not None
+            and record.review_files.get("reading.html") != artifact.reading_sha256
+        ):
+            raise ValueError("Public reading view does not match its review packet")
         if native:
             if record.configuration.path != str(configuration.path):
                 raise ValueError("Native publication configuration path changed; prepare again")

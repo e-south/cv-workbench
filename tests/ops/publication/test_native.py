@@ -9,6 +9,7 @@ import yaml
 
 from cvworkbench.inputs.sot import REQUIRED_FILES, load_sot_snapshot
 from cvworkbench.ops.publication.native import prepare_native_public_pdf
+from cvworkbench.ops.publication.pdf import PublicPdfError
 from cvworkbench.ops.publication.state import inspect_publication, record_publication_review
 from cvworkbench.ops.syncing import SyncError, sync_site
 from tests.ops.publication.test_pdf import _write_workspace
@@ -18,7 +19,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def native_workspace(root):
+def native_workspace(root, *, with_html=True):
     config, variant, policy, sot = _write_workspace(root)
     for name in REQUIRED_FILES:
         if not (sot / name).exists():
@@ -47,6 +48,24 @@ def native_workspace(root):
         "outputs": {"pdf": "cv.pdf", "md": "cv.md"},
         "output_hashes": {fmt: digest(run / f"cv.{fmt}") for fmt in ("pdf", "md")},
     }
+    if with_html:
+        (run / "styles").mkdir()
+        (run / "styles/theme.css").write_text(
+            "body{font-family:Arial}.entry-heading>p{display:flex}"
+        )
+        (run / "cv.html").write_text(
+            '<!doctype html><html><head><meta charset="utf-8"></head><body><h1>Example Person</h1><div class="contact-block"><p><a href="mailto:person@example.com">Email</a></p></div><div class="entry-heading"><p>Institute <span class="entry-date">2026</span></p></div></body></html>'
+        )
+        manifest["outputs"]["html"] = "cv.html"
+        manifest["output_hashes"]["html"] = digest(run / "cv.html")
+        manifest["render"] = {
+            "formats": {
+                "html": {
+                    "style_path": "styles/theme.css",
+                    "style_hash": digest(run / "styles/theme.css"),
+                }
+            }
+        }
     (run / "manifest.json").write_text(json.dumps(manifest))
     return dict(
         run_path=run,
@@ -63,6 +82,14 @@ def test_native_prepare_review_sync_keeps_provenance_private(tmp_path):
     manifest = json.loads(result.manifest_path.read_text())
     assert manifest["artifact_kind"] == "native-pdf-publication"
     assert "authored_name" not in manifest["source"]
+    reading = manifest["reading_html"]
+    html_path = result.output_pdf.parent / reading["name"]
+    assert reading["sha256"] == digest(html_path)
+    assert "<h1>Example Person</h1>" in html_path.read_text()
+    assert "mailto:person@example.com" in html_path.read_text()
+    assert 'charset="utf-8"' in html_path.read_text()
+    assert 'class="contact-block"' in html_path.read_text()
+    assert ".entry-heading>p{display:flex}" in html_path.read_text()
     assert str(tmp_path) not in result.manifest_path.read_text()
     config = args["config_path"]
     assert inspect_publication(config, "base").state == "review_required"
@@ -78,6 +105,7 @@ def test_native_prepare_review_sync_keeps_provenance_private(tmp_path):
                     "publish_variant": "base",
                     "cv_pdf_dir": "public/cv",
                     "cv_pdf_name": "cv.pdf",
+                    "cv_html_name": "cv.html",
                     "cv_manifest": "public/cv/manifest.json",
                     "cv_page": "page.md",
                     "cv_page_frontmatter_key": "cvPdf",
@@ -91,6 +119,16 @@ def test_native_prepare_review_sync_keeps_provenance_private(tmp_path):
     sync_site(config_path=config, site_config_path=site_config, mode="local")
     assert (site / "public/cv/cv.pdf").read_bytes() == result.output_pdf.read_bytes()
     assert str(tmp_path) not in (site / "public/cv/manifest.json").read_text()
+    assert (site / "public/cv/cv.html").read_bytes() == html_path.read_bytes()
+    public_manifest = json.loads((site / "public/cv/manifest.json").read_text())
+    assert public_manifest["html_sha256"] == digest(html_path)
+    assert public_manifest["html_path"] == "public/cv/cv.html"
+    html_path.write_text("tampered")
+    assert inspect_publication(config, "base").state == "invalid"
+    before = {p: p.read_bytes() for p in site.rglob("*") if p.is_file()}
+    with pytest.raises(SyncError):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+    assert all(p.read_bytes() == data for p, data in before.items())
     assert not list(site.rglob("preparation.json"))
 
 
@@ -109,9 +147,9 @@ def test_native_preparation_rejects_midflight_source_change_and_preserves_prior_
         if p.is_file()
     }
 
-    def change_source(content):
+    def change_source(content, **kwargs):
         (args["sot_path"] / "experience.yaml").write_text("changed: true")
-        return original(content)
+        return original(content, **kwargs)
 
     monkeypatch.setattr(native, "publication_review_files", change_source)
     with pytest.raises(ValueError, match="changed"):
@@ -223,10 +261,10 @@ def test_native_publication_cannot_replace_its_source_run(tmp_path):
     m = json.loads((run / "manifest.json").read_text())
     m["configuration"]["sha256"] = digest(args["config_path"])
     (run / "manifest.json").write_text(json.dumps(m))
-    before = {p.name: p.read_bytes() for p in run.iterdir()}
+    before = {p.relative_to(run): p.read_bytes() for p in run.rglob("*") if p.is_file()}
     with pytest.raises(RuntimeError, match="overlap"):
         prepare_native_public_pdf(**args)
-    assert {p.name: p.read_bytes() for p in run.iterdir()} == before
+    assert {p.relative_to(run): p.read_bytes() for p in run.rglob("*") if p.is_file()} == before
 
 
 def test_native_publication_removes_automatic_opening_view_actions(tmp_path):
@@ -306,3 +344,22 @@ def test_native_prepare_rejects_disclosure_and_unbound_inputs_without_replacemen
     with pytest.raises((ValueError, RuntimeError)):
         prepare_native_public_pdf(**args)
     assert result.output_pdf.read_bytes() == before
+
+
+@pytest.mark.parametrize("relative", ["cv.html", "styles/theme.css"])
+def test_native_reading_requires_exact_rendered_html_and_styles(tmp_path, relative):
+    args = native_workspace(tmp_path)
+    result = prepare_native_public_pdf(**args)
+    prior = result.output_pdf.read_bytes()
+    (args["run_path"] / relative).write_text("changed")
+    assert inspect_publication(args["config_path"], "base").state == "stale_export"
+    with pytest.raises(PublicPdfError, match="hash"):
+        prepare_native_public_pdf(**args)
+    assert result.output_pdf.read_bytes() == prior
+
+
+def test_native_pdf_only_run_does_not_invent_a_reading_layout(tmp_path):
+    args = native_workspace(tmp_path, with_html=False)
+    result = prepare_native_public_pdf(**args)
+    assert json.loads(result.manifest_path.read_text())["reading_html"] is None
+    assert not result.output_pdf.with_suffix(".html").exists()
