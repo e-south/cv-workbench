@@ -684,7 +684,7 @@ def main() -> int:
                 review_recipe["steps"][1],
                 kind="manual",
                 runnable=False,
-                placeholders=["<variant>"],
+                placeholders=[],
                 message="review.import edit step",
             )
             _require_recipe_step_contract(
