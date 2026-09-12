@@ -76,6 +76,10 @@ unknown fields, malformed versions, unsafe relative paths, and missing baseline
 or output identities.
 
 Import validates those source artifacts before conversion or draft writes.
+Canonical bytes are captured once for interpretation and the recorded hash;
+changes during conversion fail before draft allocation. Draft payloads commit
+through one recoverable file transaction. A failed commit removes its empty owned
+directory while preserving prior drafts and any unexpected recovery evidence.
 Editing the review copy is expected; editing its immutable source run invalidates
 the baseline. These hashes establish identity since bundle creation, not a
 human review decision or proof that current SoT files still match the build.

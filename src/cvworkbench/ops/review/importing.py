@@ -26,6 +26,7 @@ from cvworkbench.ops.review.record import (
     validate_source_artifacts,
 )
 from cvworkbench.ops.review.targets import resolve_review_target
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,10 @@ def import_docx_review(
     if not canonical_path.exists():
         raise ReviewError(f"Canonical markdown not found: {canonical_path}")
 
+    canonical_bytes = canonical_path.read_bytes()
+    canonical_hash = hashlib.sha256(canonical_bytes).hexdigest()
+    if source is not None and canonical_hash != source.files["canonical.md"]:
+        raise ReviewError("Review baseline changed before conversion")
     imported_markdown = markdown.convert_docx_to_markdown(docx_path)
     patch_name, patch_text, apply_status, note_lines = build_import_patch(
         canonical_path=canonical_path,
@@ -85,16 +90,19 @@ def import_docx_review(
         sot_path=resolution.sot_path,
         variant=resolution.variant,
         project_patch=resolution.project_patch,
+        canonical_markdown=canonical_bytes.decode("utf-8"),
     )
+    if canonical_path.read_bytes() != canonical_bytes:
+        raise ReviewError("Review baseline changed during conversion")
+    if source is not None:
+        validate_source_artifacts(source)
     drafts_root = resolve_drafts_path(config_path)
     draft_dir = _create_import_draft_dir(drafts_root)
     imported_path = draft_dir / "imported.md"
-    imported_path.write_text(imported_markdown)
     patch_path = draft_dir / patch_name
-    patch_path.write_text(patch_text)
 
     metadata_path = draft_dir / "draft.json"
-    metadata_path.write_text(
+    metadata_content = (
         json.dumps(
             {
                 "source": "import-docx",
@@ -103,7 +111,7 @@ def import_docx_review(
                 "variant_id": resolution.variant.id,
                 "review_dir": str(resolution.review_dir),
                 "canonical_path": str(canonical_path),
-                "canonical_hash": _hash_file(canonical_path),
+                "canonical_hash": canonical_hash,
                 "imported_path": str(imported_path),
                 "patch_path": patch_name,
                 "apply_status": apply_status,
@@ -115,7 +123,7 @@ def import_docx_review(
     )
 
     notes_path = draft_dir / "notes.md"
-    notes_path.write_text(
+    notes_content = (
         "\n".join(
             [
                 "# Import Notes",
@@ -129,6 +137,25 @@ def import_docx_review(
         )
         + "\n"
     )
+
+    writes = [
+        (imported_path, imported_markdown.encode()),
+        (patch_path, patch_text.encode()),
+        (metadata_path, metadata_content.encode()),
+        (notes_path, notes_content.encode()),
+    ]
+    try:
+        replace_files_atomically(
+            writes,
+            file_modes={path: 0o600 for path, _ in writes},
+            expected_contents={path: None for path, _ in writes},
+        )
+    except (AtomicWriteError, OSError) as exc:
+        try:
+            draft_dir.rmdir()
+        except OSError:
+            pass  # Preserve unexpected files or recovery evidence rather than deleting them.
+        raise ReviewError("Could not commit the import draft; prior files were preserved") from exc
 
     return ImportResult(
         draft_dir=draft_dir,
@@ -145,14 +172,6 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
 
 
-def _hash_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8192), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _create_import_draft_dir(drafts_root: Path) -> Path:
     drafts_root.mkdir(parents=True, exist_ok=True)
     base_name = f"import-{_timestamp()}"
@@ -160,7 +179,7 @@ def _create_import_draft_dir(drafts_root: Path) -> Path:
         name = base_name if suffix == 0 else f"{base_name}-{suffix:02d}"
         candidate = drafts_root / name
         try:
-            candidate.mkdir(parents=False, exist_ok=False)
+            candidate.mkdir(parents=False, exist_ok=False, mode=0o700)
         except FileExistsError:
             continue
         return candidate

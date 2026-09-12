@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -23,6 +24,60 @@ from cvworkbench.config import resolve_drafts_path, resolve_reviews_path
 from cvworkbench.ops.review.packs import build_review_pack
 from cvworkbench.ops.review.targets import resolve_review_target
 from tests.utils import isolated_filesystem
+
+
+def test_import_rejects_baseline_changed_during_conversion(tmp_path, monkeypatch):
+    from cvworkbench.ops.review import ReviewError
+    from cvworkbench.ops.review.importing import import_docx_review
+
+    config = _write_minimal_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    run = "2026-01-01T00-00-00Z"
+    _write_run_manifest(tmp_path, run, "base", "before\n")
+    reviewed = _pack_review_docx(config, variant_id="base")
+    baseline = tmp_path / "var/runs" / run / "canonical.md"
+
+    def convert(_path):
+        baseline.write_text("changed during conversion\n")
+        return "after\n"
+
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", convert)
+    with pytest.raises(ReviewError, match="changed|mismatch"):
+        import_docx_review(
+            docx_path=reviewed, config_path=config, run=None, variant_id="base", project_dir=None
+        )
+    assert not list(resolve_drafts_path(config).glob("import-*"))
+
+
+def test_failed_import_commit_removes_only_its_owned_draft(tmp_path, monkeypatch):
+    from cvworkbench import storage
+    from cvworkbench.ops.review import ReviewError
+    from cvworkbench.ops.review.importing import import_docx_review
+
+    config = _write_minimal_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    run = "2026-01-01T00-00-00Z"
+    _write_run_manifest(tmp_path, run, "base", "before\n")
+    reviewed = _pack_review_docx(config, variant_id="base")
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", lambda _: "after\n")
+    drafts = resolve_drafts_path(config)
+    drafts.mkdir(parents=True, exist_ok=True)
+    existing = drafts / "keep.md"
+    existing.write_text("Existing work\n")
+    real_replace = storage.os.replace
+
+    def replace(source, destination):
+        if Path(destination).name == "notes.md":
+            raise OSError("injected storage failure")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(storage.os, "replace", replace)
+    with pytest.raises(ReviewError, match="draft"):
+        import_docx_review(
+            docx_path=reviewed, config_path=config, run=None, variant_id="base", project_dir=None
+        )
+    assert existing.read_text() == "Existing work\n"
+    assert not list(drafts.glob("import-*"))
 
 
 def _pack_review_docx(config: Path, *, variant_id=None, project_dir=None) -> Path:

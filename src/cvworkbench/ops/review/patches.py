@@ -27,8 +27,8 @@ from cvworkbench.text import slugify
 from cvworkbench.variants import Variant
 
 
-def _diff_text(canonical_path: Path, imported_markdown: str) -> str:
-    before = canonical_path.read_text().splitlines()
+def _diff_text(canonical_markdown: str, imported_markdown: str) -> str:
+    before = canonical_markdown.splitlines()
     after = imported_markdown.splitlines()
     diff = unified_diff(before, after, fromfile="canonical.md", tofile="imported.md", lineterm="")
     return "\n".join(diff) + ("\n" if before or after else "")
@@ -66,9 +66,12 @@ def build_import_patch(
     sot_path: Path,
     variant: Variant,
     project_patch: ProjectPatch | None,
+    canonical_markdown: str | None = None,
 ) -> tuple[str, str, str, list[str]]:
+    if canonical_markdown is None:
+        canonical_markdown = canonical_path.read_text()
     supported = _build_supported_project_patch(
-        canonical_markdown=normalize_markdown(canonical_path.read_text()),
+        canonical_markdown=normalize_markdown(canonical_markdown),
         imported_markdown=normalize_markdown(imported_markdown),
         sot_path=sot_path,
         variant=variant,
@@ -103,7 +106,7 @@ def build_import_patch(
         )
     return (
         "patch.diff",
-        _diff_text(canonical_path, imported_markdown),
+        _diff_text(canonical_markdown, imported_markdown),
         "review_diff_only",
         [
             "This draft compares reviewed DOCX content against canonical.md.",
@@ -355,7 +358,7 @@ def _tokenize_markdown(markdown: str) -> list[_MarkdownToken]:
 
     for raw_line in markdown.splitlines():
         line = raw_line.strip()
-        if not line or line == ":::" or line.startswith("::: "):
+        if not line or re.fullmatch(r":{3,}(?:\s+.*)?", line):
             flush_paragraph()
             continue
         if line.startswith("## "):
