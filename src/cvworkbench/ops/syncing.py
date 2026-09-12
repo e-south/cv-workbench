@@ -188,6 +188,8 @@ def sync_site(
         raise SyncError(f"Publication is {publication.state}: {'; '.join(publication.reasons)}")
     if publication.pdf_sha256 != artifact.sha256:
         raise SyncError("Reviewed PDF does not match captured artifact; retry sync")
+    if publication.manifest_sha256 != artifact.manifest_sha256:
+        raise SyncError("Reviewed publication does not match captured manifest; retry sync")
 
     plan = _plan_sync(site, artifact, publish)
     branch_name: str | None = None

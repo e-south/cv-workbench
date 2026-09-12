@@ -363,3 +363,52 @@ def test_native_pdf_only_run_does_not_invent_a_reading_layout(tmp_path):
     result = prepare_native_public_pdf(**args)
     assert json.loads(result.manifest_path.read_text())["reading_html"] is None
     assert not result.output_pdf.with_suffix(".html").exists()
+
+
+def test_sync_rejects_new_reading_generation_with_identical_pdf(tmp_path, monkeypatch):
+    from cvworkbench.ops import syncing
+
+    args = native_workspace(tmp_path)
+    result = prepare_native_public_pdf(**args)
+    config = args["config_path"]
+    pdf_sha = digest(result.output_pdf)
+    record_publication_review(config, "base", pdf_sha)
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "page.md").write_text("---\ncvPdf: /old.pdf\n---\n")
+    site_config = config.parent / "site-sync.yaml"
+    site_config.write_text(
+        yaml.safe_dump(
+            {
+                "site": {
+                    "repo_path": str(site),
+                    "publish_variant": "base",
+                    "cv_pdf_dir": "public/cv",
+                    "cv_pdf_name": "cv.pdf",
+                    "cv_html": "content/cv.html",
+                    "cv_manifest": "public/cv/manifest.json",
+                    "cv_page": "page.md",
+                    "cv_page_frontmatter_key": "cvPdf",
+                }
+            }
+        )
+    )
+    inspect = syncing.inspect_publication
+
+    def replace_preparation(*positional, **keywords):
+        html = args["run_path"] / "cv.html"
+        html.write_text(html.read_text().replace("Institute", "Revised institute"))
+        manifest_path = args["run_path"] / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["output_hashes"]["html"] = digest(html)
+        manifest_path.write_text(json.dumps(manifest))
+        revised = prepare_native_public_pdf(**args)
+        assert digest(revised.output_pdf) == pdf_sha
+        record_publication_review(config, "base", pdf_sha)
+        return inspect(*positional, **keywords)
+
+    monkeypatch.setattr(syncing, "inspect_publication", replace_preparation)
+    with pytest.raises(SyncError, match="Reviewed publication does not match captured manifest"):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+    assert not (site / "public").exists()
+    assert not (site / "content").exists()

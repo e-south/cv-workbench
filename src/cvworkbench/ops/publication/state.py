@@ -70,6 +70,7 @@ class PublicationState:
     exported_pdf: str | None = None
     pdf_path: str | None = None
     pdf_sha256: str | None = None
+    manifest_sha256: str | None = None
     preparation_path: str | None = None
     preparation_sha256: str | None = None
     review_path: str | None = None
@@ -183,6 +184,12 @@ def inspect_publication(
             raise ValueError("Prepared artifact or manifest changed after preparation")
         validate_publish_policy(variant, policy)
         artifact = read_public_artifact(pdf, manifest, variant, policy)
+        if (
+            artifact.sha256 != record.pdf_sha256
+            or artifact.manifest_sha256 != record.manifest_sha256
+        ):
+            raise ValueError("Captured publication changed after preparation")
+        state = replace(state, manifest_sha256=artifact.manifest_sha256)
         if (
             artifact.reading_sha256 is not None
             and record.review_files.get("reading.html") != artifact.reading_sha256

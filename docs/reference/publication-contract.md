@@ -248,3 +248,7 @@ their signature/hash against the manifest and variant/policy declarations.
 content, unsafe links, encryption, attachments, and unapproved graphics. Sync
 requires both checks and binds the captured hash to the current reviewed
 publication before constructing its copy plan.
+
+Site sync matches both captured PDF and manifest digests to the reviewed state.
+This binds an optional HTML reading view and its declared links even when two
+preparations produce identical PDF bytes.

@@ -32,6 +32,7 @@ class PublicArtifact:
     source: Path
     content: bytes = field(repr=False)
     sha256: str
+    manifest_sha256: str | None = None
     allowed_links: frozenset[str] | None = None
     reading_source: Path | None = None
     reading_content: bytes | None = field(default=None, repr=False)
@@ -80,7 +81,8 @@ def read_public_artifact(
     if not manifest_path.exists():
         raise PublicationArtifactError(f"Build manifest not found: {manifest_path}")
     try:
-        manifest = parse_publication_manifest(manifest_path.read_text())
+        manifest_bytes = manifest_path.read_bytes()
+        manifest = parse_publication_manifest(manifest_bytes.decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise PublicationArtifactError(f"Build manifest is invalid: {exc}") from exc
     if manifest.variant.id != variant.id:
@@ -129,6 +131,7 @@ def read_public_artifact(
         source=source_pdf,
         content=content,
         sha256=pdf_hash,
+        manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
         allowed_links=links,
         reading_source=reading_source,
         reading_content=reading_content,
