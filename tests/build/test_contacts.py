@@ -89,7 +89,7 @@ def test_contact_labels_are_literal_text(sample_workspace):
         {"person": {"name": "Example", "links": [{"label": label, "url": target}]}}, variant
     )
     rendered = subprocess.run(
-        ["pandoc", "--from", "markdown+fenced_divs", "--to", "html5"],
+        ["pandoc", "--wrap=none", "--from", "markdown+fenced_divs", "--to", "html5"],
         input=markdown,
         text=True,
         capture_output=True,

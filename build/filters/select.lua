@@ -1,3 +1,5 @@
+local metadata = dofile((PANDOC_SCRIPT_FILE:match('^(.*[/\\])') or '') .. 'metadata.lua')
+
 --[[
 --------------------------------------------------------------------------------
 cv-workbench
@@ -23,7 +25,7 @@ local function to_list(meta, keys)
   if not value then
     return {}
   end
-  if value.t == "MetaList" then
+  if metadata.is_list(value) then
     local items = {}
     for _, item in ipairs(value) do
       table.insert(items, pandoc.utils.stringify(item))

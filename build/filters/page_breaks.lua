@@ -1,8 +1,10 @@
+local metadata = dofile((PANDOC_SCRIPT_FILE:match('^(.*[/\\])') or '') .. 'metadata.lua')
+
 -- Theme-selected heading IDs start new print pages without source blank lines.
 function Pandoc(doc)
   local selected = doc.meta['cvw-page-break-before']
   if not selected then return nil end
-  if selected.t ~= 'MetaList' then error('cvw-page-break-before must be a list') end
+  if not metadata.is_list(selected) then error('cvw-page-break-before must be a list') end
   local targets, seen = {}, {}
   for _, value in ipairs(selected) do
     local id = pandoc.utils.stringify(value)

@@ -1,3 +1,5 @@
+local metadata = dofile((PANDOC_SCRIPT_FILE:match('^(.*[/\\])') or '') .. 'metadata.lua')
+
 -- Optional record hierarchy. Source selection and wording remain upstream.
 local kinds = {
   education='education', role='experience', publication='publications',
@@ -126,7 +128,7 @@ end
 function Pandoc(doc)
   if doc.meta['cvw-entry-structure'] ~= true then return nil end
   local selected = doc.meta['cvw-bulleted-entries']
-  if selected and selected.t ~= 'MetaList' then error('cvw-bulleted-entries must be a list') end
+  if selected and not metadata.is_list(selected) then error('cvw-bulleted-entries must be a list') end
   local allowed, bulleted = {}, {}
   for _, kind in pairs(kinds) do allowed[kind] = true end
   for _, value in ipairs(selected or {}) do

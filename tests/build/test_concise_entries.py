@@ -47,6 +47,7 @@ def render_entries(source, *, concise=True):
     result = subprocess.run(
         [
             "pandoc",
+            "--wrap=none",
             "-t",
             "html5",
             "--lua-filter",
@@ -245,6 +246,7 @@ def test_ambiguous_metadata_is_preserved_without_restructuring(metadata):
     result = subprocess.run(
         [
             "pandoc",
+            "--wrap=none",
             "-t",
             "html5",
             "--lua-filter",
@@ -281,6 +283,7 @@ def test_nested_education_highlights_remain_a_list():
     result = subprocess.run(
         [
             "pandoc",
+            "--wrap=none",
             "-t",
             "html5",
             "--lua-filter",

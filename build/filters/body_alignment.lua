@@ -1,3 +1,5 @@
+local metadata = dofile((PANDOC_SCRIPT_FILE:match('^(.*[/\\])') or '') .. 'metadata.lua')
+
 -- Opt-in prose-list alignment. Headings and dates are outside this boundary.
 local function justify(div, style)
   if FORMAT == 'docx' then
@@ -17,7 +19,7 @@ end
 function Pandoc(doc)
   local settings = doc.meta['cvw-justify-lists']
   if not settings then return nil end
-  if settings.t ~= 'MetaList' then error('cvw-justify-lists must be a list') end
+  if not metadata.is_list(settings) then error('cvw-justify-lists must be a list') end
   local selected = {}
   for _, value in ipairs(settings) do
     local key = pandoc.utils.stringify(value)

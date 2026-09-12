@@ -169,7 +169,10 @@ selected filters or introduction of unrecorded render paths also fail. The CLI
 and preview use their existing error handling; a previous bundle survives.
 
 Build manifests additionally record `render.filters`, an ordered list of
-`name`/`sha256` entries for selected Lua filters, without absolute filter paths.
+`name`/`sha256` entries for selected Lua filters and their declared support modules,
+without absolute filter paths. The shared `metadata.lua` helper supports both
+Pandoc 2 tagged values and Pandoc 3 lists/maps; builds capture its bytes whenever
+a selected filter consumes it and reject changes during rendering.
 An empty list records that no filters were selected. Historical manifests without
 this field have unknown filter provenance; do not infer it from current files.
 The renderer treats `filter_paths=None` as discovery of the known built-in files,

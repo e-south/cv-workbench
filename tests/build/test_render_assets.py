@@ -48,6 +48,7 @@ def render_workspace(sample_workspace, monkeypatch):
         "defaults": theme / "pandoc/html.defaults.yaml",
         "style": theme / "styles/html/modern.css",
         "filter": next(filters.glob("*.lua")),
+        "filter_support": filters / "metadata.lua",
     }
     return root, paths
 
@@ -65,7 +66,9 @@ def _files(root):
     return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
 
 
-@pytest.mark.parametrize("asset", ["theme", "template", "defaults", "style", "filter"])
+@pytest.mark.parametrize(
+    "asset", ["theme", "template", "defaults", "style", "filter", "filter_support"]
+)
 @pytest.mark.parametrize("change", ["edit", "remove"])
 def test_stale_render_asset_fails_before_output_allocation(
     render_workspace, tmp_path, asset, change
@@ -82,7 +85,7 @@ def test_stale_render_asset_fails_before_output_allocation(
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.parametrize("asset", ["template", "defaults", "style", "filter"])
+@pytest.mark.parametrize("asset", ["template", "defaults", "style", "filter", "filter_support"])
 def test_asset_edit_during_real_render_preserves_the_previous_bundle(
     render_workspace, tmp_path, monkeypatch, asset
 ):
@@ -171,6 +174,10 @@ def test_manifest_records_ordered_selected_filter_fingerprints(render_workspace,
         {"name": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
         for path in plan.filter_paths
     ]
+    support = root / "filters/metadata.lua"
+    expected.append(
+        {"name": "metadata.lua", "sha256": hashlib.sha256(support.read_bytes()).hexdigest()}
+    )
     for directory in (result.run_dir, result.dist_dir):
         manifest = json.loads((directory / "manifest.json").read_text())
         assert manifest["render"]["filters"] == expected

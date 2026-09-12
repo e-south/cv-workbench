@@ -1,3 +1,5 @@
+local metadata = dofile((PANDOC_SCRIPT_FILE:match('^(.*[/\\])') or '') .. 'metadata.lua')
+
 -- Explicit presentation references. Canonical records and selection stay upstream.
 local function fail(message) error('cvw-entry-layout: ' .. message) end
 local function append(target, content)
@@ -195,7 +197,7 @@ end
 function Pandoc(doc)
   local rules = doc.meta['cvw-entry-layout']
   if not rules then return nil end
-  if rules.t ~= 'MetaList' then fail('must be a list') end
+  if not metadata.is_list(rules) then fail('must be a list') end
   local records, sections, consumed, targets, owners, current_section = {}, {}, {}, {}, {}, nil
   for _, block in ipairs(doc.blocks) do
     if block.t == 'Div' and block.identifier ~= '' then
@@ -210,14 +212,14 @@ function Pandoc(doc)
   end
   local parsed = {}
   for _, rule in ipairs(rules) do
-    if rule.t ~= 'MetaMap' then fail('each rule must be a mapping') end
+    if not metadata.is_map(rule) then fail('each rule must be a mapping') end
     for key, _ in pairs(rule) do
       if key ~= 'sources' and key ~= 'target' and key ~= 'placement' and key ~= 'label'
           and key ~= 'fields' and key ~= 'date_position' and key ~= 'group_by' then
         fail('unknown rule key: ' .. key)
       end
     end
-    if not rule.sources or rule.sources.t ~= 'MetaList' or #rule.sources == 0 then
+    if not rule.sources or not metadata.is_list(rule.sources) or #rule.sources == 0 then
       fail('sources must be a nonempty list')
     end
     local target = pandoc.utils.stringify(rule.target or '')
@@ -248,7 +250,7 @@ function Pandoc(doc)
       fail('shared_citation cannot omit fields or override its citation label')
     end
     if rule.fields then
-      if rule.fields.t ~= 'MetaList' or #rule.fields == 0 then fail('fields must be a nonempty list') end
+      if not metadata.is_list(rule.fields) or #rule.fields == 0 then fail('fields must be a nonempty list') end
       fields = {}
       local seen = {}
       for _, item in ipairs(rule.fields) do

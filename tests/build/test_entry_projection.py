@@ -58,7 +58,7 @@ def document(rules):
 
 
 def render(source, output):
-    args = ["pandoc", "--pdf-engine=xelatex", "-o", str(output)]
+    args = ["pandoc", "--wrap=none", "--pdf-engine=xelatex", "-o", str(output)]
     for path in resolve_filter_paths(Path(__file__).resolve().parents[2] / "build/filters"):
         args.extend(["--lua-filter", str(path)])
     return subprocess.run(args, input=source, text=True, capture_output=True, check=True)

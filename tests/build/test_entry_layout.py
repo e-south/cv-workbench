@@ -22,7 +22,7 @@ def _entry_html(section, item, variant):
     variant = replace(variant, order=[section])
     markdown = build_markdown({section: {section: [item]}}, variant)
     result = subprocess.run(
-        ["pandoc", "--from", "markdown+fenced_divs", "--to", "html5"],
+        ["pandoc", "--wrap=none", "--from", "markdown+fenced_divs", "--to", "html5"],
         input=markdown,
         text=True,
         capture_output=True,

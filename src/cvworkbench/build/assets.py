@@ -29,6 +29,7 @@ class RenderAssetContract:
     file_hashes: Mapping[Path, str] = field(repr=False)
     filter_paths: tuple[Path, ...]
     theme_hash: str
+    filter_support_paths: tuple[Path, ...] = ()
 
     def verify(self, filter_paths: Sequence[Path], render_plans: Mapping[str, RenderPlan]) -> None:
         self._check_selection(filter_paths, render_plans)
@@ -57,7 +58,10 @@ class RenderAssetContract:
                 )
 
     def filter_metadata(self) -> list[dict[str, str]]:
-        return [{"name": path.name, "sha256": self.file_hashes[path]} for path in self.filter_paths]
+        return [
+            {"name": path.name, "sha256": self.file_hashes[path]}
+            for path in (*self.filter_paths, *self.filter_support_paths)
+        ]
 
 
 def capture_render_assets(
@@ -67,7 +71,21 @@ def capture_render_assets(
 ) -> RenderAssetContract:
     """Capture fingerprints, not a frozen copy of Pandoc's dependency graph."""
     selected_filters = tuple(path.resolve() for path in filter_paths)
-    paths = [*theme_hash_paths(theme), *selected_filters]
+    metadata_consumers = {
+        "select.lua",
+        "page_breaks.lua",
+        "body_alignment.lua",
+        "entry_structure.lua",
+        "entry_projection.lua",
+    }
+    support_paths = tuple(
+        dict.fromkeys(
+            path.with_name("metadata.lua")
+            for path in selected_filters
+            if path.name in metadata_consumers
+        )
+    )
+    paths = [*theme_hash_paths(theme), *selected_filters, *support_paths]
     paths.extend(plan.style_path for plan in render_plans.values() if plan.style_path is not None)
     hashes = {path: _hash_asset(path) for path in dict.fromkeys(path.resolve() for path in paths)}
     definition = (theme.root / "theme.yaml").resolve()
@@ -78,6 +96,7 @@ def capture_render_assets(
         file_hashes=MappingProxyType(hashes),
         filter_paths=selected_filters,
         theme_hash=theme_hash,
+        filter_support_paths=support_paths,
     )
     contract._check_selection(filter_paths, render_plans)
     return contract
