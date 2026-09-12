@@ -60,7 +60,7 @@ def test_dev_stop_removes_session(monkeypatch, tmp_path: Path) -> None:
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(app_module, "_post_preview_stop", lambda *_: (True, None))
     monkeypatch.setattr(app_module, "_wait_for_port_close", lambda *_: True)
 
@@ -97,7 +97,7 @@ def test_dev_stop_clears_stale_session_when_api_is_unreachable(monkeypatch, tmp_
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(app_module, "_post_preview_stop", lambda *_: (False, "connection refused"))
     monkeypatch.setattr(app_module, "_preview_session_conflict", lambda *_: (False, "stale"))
 
@@ -137,7 +137,7 @@ def test_dev_stop_force_errors_when_port_is_still_busy_without_live_pid(
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(app_module, "_post_preview_stop", lambda *_: (True, None))
     monkeypatch.setattr(app_module, "_wait_for_port_close", lambda *_: False)
     monkeypatch.setattr(app_module, "_preview_pid_is_live", lambda *_: False)

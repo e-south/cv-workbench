@@ -1,0 +1,139 @@
+"""
+--------------------------------------------------------------------------------
+cv-workbench
+cv-workbench/src/cvworkbench/build/planning.py
+
+Resolve build content, configuration, and render choices before artifact writes.
+
+Module Author(s): Eric J. South
+--------------------------------------------------------------------------------
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from cvworkbench.build.assets import RenderAssetContract, capture_render_assets
+from cvworkbench.build.formats import normalize_output_formats
+from cvworkbench.build.markdown import build_markdown
+from cvworkbench.build.paths import filters_dir
+from cvworkbench.build.rendering import resolve_filter_paths
+from cvworkbench.build.resume import build_resume
+from cvworkbench.build.selection import build_selection
+from cvworkbench.config import (
+    ConfigSnapshot,
+    ConfigSource,
+    read_config,
+    resolve_default_theme,
+    resolve_default_variant,
+    resolve_pdf_engine,
+    resolve_style_preset,
+    resolve_themes_dir,
+    resolve_variant_path,
+)
+from cvworkbench.inputs.sot import load_sot_snapshot
+from cvworkbench.themes import (
+    RenderPlan,
+    Theme,
+    ThemeError,
+    build_render_plan,
+    resolve_theme,
+)
+from cvworkbench.variants import Variant, load_variant_snapshot
+
+
+@dataclass(frozen=True)
+class BuildPlan:
+    configuration: ConfigSnapshot
+    sot_path: Path
+    variant_path: Path
+    variant: Variant
+    sot_hashes: Mapping[str, str]
+    snippet_hashes: Mapping[str, str]
+    variant_hash: str
+    formats: list[str]
+    markdown: str = field(repr=False)
+    selection_payload: str = field(repr=False)
+    resume_payload: dict[str, Any] = field(repr=False)
+    filters_path: Path
+    filter_paths: tuple[Path, ...]
+    pdf_engine: str | None
+    theme: Theme
+    theme_hash: str
+    style_preset: str | None
+    render_plans: dict[str, RenderPlan]
+    render_assets: RenderAssetContract
+
+
+def plan_build(
+    *,
+    sot_path: Path,
+    config_path: ConfigSource,
+    variant_id: str | None,
+    formats: list[str] | None,
+    theme: str | None = None,
+    style_preset: str | None = None,
+    variant_path_override: Path | None = None,
+) -> BuildPlan:
+    """Prepare a request-local build plan without allocating runs or writing outputs."""
+    configuration = read_config(config_path)
+    variant_path = variant_path_override
+    if variant_path is None:
+        selected_id = variant_id or resolve_default_variant(configuration)
+        variant_path = resolve_variant_path(selected_id, configuration)
+    variant_snapshot = load_variant_snapshot(variant_path)
+    variant = variant_snapshot.variant
+    selected_formats = normalize_output_formats(formats if formats is not None else variant.outputs)
+    if not selected_formats:
+        raise ValueError("No output formats selected")
+
+    source = load_sot_snapshot(sot_path)
+    sot = source.data
+    markdown = build_markdown(sot, variant)
+    selection_payload = json.dumps(build_selection(sot, variant), indent=2, sort_keys=True) + "\n"
+    resume_payload = build_resume(sot)
+    filters_path = filters_dir()
+    filter_paths = resolve_filter_paths(filters_path)
+    configured_pdf_engine = resolve_pdf_engine(configuration)
+    theme_id = theme or variant.render_theme or resolve_default_theme(configuration)
+    preset = style_preset or variant.render_style_preset or resolve_style_preset(configuration)
+    try:
+        theme_obj = resolve_theme(resolve_themes_dir(configuration), theme_id)
+    except ThemeError as exc:
+        raise ValueError(str(exc)) from exc
+    render_plans = {
+        fmt: build_render_plan(
+            output_format=fmt,
+            theme=theme_obj,
+            style_preset=preset,
+            pdf_engine=configured_pdf_engine,
+        )
+        for fmt in selected_formats
+    }
+    render_assets = capture_render_assets(theme_obj, render_plans, filter_paths)
+    pdf_plan = render_plans.get("pdf")
+    return BuildPlan(
+        configuration=configuration,
+        sot_path=sot_path,
+        variant_path=variant_path,
+        variant=variant,
+        sot_hashes=source.sot_hashes,
+        snippet_hashes=source.snippet_hashes,
+        variant_hash=variant_snapshot.sha256,
+        formats=selected_formats,
+        markdown=markdown,
+        selection_payload=selection_payload,
+        resume_payload=resume_payload,
+        filters_path=filters_path,
+        filter_paths=filter_paths,
+        pdf_engine=pdf_plan.pdf_engine if pdf_plan is not None else None,
+        theme=theme_obj,
+        theme_hash=render_assets.theme_hash,
+        style_preset=preset,
+        render_plans=render_plans,
+        render_assets=render_assets,
+    )

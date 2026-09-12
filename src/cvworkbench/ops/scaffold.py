@@ -20,6 +20,8 @@ from pathlib import Path
 
 import yaml
 
+from cvworkbench.resources import distribution_path
+
 
 class ScaffoldError(RuntimeError):
     pass
@@ -37,6 +39,7 @@ class InitResult:
 
 def init_project(root: Path, *, sample_default: bool = False) -> InitResult:
     template_root = resolve_template_root()
+    _validate_template(template_root)
     statuses: dict[str, str] = {}
 
     if sample_default:
@@ -56,7 +59,7 @@ def init_project(root: Path, *, sample_default: bool = False) -> InitResult:
         statuses,
         "workbench_config",
     )
-    if sample_default:
+    if sample_default and statuses["workbench_config"] == "created":
         _set_workbench_sot_path(workbench_target, sot_target)
 
     variants_target = config_target / "variants"
@@ -68,6 +71,12 @@ def init_project(root: Path, *, sample_default: bool = False) -> InitResult:
         statuses,
         "base_variant",
     )
+    # Custom template roots may intentionally offer only a base document.
+    letter_template = template_root / "config" / "variants" / "cover-letter.yaml"
+    if letter_template.is_file():
+        _copy_file_from_template(
+            letter_template, variants_target / "cover-letter.yaml", statuses, "cover_letter_variant"
+        )
     publish_target = config_target / "publish.yaml"
     _copy_file_from_template(
         template_root / "config" / "publish.yaml",
@@ -138,11 +147,30 @@ def _resolve_template_root() -> Path:
     env_value = os.environ.get("CVW_TEMPLATE_DIR")
     if env_value:
         return Path(env_value)
-    return Path(__file__).resolve().parents[3]
+    try:
+        return distribution_path("workspace")
+    except FileNotFoundError as exc:
+        raise ScaffoldError(str(exc)) from exc
 
 
 def resolve_template_root() -> Path:
     return _resolve_template_root()
+
+
+def _validate_template(root: Path) -> None:
+    for relative in ("sot.sample", "build/themes"):
+        path = root / relative
+        if not path.is_dir():
+            raise ScaffoldError(f"Template directory not found: {path}")
+    for relative in (
+        "config/workbench.yaml",
+        "config/variants/base.yaml",
+        "config/publish.yaml",
+        "config/site-sync.yaml",
+    ):
+        path = root / relative
+        if not path.is_file():
+            raise ScaffoldError(f"Template file not found: {path}")
 
 
 def _ensure_precommit_hooks(root: Path, statuses: dict[str, str]) -> None:

@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,11 +22,23 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from cvworkbench.build.paths import output_path
-from cvworkbench.config import resolve_publish_path, resolve_sot_path, resolve_variant_path
-from cvworkbench.ops.atomic import AtomicWriteError, replace_files_atomically
-from cvworkbench.ops.public_pdf import PublicPdfError, validate_public_pdf
-from cvworkbench.ops.publish import PublishConfig, PublishError, load_publish_config
-from cvworkbench.variants import Variant, load_variant
+from cvworkbench.config import (
+    ConfigSource,
+    read_config,
+    resolve_publish_path,
+    resolve_sot_path,
+    resolve_variant_path,
+)
+from cvworkbench.ops.publication.artifact import (
+    PublicArtifact,
+    read_public_artifact,
+    validate_publish_policy,
+)
+from cvworkbench.ops.publication.pdf import PublicPdfError, validate_public_pdf_content
+from cvworkbench.ops.publication.policy import PublishConfig, PublishError, load_publish_config
+from cvworkbench.ops.publication.state import inspect_publication
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
+from cvworkbench.variants import load_variant
 
 
 class SyncError(RuntimeError):
@@ -43,6 +55,7 @@ class _SiteConfig(BaseModel):
     cv_manifest: str
     cv_page: str
     cv_page_frontmatter_key: str
+    cv_html: str | None = None
 
 
 class _SiteSyncModel(BaseModel):
@@ -59,11 +72,19 @@ class SiteSyncConfig:
     cv_manifest: Path
     cv_page: Path
     cv_page_frontmatter_key: str
+    cv_html: Path | None = None
+
+
+@dataclass(frozen=True)
+class ArtifactCopy:
+    source: Path
+    destination: Path
+    content: bytes = field(repr=False)
 
 
 @dataclass(frozen=True)
 class SyncPlan:
-    copy_ops: list[tuple[Path, Path]]
+    copy_ops: tuple[ArtifactCopy, ...]
     frontmatter_path: Path
     frontmatter_content: str
     manifest_path: Path
@@ -106,6 +127,8 @@ def load_site_sync(path: Path) -> SiteSyncConfig:
     cv_pdf_name = Path(site.cv_pdf_name)
     if cv_pdf_name.name != site.cv_pdf_name or cv_pdf_name.is_absolute():
         raise SyncError("Site cv_pdf_name must be a single filename")
+    if site.cv_html is not None and Path(site.cv_html).suffix != ".html":
+        raise SyncError("Site cv_html must name an HTML destination")
     return SiteSyncConfig(
         repo_path=repo_path,
         publish_variant=site.publish_variant,
@@ -114,50 +137,61 @@ def load_site_sync(path: Path) -> SiteSyncConfig:
         cv_manifest=_site_relative_path(repo_path, site.cv_manifest, "cv_manifest"),
         cv_page=_site_relative_path(repo_path, site.cv_page, "cv_page"),
         cv_page_frontmatter_key=site.cv_page_frontmatter_key,
+        cv_html=_site_relative_path(repo_path, site.cv_html, "cv_html") if site.cv_html else None,
     )
 
 
 def sync_site(
     *,
-    config_path: Path,
+    config_path: ConfigSource,
     site_config_path: Path,
     mode: str,
     publish_config_path: Path | None = None,
 ) -> SyncResult:
+    configuration = read_config(config_path)
     site = load_site_sync(site_config_path)
-    publish: PublishConfig | None = None
-    if publish_config_path is not None:
-        try:
-            publish = load_publish_config(publish_config_path)
-        except PublishError as exc:
-            raise SyncError(str(exc)) from exc
-        if site.publish_variant not in publish.variants:
-            raise SyncError(
-                f"Publish variant '{site.publish_variant}' is not allowed by publish config"
-            )
-    variant_path = resolve_variant_path(site.publish_variant, config_path)
+    policy_path = publish_config_path or configuration.path.parent / "publish.yaml"
+    try:
+        publish = load_publish_config(policy_path)
+    except PublishError as exc:
+        raise SyncError(str(exc)) from exc
+    if site.publish_variant not in publish.variants:
+        raise SyncError(
+            f"Publish variant '{site.publish_variant}' is not allowed by publish config"
+        )
+    variant_path = resolve_variant_path(site.publish_variant, configuration)
     variant = load_variant(variant_path)
-    if publish is not None:
-        _validate_publish_policy(variant, publish)
-    publish_dir = resolve_publish_path(config_path) / variant.id
+    try:
+        validate_publish_policy(variant, publish)
+    except ValueError as exc:
+        raise SyncError(str(exc)) from exc
+    publish_dir = resolve_publish_path(configuration) / variant.id
 
     source_pdf = output_path(publish_dir, variant, "pdf")
     if not source_pdf.exists():
         raise SyncError(f"Missing PDF output: {source_pdf}")
     source_manifest = publish_dir / "manifest.json"
-    pdf_hash = _validate_public_artifact(source_pdf, source_manifest, variant, publish)
-    if publish is not None:
-        try:
-            validate_public_pdf(
-                source_pdf,
-                variant=variant,
-                publish=publish,
-                sot_path=resolve_sot_path(None, config_path),
-            )
-        except (PublicPdfError, ValueError) as exc:
-            raise SyncError(str(exc)) from exc
+    try:
+        artifact = read_public_artifact(source_pdf, source_manifest, variant, publish)
+        validate_public_pdf_content(
+            artifact.content,
+            variant=variant,
+            publish=publish,
+            sot_path=resolve_sot_path(None, configuration),
+            allowed_links=artifact.allowed_links,
+        )
+    except (PublicPdfError, ValueError) as exc:
+        raise SyncError(str(exc)) from exc
 
-    plan = _plan_sync(site, source_pdf, pdf_hash, publish)
+    publication = inspect_publication(configuration, variant.id, publish_config_path=policy_path)
+    if publication.state != "reviewed":
+        raise SyncError(f"Publication is {publication.state}: {'; '.join(publication.reasons)}")
+    if publication.pdf_sha256 != artifact.sha256:
+        raise SyncError("Reviewed PDF does not match captured artifact; retry sync")
+    if publication.manifest_sha256 != artifact.manifest_sha256:
+        raise SyncError("Reviewed publication does not match captured manifest; retry sync")
+
+    plan = _plan_sync(site, artifact, publish)
     branch_name: str | None = None
     if mode == "local":
         if plan.has_changes():
@@ -178,8 +212,8 @@ def sync_site(
     _apply_plan(plan)
     _run_git(site.repo_path, ["add", str(plan.frontmatter_path)])
     _run_git(site.repo_path, ["add", str(plan.manifest_path)])
-    for _, dest in plan.copy_ops:
-        _run_git(site.repo_path, ["add", str(dest)])
+    for copy in plan.copy_ops:
+        _run_git(site.repo_path, ["add", str(copy.destination)])
 
     if _git_has_changes(site.repo_path):
         _run_git(site.repo_path, ["commit", "-m", "Update CV artifacts"])
@@ -205,24 +239,33 @@ def sync_site(
 
 def _plan_sync(
     site: SiteSyncConfig,
-    source_pdf: Path,
-    pdf_hash: str,
-    publish: PublishConfig | None,
+    artifact: PublicArtifact,
+    publish: PublishConfig,
 ) -> SyncPlan:
     dest_pdf = site.repo_path / site.cv_pdf_dir / site.cv_pdf_name
     dest_page = site.repo_path / site.cv_page
     manifest_path = site.repo_path / site.cv_manifest
 
-    copy_ops: list[tuple[Path, Path]] = []
-    if _content_changed(source_pdf, dest_pdf):
-        copy_ops.append((source_pdf, dest_pdf))
+    copy_ops: tuple[ArtifactCopy, ...] = ()
+    if not dest_pdf.exists() or _hash_file(dest_pdf) != artifact.sha256:
+        copy_ops = (ArtifactCopy(artifact.source, dest_pdf, artifact.content),)
+    if site.cv_html is not None:
+        if artifact.reading_content is None or artifact.reading_source is None:
+            raise SyncError("Site reading view requires a reviewed native HTML publication")
+        dest_html = site.repo_path / site.cv_html
+        if not dest_html.exists() or _hash_file(dest_html) != artifact.reading_sha256:
+            copy_ops += (
+                ArtifactCopy(artifact.reading_source, dest_html, artifact.reading_content),
+            )
 
     if not dest_page.exists():
         raise SyncError(f"Missing site page: {dest_page}")
 
     pdf_url = _pdf_url(site.cv_pdf_dir, site.cv_pdf_name)
     frontmatter_content = _update_frontmatter(dest_page, site.cv_page_frontmatter_key, pdf_url)
-    manifest_content = _public_manifest(site, pdf_hash, publish)
+    manifest_content = _public_manifest(
+        site, artifact.sha256, publish, reading_hash=artifact.reading_sha256
+    )
     if manifest_path.exists() and manifest_path.read_text() == manifest_content:
         manifest_content = ""
 
@@ -237,9 +280,7 @@ def _plan_sync(
 
 
 def _apply_plan(plan: SyncPlan) -> None:
-    writes: list[tuple[Path, bytes]] = [
-        (destination, source.read_bytes()) for source, destination in plan.copy_ops
-    ]
+    writes: list[tuple[Path, bytes]] = [(copy.destination, copy.content) for copy in plan.copy_ops]
     if plan.frontmatter_content:
         writes.append((plan.frontmatter_path, plan.frontmatter_content.encode()))
     if plan.manifest_content:
@@ -250,110 +291,32 @@ def _apply_plan(plan: SyncPlan) -> None:
         raise SyncError(str(exc)) from exc
 
 
-def _validate_publish_policy(variant: Variant, publish: PublishConfig) -> None:
-    missing_tags = sorted(set(publish.required_exclude_tags) - set(variant.exclude_tags))
-    if missing_tags:
-        raise SyncError(
-            f"Publish variant is missing required exclude tags: {', '.join(missing_tags)}"
-        )
-
-    contact_fields = sorted(set(variant.contact_fields) & set(publish.forbidden_contact_fields))
-    if contact_fields:
-        raise SyncError(
-            f"Publish variant includes forbidden contact fields: {', '.join(contact_fields)}"
-        )
-
-    sections = sorted(set(variant.order) & set(publish.forbidden_sections))
-    if sections:
-        raise SyncError(f"Publish variant includes forbidden sections: {', '.join(sections)}")
-
-
-def _validate_public_artifact(
-    source_pdf: Path,
-    manifest_path: Path,
-    variant: Variant,
-    publish: PublishConfig | None,
-) -> str:
-    if not source_pdf.read_bytes().startswith(b"%PDF-"):
-        raise SyncError(f"Public artifact is not a PDF: {source_pdf}")
-    if not manifest_path.exists():
-        raise SyncError(f"Build manifest not found: {manifest_path}")
-    try:
-        manifest = json.loads(manifest_path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        raise SyncError(f"Build manifest is invalid: {manifest_path}") from exc
-    if not isinstance(manifest, dict):
-        raise SyncError(f"Build manifest is invalid: {manifest_path}")
-    if manifest.get("schema_version") != 1:
-        raise SyncError("Build manifest schema does not match authored publication contract")
-    if manifest.get("artifact_kind") != "authored-pdf-publication":
-        raise SyncError("Build manifest is not an authored PDF publication")
-    if manifest.get("formats") != ["pdf"]:
-        raise SyncError("Build manifest must declare only the PDF publication format")
-
-    manifest_variant = manifest.get("variant")
-    if not isinstance(manifest_variant, dict) or manifest_variant.get("id") != variant.id:
-        raise SyncError("Build manifest variant does not match publish variant")
-    variant_contract = {
-        "exclude_tags": variant.exclude_tags,
-        "contact_fields": variant.contact_fields,
-        "order": variant.order,
-    }
-    for key, expected in variant_contract.items():
-        if manifest_variant.get(key) != expected:
-            raise SyncError(f"Build manifest {key} does not match publish variant")
-
-    outputs = manifest.get("outputs")
-    if not isinstance(outputs, dict) or outputs.get("pdf") != source_pdf.name:
-        raise SyncError("Build manifest does not declare the PDF artifact")
-    output_hashes = manifest.get("output_hashes")
-    pdf_hash = _hash_file(source_pdf)
-    if not isinstance(output_hashes, dict) or output_hashes.get("pdf") != pdf_hash:
-        raise SyncError("Build manifest PDF hash does not match the artifact")
-    source = manifest.get("source")
-    if not isinstance(source, dict):
-        raise SyncError("Build manifest lacks authored source provenance")
-    transformation = manifest.get("transformation")
-    if not isinstance(transformation, dict) or transformation.get("kind") != "semantic-redaction":
-        raise SyncError("Build manifest lacks the semantic-redaction provenance contract")
-    redaction_count = transformation.get("redaction_count")
-    if not isinstance(redaction_count, int) or isinstance(redaction_count, bool):
-        raise SyncError("Build manifest redaction count is invalid")
-    if publish is not None:
-        if source.get("visual_fingerprint_sha256") != publish.approved_visual_fingerprint_sha256:
-            raise SyncError("Build manifest visual fingerprint does not match publish policy")
-        if transformation.get("forbidden_contact_fields") != publish.forbidden_contact_fields:
-            raise SyncError("Build manifest contact policy does not match publish policy")
-        if transformation.get("forbidden_sections") != publish.forbidden_sections:
-            raise SyncError("Build manifest section policy does not match publish policy")
-    return pdf_hash
-
-
 def _public_manifest(
     site: SiteSyncConfig,
     pdf_hash: str,
-    publish: PublishConfig | None,
+    publish: PublishConfig,
+    *,
+    reading_hash: str | None = None,
 ) -> str:
     payload = {
         "schema_version": 1,
         "variant": site.publish_variant,
         "pdf_path": str((site.cv_pdf_dir / site.cv_pdf_name).as_posix()),
         "pdf_sha256": pdf_hash,
-        "required_exclude_tags": publish.required_exclude_tags if publish else [],
-        "forbidden_contact_fields": publish.forbidden_contact_fields if publish else [],
-        "forbidden_sections": publish.forbidden_sections if publish else [],
+        "required_exclude_tags": publish.required_exclude_tags,
+        "forbidden_contact_fields": publish.forbidden_contact_fields,
+        "forbidden_sections": publish.forbidden_sections,
     }
+    if site.cv_html is not None:
+        if reading_hash is None:
+            raise SyncError("Reading view has no publication hash")
+        payload["html_path"] = str(site.cv_html.as_posix())
+        payload["html_sha256"] = reading_hash
     fields = [
         f"  {json.dumps(key)}: {json.dumps(value, sort_keys=True)}"
         for key, value in sorted(payload.items())
     ]
     return "{\n" + ",\n".join(fields) + "\n}\n"
-
-
-def _content_changed(source: Path, dest: Path) -> bool:
-    if not dest.exists():
-        return True
-    return _hash_file(source) != _hash_file(dest)
 
 
 def _hash_file(path: Path) -> str:

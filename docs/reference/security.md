@@ -9,7 +9,22 @@ navigation:
 
 # Security
 
-- Personal SoT data must live outside this repo.
+- Personal SoT data must stay outside version control. Use the configured,
+  ignored `local/` workspace or an explicitly configured external directory;
+  tracked source data is limited to public examples.
+- External career libraries contain private sources, working files, current
+  documents, and promotion receipts. Discovery requires an explicit root or
+  configuration and never inventories the environment or home directory.
+  Local inventory output includes selected paths and identities, not document
+  text or environment values. Keep it private; it is not a publication manifest.
+- Local promotion rejects source/destination overlap, unsafe paths, conflicting
+  identities, and changed current files. Public promotion accepts only a reviewed,
+  prepared PDF through the existing publication policy. Private library data is
+  never copied into the package or sent to a site by document discovery/promotion.
+- Local library operations do not upload documents or read environment values.
+  Malformed source YAML diagnostics omit the private input line, and CLI exception
+  rendering is tested to omit local variable values. Diagnostic paths and local
+  review records still reveal workspace structure: do not publish them as logs.
 - `local/sot/`, `var/dist/`, `var/runs/`, `var/drafts/`, `var/registry/`, `var/reviews/`, and `var/projects/` are ignored by git.
 - Public variants must omit forbidden contact fields and sections in addition
   to excluding private tags. Tag filtering alone does not protect top-level
@@ -25,9 +40,22 @@ navigation:
   and validates that every removed glyph falls inside a policy-derived region
   while every surviving glyph and approved vector graphic retains its visual
   geometry.
+- Phone, email, and forbidden-section checks also cover decoded PDF object
+  strings, including bookmark titles and accessibility descriptions. External
+  bookmark actions are rejected. See [non-page disclosure](publication-contract.md#non-page-disclosure)
+  for inspection scope and preservation behavior.
 - Site sync reparses the PDF and validates current variant policy and artifact
   hash before writing. The site receives a sanitized provenance manifest, not
   source paths, authored-source hashes, or private SoT hashes.
+- Direct API sync enforces the same mandatory policy as the CLI, including an
+  actual PDF rectangle-fingerprint check. Local visual review packets render
+  only the validated public bytes and remain outside the site handoff.
+- Preview requests validate local Host and same-origin browser headers, bound
+  request bodies and socket reads, and reject malformed requests before any
+  render or stop action. See [the preview contract](preview-contract.md).
+- Variant identifiers and artifact stems cannot introduce paths into output or
+  promotion destinations. See the [name contract](configuration-contract.md#variant-and-artifact-names)
+  for model and path-resolution checks.
 - Pre-commit includes gitleaks to catch secrets before commit.
 - `uv run cvw init` installs pre-commit hooks when a `.pre-commit-config.yaml`
   is present in the repo. Hook installation requires a writable `.git/hooks/`

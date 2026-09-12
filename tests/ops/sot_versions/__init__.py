@@ -1,0 +1,1 @@
+"""Source-version operation contracts."""

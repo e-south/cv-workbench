@@ -12,6 +12,7 @@ Module Author(s): Eric J. South
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ class ThemeRoute:
     template: Path | None
     pdf_engine: str | None
     defaults: list[Path]
+    reference_doc: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ class Theme:
     description: str | None
     root: Path
     routes: dict[str, ThemeRoute]
+    definition_sha256: str
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class RenderPlan:
     theme_id: str | None
     theme_hash: str | None
     style_hash: str | None
+    reference_doc: Path | None = None
 
 
 _FORMAT_ROUTES = {
@@ -152,16 +156,28 @@ def build_render_plan(
         theme_id=theme.id,
         theme_hash=hash_theme(theme),
         style_hash=style_hash,
+        reference_doc=route.reference_doc,
     )
 
 
-def hash_theme(theme: Theme) -> str:
+def hash_theme(theme: Theme, *, file_hashes: Mapping[Path, str] | None = None) -> str:
+    digest = hashlib.sha256()
+    for path in theme_hash_paths(theme):
+        fingerprint = file_hashes[path.resolve()] if file_hashes is not None else _hash_file(path)
+        digest.update(fingerprint.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def theme_hash_paths(theme: Theme) -> list[Path]:
+    """Keep composite theme fingerprint membership and ordering in one owner."""
     paths: list[Path] = [theme.root / "theme.yaml"]
     for route in theme.routes.values():
         paths.extend(route.defaults)
         if route.template is not None:
             paths.append(route.template)
-    return _hash_files(paths)
+        if route.reference_doc is not None:
+            paths.append(route.reference_doc)
+    return paths
 
 
 def load_theme(theme_dir: Path) -> Theme:
@@ -169,7 +185,8 @@ def load_theme(theme_dir: Path) -> Theme:
     if not theme_path.exists():
         raise ThemeError(f"Theme file not found: {theme_path}")
 
-    raw = yaml.safe_load(theme_path.read_text())
+    definition = theme_path.read_bytes()
+    raw = yaml.safe_load(definition.decode("utf-8"))
     if raw is None:
         raise ThemeError("Theme file is empty")
     if not isinstance(raw, dict):
@@ -196,6 +213,20 @@ def load_theme(theme_dir: Path) -> Theme:
         template_path = _resolve_template(theme_dir, template_value)
         defaults = _resolve_defaults(theme_dir, name, data)
         pdf_engine = _optional_str(data.get("pdf_engine"))
+        reference_doc = None
+        if "reference_doc" in data:
+            value = data["reference_doc"]
+            if name != "docx" or to_value != "docx":
+                raise ThemeError("reference_doc is supported only by the docx route")
+            if not isinstance(value, str) or not value.strip():
+                raise ThemeError("Theme reference_doc must be a nonempty relative file path")
+            reference_doc = (theme_dir / value).resolve()
+            if (
+                Path(value).is_absolute()
+                or not reference_doc.is_relative_to(theme_dir.resolve())
+                or not reference_doc.is_file()
+            ):
+                raise ThemeError("Theme reference_doc must name a regular file within the theme")
 
         routes[name] = ThemeRoute(
             name=name,
@@ -203,6 +234,7 @@ def load_theme(theme_dir: Path) -> Theme:
             template=template_path,
             pdf_engine=pdf_engine,
             defaults=defaults,
+            reference_doc=reference_doc,
         )
 
     return Theme(
@@ -210,6 +242,7 @@ def load_theme(theme_dir: Path) -> Theme:
         description=description,
         root=theme_dir,
         routes=routes,
+        definition_sha256=hashlib.sha256(definition).hexdigest(),
     )
 
 
@@ -272,13 +305,6 @@ def _optional_str(value: object) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     return value.strip()
-
-
-def _hash_files(paths: list[Path]) -> str:
-    digest = hashlib.sha256()
-    for path in paths:
-        digest.update(_hash_file(path).encode("utf-8"))
-    return digest.hexdigest()
 
 
 def _hash_file(path: Path | None) -> str:

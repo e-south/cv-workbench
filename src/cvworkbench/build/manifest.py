@@ -14,14 +14,12 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from cvworkbench.inputs.sot import OPTIONAL_FILES, REQUIRED_FILES
 from cvworkbench.variants import Variant
 
 
@@ -40,18 +38,16 @@ class ManifestMetadata:
 
 def collect_manifest_metadata(
     *,
-    variant_path: Path,
-    sot_path: Path,
-    resume_path: Path,
+    sot_hashes: Mapping[str, str],
+    snippet_hashes: Mapping[str, str],
+    variant_hash: str,
+    resume_name: str,
+    resume_content: bytes,
     pdf_engine: str | None,
     repo_root: Path,
 ) -> ManifestMetadata:
-    task_count = 7 if pdf_engine else 6
+    task_count = 3 if pdf_engine else 2
     with ThreadPoolExecutor(max_workers=task_count) as executor:
-        resume_hash_future = executor.submit(_hash_file, resume_path)
-        sot_hashes_future = executor.submit(_hash_sot, sot_path)
-        snippet_hashes_future = executor.submit(_hash_snippets, sot_path)
-        variant_hash_future = executor.submit(_hash_file, variant_path)
         git_commit_future = executor.submit(_git_commit, repo_root)
         pandoc_version_future = executor.submit(_tool_version, ["pandoc", "--version"])
         pdf_engine_version_future = (
@@ -59,11 +55,11 @@ def collect_manifest_metadata(
         )
 
     return ManifestMetadata(
-        resume_name=resume_path.name,
-        resume_hash=resume_hash_future.result(),
-        sot_hashes=sot_hashes_future.result(),
-        snippet_hashes=snippet_hashes_future.result(),
-        variant_hash=variant_hash_future.result(),
+        resume_name=resume_name,
+        resume_hash=hashlib.sha256(resume_content).hexdigest(),
+        sot_hashes=dict(sot_hashes),
+        snippet_hashes=dict(snippet_hashes),
+        variant_hash=variant_hash,
         git_commit=git_commit_future.result(),
         pandoc_version=pandoc_version_future.result(),
         pdf_engine=pdf_engine,
@@ -79,10 +75,12 @@ def build_manifest(
     formats: list[str],
     output_paths: dict[str, Path],
     metadata: ManifestMetadata,
+    configuration_sha256: str,
     render: dict[str, Any] | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     payload = {
+        "configuration": {"sha256": configuration_sha256},
         "variant": {
             "id": variant.id,
             "document_type": variant.document_type,
@@ -93,6 +91,9 @@ def build_manifest(
             "contact_fields": list(variant.contact_fields),
             "max_bullets_per_role": variant.max_bullets_per_role,
             "order": list(variant.order),
+            "section_titles": dict(variant.section_titles),
+            "page_break_before": list(variant.render_page_break_before),
+            "entry_layout": list(variant.render_entry_layout),
         },
         "formats": list(formats),
         "outputs": {fmt: output_paths[fmt].name for fmt in formats if fmt in output_paths},
@@ -126,55 +127,11 @@ def write_manifest(path: Path, data: dict[str, Any]) -> None:
     path.write_text(f"{payload}\n")
 
 
-def _hash_sot(sot_path: Path) -> dict[str, str]:
-    hashes = {filename: _hash_file(sot_path / filename) for filename in REQUIRED_FILES.keys()}
-    for filename in OPTIONAL_FILES.keys():
-        path = sot_path / filename
-        if path.exists():
-            hashes[filename] = _hash_file(path)
-    return hashes
-
-
-def _hash_snippets(sot_path: Path) -> dict[str, str]:
-    snippets_path = sot_path / "snippets.yaml"
-    if not snippets_path.exists():
-        return {}
-    raw = yaml.safe_load(snippets_path.read_text())
-    if raw is None:
-        raise ValueError("snippets.yaml is empty")
-    if not isinstance(raw, dict):
-        raise ValueError("snippets.yaml must be a YAML mapping")
-    snippets = raw.get("snippets")
-    if not isinstance(snippets, list):
-        raise ValueError("snippets.snippets must be a list")
-
-    hashes: dict[str, str] = {}
-    for snippet in snippets:
-        if not isinstance(snippet, dict):
-            continue
-        path_value = snippet.get("path")
-        if isinstance(path_value, str) and path_value.strip():
-            path = sot_path / path_value
-            hashes[path_value] = _hash_file(path)
-            continue
-        text_value = snippet.get("text")
-        if isinstance(text_value, str) and text_value.strip():
-            snippet_id = snippet.get("id") or "snippet"
-            hashes[f"inline:{snippet_id}"] = _hash_text(text_value)
-    return hashes
-
-
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(8192), b""):
             digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _hash_text(text: str) -> str:
-    digest = hashlib.sha256()
-    digest.update(text.encode("utf-8"))
     return digest.hexdigest()
 
 

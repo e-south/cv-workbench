@@ -110,3 +110,27 @@ def test_variant_promote_refuses_overwrite(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "already exists" in result.stderr
+
+
+def test_variant_promote_rejects_a_path_as_the_target_identifier(tmp_path: Path) -> None:
+    config = _write_minimal_config(tmp_path)
+    draft = _write_draft_variant(tmp_path, "draft")
+    before = {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    result = CliRunner().invoke(
+        app,
+        [
+            "variant",
+            "promote",
+            "--draft",
+            str(draft),
+            "--config",
+            str(config),
+            "--id",
+            "../escaped",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Variant id" in result.stderr
+    assert {
+        p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+    } == before

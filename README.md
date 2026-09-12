@@ -15,6 +15,7 @@ workflow map, contracts, and maintainer routes.
 - [docs/readme.md](docs/readme.md): central docs router and usage-flow index
 - [docs/howto/quickstart.md](docs/howto/quickstart.md): first successful local build
 - [docs/reference/context-contract.md](docs/reference/context-contract.md): automation/bootstrap contract
+- [docs/reference/document-library.md](docs/reference/document-library.md): current files, manual variants, and reviewed local promotion
 - [docs/reference/preview-contract.md](docs/reference/preview-contract.md): local build and preview contract
 - [docs/reference/project-contract.md](docs/reference/project-contract.md): project guide, reviewpack, import, and guarded patching
 - [docs/reference/verify-contract.md](docs/reference/verify-contract.md): repo-local verification harness

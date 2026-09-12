@@ -14,9 +14,25 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
+
+
+@pytest.mark.parametrize("output", ["--plain", "--json"])
+def test_status_reports_publication_in_both_output_modes(tmp_path, output):
+    config = _write_config(tmp_path)
+    result = CliRunner().invoke(
+        app, ["status", output, "--sot-path", "sot.sample", "--config", str(config)]
+    )
+    assert result.exit_code == 0, result.output
+    if output == "--json":
+        assert json.loads(result.output)["publication"]["state"] == "unconfigured"
+    else:
+        assert "publication: unconfigured" in result.output
 
 
 def _write_config(root: Path) -> Path:
@@ -139,5 +155,6 @@ def test_status_json_reports_runs_variants_and_projects(tmp_path: Path) -> None:
     assert payload["variants"]["config_count"] == 2
     assert payload["projects"]["count"] == 1
     assert payload["reviews"]["count"] == 1
+    assert payload["reviews"]["items"][0]["missing_files"] == ["review.md"]
     recents = payload["runs"]["recents_by_variant"]["base"]
     assert recents[0]["run_id"] == "2026-01-03T00-00-00Z"

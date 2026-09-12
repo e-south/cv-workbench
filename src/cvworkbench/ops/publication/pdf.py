@@ -1,0 +1,1014 @@
+"""
+--------------------------------------------------------------------------------
+cv-workbench
+cv-workbench/src/cvworkbench/ops/publication/pdf.py
+
+Prepares faithful authored PDFs for public distribution.
+
+Module Author(s): Eric J. South
+--------------------------------------------------------------------------------
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import tempfile
+import zipfile
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+from xml.etree import ElementTree
+
+import pymupdf
+import yaml
+
+from cvworkbench.build.paths import output_path
+from cvworkbench.config import (
+    ConfigSnapshot,
+    ConfigSource,
+    read_config,
+    resolve_publish_path,
+    resolve_reviews_path,
+    resolve_variant_path,
+)
+from cvworkbench.ops.publication.inputs import (
+    PublicationInputCopies,
+    PublicationInputError,
+    capture_publication_inputs,
+)
+from cvworkbench.ops.publication.manifest import publication_manifest_content
+from cvworkbench.ops.publication.object_text import PdfObjectTextError, pdf_object_text
+from cvworkbench.ops.publication.packet import PublicationReviewError, publication_review_files
+from cvworkbench.ops.publication.policy import PublishConfig, load_publish_config
+from cvworkbench.ops.publication.record import PreparationInputChangedError, preparation_bytes
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
+from cvworkbench.variants import Variant, load_variant
+
+EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+PHONE_SEPARATOR_PATTERN = r"[ .\-\u00a0\u2010-\u2015\u202f\u2212]"
+PHONE_CANDIDATE_PATTERN = re.compile(
+    rf"(?<!\w)(?:"
+    rf"(?:\+?1{PHONE_SEPARATOR_PATTERN}?)?(?:\(\d{{3}}\)|\d{{3}})"
+    rf"{PHONE_SEPARATOR_PATTERN}\d{{3}}{PHONE_SEPARATOR_PATTERN}\d{{4}}"
+    rf"|\+\d{{1,3}}(?:{PHONE_SEPARATOR_PATTERN}\(?\d{{1,4}}\)?){{2,5}}"
+    rf"|\+?\d{{10,15}}"
+    rf"|\d{{3}}{PHONE_SEPARATOR_PATTERN}\d{{4}}"
+    rf")(?!\w)"
+)
+MIN_SOURCE_TOKEN_COVERAGE = 0.9
+LINK_LABEL_TOLERANCE_POINTS = 3.0
+
+
+class PublicPdfError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class PublicPdfResult:
+    output_pdf: Path
+    manifest_path: Path
+    redaction_count: int
+    review_path: Path
+
+
+def sanitize_public_metadata(document: pymupdf.Document) -> None:
+    """Strip hidden payloads and the catalog's automatic opening action."""
+    document.scrub(remove_links=False)
+    # xref_set_key(..., "null") retains the key in current PyMuPDF. Delete
+    # through its MuPDF dictionary API without rewriting unrelated catalog data.
+    pdf = pymupdf.mupdf.pdf_document_from_fz_document(document.this)
+    catalog = pymupdf.mupdf.pdf_load_object(pdf, document.pdf_catalog())
+    pymupdf.mupdf.pdf_dict_dels(catalog, "OpenAction")
+    document.set_metadata({})
+
+
+@dataclass(frozen=True)
+class _PdfCharacter:
+    value: str
+    origin: tuple[float, float]
+    bbox: tuple[float, float, float, float]
+    font: str
+    size: float
+    flags: int
+    color: int
+
+
+@dataclass(frozen=True)
+class _SourceMatch:
+    pdf_token_coverage: float
+    docx_token_coverage: float
+
+
+@dataclass(frozen=True)
+class _RedactionRegion:
+    page_index: int
+    rect: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class _RedactionPlan:
+    count: int
+    regions: tuple[_RedactionRegion, ...]
+
+
+def prepare_public_pdf(
+    *,
+    authored_source: Path,
+    source_pdf: Path,
+    config_path: ConfigSource,
+    variant_id: str,
+    publish_config_path: Path,
+    sot_path: Path,
+) -> PublicPdfResult:
+    """Sanitize an authored PDF without re-typesetting its public content."""
+
+    configuration = read_config(config_path)
+    if not source_pdf.exists():
+        raise PublicPdfError(f"Authored PDF not found: {source_pdf}")
+    try:
+        with capture_publication_inputs(
+            authored_source=authored_source,
+            source_pdf=source_pdf,
+            policy_path=publish_config_path,
+            variant_path=resolve_variant_path(variant_id, configuration),
+            person_path=sot_path / "person.yaml",
+        ) as inputs:
+            return _prepare_captured_public_pdf(inputs=inputs, configuration=configuration)
+    except (PublicationInputError, PreparationInputChangedError) as exc:
+        raise PublicPdfError(str(exc)) from exc
+
+
+def _prepare_captured_public_pdf(
+    *, inputs: PublicationInputCopies, configuration: ConfigSnapshot
+) -> PublicPdfResult:
+    authored_source = inputs.authored_source
+    source_pdf = inputs.exported_pdf
+    sot_path = inputs.person.parent
+    source_match = _validate_authored_source(authored_source, source_pdf)
+    variant = load_variant(inputs.variant_config)
+    publish = load_publish_config(inputs.policy)
+    _validate_publish_variant(variant, publish)
+    if "pdf" not in variant.outputs:
+        raise PublicPdfError(f"Publish variant '{variant.id}' does not declare a PDF output")
+
+    output_pdf = output_path(resolve_publish_path(configuration) / variant.id, variant, "pdf")
+    manifest_path = output_pdf.parent / "manifest.json"
+    if Path(inputs.stamps.exported_pdf.path) == output_pdf.resolve():
+        raise PublicPdfError("Authored source and public output must be different files")
+    output_pdf.parent.mkdir(parents=True, exist_ok=True)
+    person = _load_person(sot_path)
+
+    document = _open_pdf(source_pdf)
+    try:
+        source_visual_fingerprint = _validate_source_visual_contract(document, publish)
+        redaction_plan = _mark_private_content(document, publish, person, variant)
+        _tighten_public_link_rectangles(document, person=person, variant=variant)
+        for page in document:
+            page.apply_redactions(images=0, graphics=0, text=0)
+        sanitize_public_metadata(document)
+
+        temporary_pdf = _temporary_pdf_path(output_pdf)
+        try:
+            document.save(
+                temporary_pdf,
+                garbage=4,
+                clean=True,
+                deflate=True,
+                use_objstms=1,
+                reproducible=True,
+                no_new_id=True,
+            )
+            validate_public_pdf(
+                temporary_pdf,
+                variant=variant,
+                publish=publish,
+                sot_path=sot_path,
+            )
+            validate_public_pdf_layout(
+                source_pdf,
+                temporary_pdf,
+                allowed_redactions=redaction_plan.regions,
+            )
+            public_pdf_bytes = temporary_pdf.read_bytes()
+            public_pdf_hash = hashlib.sha256(public_pdf_bytes).hexdigest()
+            review_dir = resolve_reviews_path(configuration) / "publication" / public_pdf_hash
+            try:
+                review_files = publication_review_files(public_pdf_bytes)
+            except PublicationReviewError as exc:
+                raise PublicPdfError(str(exc)) from exc
+            manifest_content = publication_manifest_content(
+                authored_name=authored_source.name,
+                authored_sha256=inputs.stamps.authored_source.sha256,
+                source_pdf_name=source_pdf.name,
+                source_pdf_sha256=inputs.stamps.exported_pdf.sha256,
+                output_pdf_name=output_pdf.name,
+                output_pdf_sha256=public_pdf_hash,
+                variant=variant,
+                publish=publish,
+                redaction_count=redaction_plan.count,
+                pdf_token_coverage=source_match.pdf_token_coverage,
+                docx_token_coverage=source_match.docx_token_coverage,
+                source_visual_fingerprint=source_visual_fingerprint,
+            )
+            record_content = preparation_bytes(
+                inputs=inputs.stamps,
+                variant=variant.id,
+                pdf_hash=public_pdf_hash,
+                manifest_content=manifest_content,
+                review_files=review_files,
+            )
+            try:
+                replace_files_atomically(
+                    [
+                        (output_pdf, public_pdf_bytes),
+                        (manifest_path, manifest_content.encode()),
+                        (output_pdf.parent / "preparation.json", record_content),
+                        *((review_dir / name, content) for name, content in review_files.items()),
+                    ],
+                    file_modes={output_pdf.parent / "preparation.json": 0o600},
+                )
+            except AtomicWriteError as exc:
+                raise PublicPdfError(str(exc)) from exc
+        finally:
+            temporary_pdf.unlink(missing_ok=True)
+    finally:
+        document.close()
+
+    return PublicPdfResult(
+        output_pdf=output_pdf,
+        manifest_path=manifest_path,
+        redaction_count=redaction_plan.count,
+        review_path=review_dir / "review.html",
+    )
+
+
+def validate_public_pdf(
+    path: Path,
+    *,
+    variant: Variant,
+    publish: PublishConfig,
+    sot_path: Path,
+    allowed_links: frozenset[str] | None = None,
+) -> None:
+    """Fail closed when a PDF exposes contact or section data forbidden by policy."""
+
+    person = _load_person(sot_path)
+    document = _open_pdf(path)
+    _validate_public_document(
+        document,
+        person=person,
+        variant=variant,
+        publish=publish,
+        label=str(path),
+        allowed_links=allowed_links,
+    )
+
+
+def validate_public_pdf_content(
+    content: bytes,
+    *,
+    variant: Variant,
+    publish: PublishConfig,
+    sot_path: Path,
+    allowed_links: frozenset[str] | None = None,
+) -> None:
+    """Validate captured PDF bytes without reopening a mutable artifact path."""
+    person = _load_person(sot_path)
+    if not content.startswith(b"%PDF-"):
+        raise PublicPdfError("Public artifact is not a PDF")
+    try:
+        document = pymupdf.open(stream=content, filetype="pdf")
+    except (pymupdf.FileDataError, RuntimeError) as exc:
+        raise PublicPdfError("Invalid PDF artifact") from exc
+    _validate_public_document(
+        document,
+        person=person,
+        variant=variant,
+        publish=publish,
+        label="captured PDF",
+        allowed_links=allowed_links,
+    )
+
+
+def _validate_public_document(
+    document: pymupdf.Document,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+    publish: PublishConfig,
+    label: str,
+    allowed_links: frozenset[str] | None = None,
+) -> None:
+    try:
+        if document.needs_pass:
+            raise PublicPdfError(f"Public PDF must not be encrypted: {label}")
+        if document.embfile_count():
+            raise PublicPdfError(f"Public PDF must not contain embedded files: {label}")
+        _validate_source_visual_contract(document, publish)
+        _validate_pdf_links(document, person=person, variant=variant, allowed_links=allowed_links)
+        text = "\n".join(page.get_text() for page in document)
+        try:
+            text += "\n" + pdf_object_text(document)
+        except PdfObjectTextError as exc:
+            raise PublicPdfError(str(exc)) from exc
+    finally:
+        document.close()
+
+    validate_public_text(text, person=person, variant=variant, publish=publish)
+
+
+def validate_public_text(
+    text: str,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+    publish: PublishConfig,
+    label: str = "Public PDF",
+) -> None:
+    """Apply the same contact and section disclosure policy to public text views."""
+    forbidden_phone_digits = _forbidden_phone_digits(person, publish)
+    if forbidden_phone_digits and any(
+        _matches_forbidden_phone(
+            match.group(0),
+            forbidden_phone_digits,
+            preceding_text=text[: match.start()],
+        )
+        for match in PHONE_CANDIDATE_PATTERN.finditer(text)
+    ):
+        raise PublicPdfError(f"{label} contains a forbidden phone number")
+
+    observed_emails = {match.casefold() for match in EMAIL_PATTERN.findall(text)}
+    allowed_emails: set[str] = set()
+    if observed_emails:
+        if "email" in variant.contact_fields and "email" not in publish.forbidden_contact_fields:
+            email = person.get("email")
+            if isinstance(email, str) and email.strip():
+                allowed_emails.add(email.strip().casefold())
+    unauthorized_emails = sorted(observed_emails - allowed_emails)
+    if unauthorized_emails:
+        raise PublicPdfError(f"{label} contains an unauthorized email address")
+
+    normalized_lines = {line.strip().casefold() for line in text.splitlines()}
+    for section in publish.forbidden_sections:
+        marker = _section_label(section).casefold()
+        if marker in normalized_lines:
+            raise PublicPdfError(f"{label} contains forbidden section heading: {section}")
+
+
+def validate_public_pdf_layout(
+    source_path: Path,
+    public_path: Path,
+    *,
+    allowed_redactions: tuple[_RedactionRegion, ...] = (),
+) -> None:
+    """Prove that sanitization did not reflow or restyle surviving text."""
+
+    source = _open_pdf(source_path)
+    public = _open_pdf(public_path)
+    try:
+        if source.page_count != public.page_count:
+            raise PublicPdfError("Public PDF layout drift: page count changed")
+
+        allowed_by_page: dict[int, list[pymupdf.Rect]] = {}
+        for region in allowed_redactions:
+            if region.page_index < 0 or region.page_index >= source.page_count:
+                raise PublicPdfError(
+                    "Public PDF layout contract contains an invalid redaction page"
+                )
+            allowed_by_page.setdefault(region.page_index, []).append(pymupdf.Rect(region.rect))
+
+        for page_index in range(source.page_count):
+            source_page = source[page_index]
+            public_page = public[page_index]
+            if source_page.rotation != public_page.rotation:
+                raise PublicPdfError(
+                    f"Public PDF layout drift on page {page_index + 1}: rotation changed"
+                )
+            for label, source_rect, public_rect in (
+                ("page", source_page.rect, public_page.rect),
+                ("media box", source_page.mediabox, public_page.mediabox),
+                ("crop box", source_page.cropbox, public_page.cropbox),
+            ):
+                if not _coordinates_match(tuple(source_rect), tuple(public_rect)):
+                    raise PublicPdfError(
+                        f"Public PDF layout drift on page {page_index + 1}: {label} changed"
+                    )
+
+            if _visual_fingerprint_for_page(source_page) != _visual_fingerprint_for_page(
+                public_page
+            ):
+                raise PublicPdfError(
+                    f"Public PDF layout drift on page {page_index + 1}: graphics changed"
+                )
+
+            source_characters = _pdf_characters(source_page)
+            public_characters = _pdf_characters(public_page)
+            source_cursor = 0
+            public_cursor = 0
+            while source_cursor < len(source_characters):
+                source_character = source_characters[source_cursor]
+                if public_cursor < len(public_characters) and _characters_match(
+                    source_character,
+                    public_characters[public_cursor],
+                ):
+                    source_cursor += 1
+                    public_cursor += 1
+                    continue
+                if _character_is_within_redaction(
+                    source_character,
+                    allowed_by_page.get(page_index, []),
+                ):
+                    source_cursor += 1
+                    continue
+                value = repr(source_character.value)
+                raise PublicPdfError(
+                    "Public PDF layout drift on page "
+                    f"{page_index + 1}: unapproved removal near character {value}"
+                )
+            if public_cursor != len(public_characters):
+                value = repr(public_characters[public_cursor].value)
+                raise PublicPdfError(
+                    "Public PDF layout drift on page "
+                    f"{page_index + 1}: unexpected character near {value}"
+                )
+    finally:
+        public.close()
+        source.close()
+
+
+def _pdf_characters(page: pymupdf.Page) -> list[_PdfCharacter]:
+    characters: list[_PdfCharacter] = []
+    payload = page.get_text("rawdict", sort=True)
+    for block in payload.get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                for character in span.get("chars", []):
+                    characters.append(
+                        _PdfCharacter(
+                            value=character["c"],
+                            origin=tuple(character["origin"]),
+                            bbox=tuple(character["bbox"]),
+                            font=span["font"],
+                            size=span["size"],
+                            flags=span["flags"],
+                            color=span["color"],
+                        )
+                    )
+    return characters
+
+
+def _characters_match(source: _PdfCharacter, public: _PdfCharacter) -> bool:
+    return (
+        source.value == public.value
+        and _coordinates_match(source.origin, public.origin)
+        and _coordinates_match(source.bbox, public.bbox)
+        and source.font == public.font
+        and abs(source.size - public.size) <= 0.001
+        and source.flags == public.flags
+        and source.color == public.color
+    )
+
+
+def _coordinates_match(source: tuple[float, ...], public: tuple[float, ...]) -> bool:
+    return len(source) == len(public) and all(
+        abs(source_value - public_value) <= 0.02
+        for source_value, public_value in zip(source, public, strict=True)
+    )
+
+
+def _character_is_within_redaction(
+    character: _PdfCharacter,
+    regions: list[pymupdf.Rect],
+) -> bool:
+    character_rect = pymupdf.Rect(character.bbox)
+    return any(character_rect.intersects(region) for region in regions)
+
+
+def _validate_pdf_links(
+    document: pymupdf.Document,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+    allowed_links: frozenset[str] | None = None,
+) -> None:
+    allowed_urls = (
+        _allowed_public_links(person, variant) if allowed_links is None else allowed_links
+    )
+    named_destinations = document.resolve_names()
+    for bookmark in document.get_toc(simple=False):
+        destination = bookmark[3]
+        xref = destination.get("xref")
+        if not isinstance(xref, int) or xref <= 0:
+            raise PublicPdfError("Public PDF bookmark action could not be inspected")
+        action_present = document.xref_get_key(xref, "A")[0] != "null"
+        named = named_destinations.get(destination.get("nameddest"), {})
+        internal_named = (
+            destination.get("kind") == pymupdf.LINK_NAMED
+            and isinstance(named.get("page"), int)
+            and 0 <= named["page"] < len(document)
+        )
+        if (
+            (
+                destination.get("kind") not in {pymupdf.LINK_NONE, pymupdf.LINK_GOTO}
+                and not internal_named
+            )
+            or (action_present and document.xref_get_key(xref, "A/S")[1] != "/GoTo")
+            or document.xref_get_key(xref, "A/Next")[0] != "null"
+            or document.xref_get_key(xref, "AA")[0] != "null"
+        ):
+            raise PublicPdfError("Public PDF contains an unsafe or external bookmark action")
+    for page_index, page in enumerate(document):
+        text_rectangles = _link_glyph_rectangles(page)
+        for link in page.get_links():
+            uri = link.get("uri")
+            parsed = urlsplit(uri) if isinstance(uri, str) else None
+            link_rect = pymupdf.Rect(link["from"])
+            label_rect = _visible_link_label_rect(link_rect, text_rectangles)
+            if (
+                link.get("kind") != pymupdf.LINK_URI
+                or parsed is None
+                or not _safe_public_uri(uri, person, variant, allow_email=allowed_links is not None)
+                or uri not in allowed_urls
+                or label_rect is None
+                or not _rect_edges_match(link_rect, label_rect)
+            ):
+                raise PublicPdfError(
+                    f"Public PDF contains an unsafe or hidden link on page {page_index + 1}"
+                )
+
+
+def _safe_public_uri(
+    uri: str, person: dict[str, Any], variant: Variant, *, allow_email: bool
+) -> bool:
+    if any(ord(char) <= 32 or ord(char) == 127 for char in uri):
+        return False
+    parsed = urlsplit(uri)
+    if parsed.scheme == "https":
+        return bool(parsed.hostname) and parsed.username is None and parsed.password is None
+    return bool(
+        allow_email
+        and "email" in variant.contact_fields
+        and person.get("email")
+        and uri == "mailto:" + person["email"]
+    )
+
+
+def _allowed_public_links(person: dict[str, Any], variant: Variant) -> set[str]:
+    if "links" not in variant.contact_fields:
+        return set()
+    raw_links = person.get("links")
+    if not isinstance(raw_links, list):
+        return set()
+    allowed: set[str] = set()
+    for link in raw_links:
+        if not isinstance(link, dict):
+            continue
+        uri = link.get("url")
+        parsed = urlsplit(uri) if isinstance(uri, str) else None
+        if parsed is None or parsed.scheme.casefold() != "https" or not parsed.hostname:
+            raise PublicPdfError("Public Source of Truth links must be absolute HTTPS URLs")
+        allowed.add(uri)
+    return allowed
+
+
+def _tighten_public_link_rectangles(
+    document: pymupdf.Document,
+    *,
+    person: dict[str, Any],
+    variant: Variant,
+) -> None:
+    """Keep label-sized links clear of redactions on adjacent text lines."""
+
+    allowed_urls = _allowed_public_links(person, variant)
+    for page in document:
+        text_rectangles = _link_glyph_rectangles(page)
+        for link in page.get_links():
+            if link.get("kind") != pymupdf.LINK_URI or link.get("uri") not in allowed_urls:
+                continue
+            link_rect = pymupdf.Rect(link["from"])
+            label_rect = _visible_link_label_rect(link_rect, text_rectangles)
+            if label_rect is not None and _rect_edges_match(link_rect, label_rect):
+                page.update_link({**link, "from": label_rect})
+
+
+def _link_glyph_rectangles(page: pymupdf.Page) -> list[pymupdf.Rect]:
+    # Word boxes include adjacent commas/periods even when they are not linked.
+    return [
+        pymupdf.Rect(character.bbox)
+        for character in _pdf_characters(page)
+        if not character.value.isspace()
+    ]
+
+
+def _visible_link_label_rect(
+    link_rect: pymupdf.Rect,
+    text_rectangles: list[pymupdf.Rect],
+) -> pymupdf.Rect | None:
+    covered = [
+        rect
+        for rect in text_rectangles
+        if link_rect.contains(pymupdf.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2))
+    ]
+    if not covered:
+        return None
+    label_rect = pymupdf.Rect(covered[0])
+    for rect in covered[1:]:
+        label_rect |= rect
+    return label_rect
+
+
+def _rect_edges_match(left: pymupdf.Rect, right: pymupdf.Rect) -> bool:
+    return all(
+        abs(left_value - right_value) <= LINK_LABEL_TOLERANCE_POINTS
+        for left_value, right_value in zip(left, right, strict=True)
+    )
+
+
+def _validate_verifiable_visual_content(document: pymupdf.Document) -> None:
+    for page_index, page in enumerate(document):
+        if page.get_images(full=True):
+            raise PublicPdfError(
+                f"Public PDF contains unverifiable raster content on page {page_index + 1}"
+            )
+        if any(True for _ in page.annots()):
+            raise PublicPdfError(
+                f"Public PDF contains unsupported annotations on page {page_index + 1}"
+            )
+        if any(True for _ in page.widgets()):
+            raise PublicPdfError(
+                f"Public PDF contains unsupported form widgets on page {page_index + 1}"
+            )
+        for drawing in page.get_drawings():
+            if any(
+                item[0] != "re" and not (item[0] == "l" and item[1].y == item[2].y)
+                for item in drawing.get("items", [])
+            ):
+                raise PublicPdfError(
+                    f"Public PDF contains unverifiable vector content on page {page_index + 1}"
+                )
+
+
+def _validate_source_visual_contract(
+    document: pymupdf.Document,
+    publish: PublishConfig,
+) -> str:
+    _validate_verifiable_visual_content(document)
+    fingerprint = _visual_fingerprint(document)
+    if fingerprint != publish.approved_visual_fingerprint_sha256:
+        raise PublicPdfError(
+            "Authored PDF visual fingerprint is not approved; review the source layout first, "
+            f"then set approved_visual_fingerprint_sha256 to {fingerprint}"
+        )
+    return fingerprint
+
+
+def _visual_fingerprint(document: pymupdf.Document) -> str:
+    drawings: list[dict[str, Any]] = []
+    for page_index, page in enumerate(document):
+        drawings.extend(
+            {"page": page_index, **drawing} for drawing in _canonical_page_drawings(page)
+        )
+    payload = json.dumps(drawings, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _visual_fingerprint_for_page(page: pymupdf.Page) -> str:
+    payload = json.dumps(
+        _canonical_page_drawings(page), sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _canonical_page_drawings(page: pymupdf.Page) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": drawing.get("type"),
+            "rect": _canonical_visual_value(drawing.get("rect")),
+            "fill": _canonical_visual_value(drawing.get("fill")),
+            "color": _canonical_visual_value(drawing.get("color")),
+            "width": _canonical_visual_value(drawing.get("width")),
+            "dashes": drawing.get("dashes"),
+            "line_cap": _canonical_visual_value(drawing.get("lineCap")),
+            "line_join": _canonical_visual_value(drawing.get("lineJoin")),
+            "close_path": drawing.get("closePath"),
+            "fill_opacity": _canonical_visual_value(drawing.get("fill_opacity")),
+            "stroke_opacity": _canonical_visual_value(drawing.get("stroke_opacity")),
+            "even_odd": drawing.get("even_odd"),
+            "layer": drawing.get("layer"),
+            "items": _canonical_visual_value(drawing.get("items", [])),
+        }
+        for drawing in page.get_drawings()
+    ]
+
+
+def _canonical_visual_value(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return round(value, 5)
+    if isinstance(value, (pymupdf.Point, pymupdf.Rect, pymupdf.Quad)):
+        return [_canonical_visual_value(item) for item in tuple(value)]
+    if isinstance(value, (list, tuple)):
+        return [_canonical_visual_value(item) for item in value]
+    raise PublicPdfError(f"Public PDF contains unsupported visual metadata: {type(value).__name__}")
+
+
+def _mark_private_content(
+    document: pymupdf.Document,
+    publish: PublishConfig,
+    person: dict[str, Any],
+    variant: Variant,
+) -> _RedactionPlan:
+    regions: list[_RedactionRegion] = []
+    forbidden_phone_digits = _forbidden_phone_digits(person, publish)
+    if forbidden_phone_digits:
+        for page_index, page in enumerate(document):
+            page_text = page.get_text()
+            for match in PHONE_CANDIDATE_PATTERN.finditer(page_text):
+                if not _matches_forbidden_phone(
+                    match.group(0),
+                    forbidden_phone_digits,
+                    preceding_text=page_text[: match.start()],
+                ):
+                    continue
+                for rect in _phone_redaction_rects(page, match.group(0)):
+                    region = _RedactionRegion(page_index=page_index, rect=tuple(rect))
+                    if region in regions:
+                        continue
+                    page.add_redact_annot(rect, fill=None, cross_out=False)
+                    regions.append(region)
+
+    for section in publish.forbidden_sections:
+        regions.extend(
+            _mark_terminal_section_and_following_pages(
+                document,
+                section,
+                allowed_sections=variant.order,
+            )
+        )
+    return _RedactionPlan(count=len(regions), regions=tuple(regions))
+
+
+def _phone_redaction_rects(page: pymupdf.Page, candidate: str) -> list[pymupdf.Rect]:
+    separators = {"|", "•", "·"}
+    words = page.get_text("words")
+    redactions: list[pymupdf.Rect] = []
+    for match_rect in page.search_for(candidate):
+        rect = pymupdf.Rect(match_rect)
+        same_line_separators = [
+            pymupdf.Rect(*word[:4])
+            for word in words
+            if word[4] in separators
+            if abs(word[1] - rect.y0) <= 1
+            if abs(word[3] - rect.y1) <= 1
+        ]
+        preceding = [
+            separator for separator in same_line_separators if 0 <= rect.x0 - separator.x1 <= 6
+        ]
+        following = [
+            separator for separator in same_line_separators if 0 <= separator.x0 - rect.x1 <= 6
+        ]
+        if preceding:
+            rect |= max(preceding, key=lambda separator: separator.x1)
+        elif following:
+            rect |= min(following, key=lambda separator: separator.x0)
+        redactions.append(rect)
+    return redactions
+
+
+def _forbidden_phone_digits(
+    person: dict[str, Any],
+    publish: PublishConfig,
+) -> tuple[str, ...]:
+    if "phone" not in publish.forbidden_contact_fields:
+        return ()
+
+    raw = person.get("phone")
+    values = raw if isinstance(raw, list) else [raw]
+    digits = tuple(
+        normalized
+        for value in values
+        if isinstance(value, str)
+        if (normalized := re.sub(r"\D", "", value))
+    )
+    if not digits:
+        raise PublicPdfError("Phone publication policy requires phone data in the Source of Truth")
+    return digits
+
+
+def _matches_forbidden_phone(
+    candidate: str,
+    forbidden_digits: tuple[str, ...],
+    *,
+    preceding_text: str = "",
+) -> bool:
+    candidate_digits = re.sub(r"\D", "", candidate)
+    for expected in forbidden_digits:
+        if candidate_digits == expected:
+            return True
+        if len(expected) == 11 and expected.startswith("1") and candidate_digits == expected[1:]:
+            return True
+        if len(candidate_digits) == 11 and candidate_digits.startswith("1"):
+            if candidate_digits[1:] == expected:
+                return True
+    if _is_labeled_valid_isbn(candidate, preceding_text=preceding_text):
+        return False
+    return 7 <= len(candidate_digits) <= 15
+
+
+def _is_labeled_valid_isbn(candidate: str, *, preceding_text: str) -> bool:
+    if not re.fullmatch(r"\d{10}|\d{13}", candidate):
+        return False
+
+    line_prefix = preceding_text.rsplit("\n", maxsplit=1)[-1]
+    label_match = re.search(r"\bISBN(?:-(10|13))?\s*:?\s*$", line_prefix, re.IGNORECASE)
+    if label_match is None:
+        return False
+    labeled_length = label_match.group(1)
+    if labeled_length is not None and int(labeled_length) != len(candidate):
+        return False
+
+    digits = [int(value) for value in candidate]
+    if len(digits) == 10:
+        return (
+            sum(weight * value for weight, value in zip(range(10, 0, -1), digits, strict=True)) % 11
+            == 0
+        )
+    if not candidate.startswith(("978", "979")):
+        return False
+    weighted_sum = sum(
+        value * (1 if index % 2 == 0 else 3) for index, value in enumerate(digits[:-1])
+    )
+    return (10 - weighted_sum % 10) % 10 == digits[-1]
+
+
+def _mark_terminal_section_and_following_pages(
+    document: pymupdf.Document,
+    section: str,
+    *,
+    allowed_sections: tuple[str, ...],
+) -> list[_RedactionRegion]:
+    label = _section_label(section)
+    heading_page: int | None = None
+    heading_rect: pymupdf.Rect | None = None
+    marker_exists = False
+
+    for page_index, page in enumerate(document):
+        page_text = page.get_text()
+        marker_exists = marker_exists or bool(
+            re.search(rf"\b{re.escape(label)}\b", page_text, re.IGNORECASE)
+        )
+        exact_heading_rect = _exact_line_rect(page, label)
+        if exact_heading_rect is None:
+            continue
+        heading_page = page_index
+        heading_rect = exact_heading_rect
+        break
+
+    if heading_page is None or heading_rect is None:
+        if marker_exists:
+            raise PublicPdfError(f"Could not isolate forbidden section heading: {section}")
+        return []
+
+    for allowed_section in allowed_sections:
+        allowed_label = _section_label(allowed_section)
+        for page_index in range(heading_page, document.page_count):
+            allowed_rect = _exact_line_rect(document[page_index], allowed_label)
+            if allowed_rect is None:
+                continue
+            follows_forbidden = page_index > heading_page or allowed_rect.y0 > heading_rect.y0
+            if follows_forbidden:
+                raise PublicPdfError(
+                    f"Forbidden section '{section}' must be terminal; "
+                    f"allowed section '{allowed_section}' follows it"
+                )
+
+    regions: list[_RedactionRegion] = []
+    for page_index in range(heading_page, document.page_count):
+        page = document[page_index]
+        if page_index == heading_page:
+            rect = pymupdf.Rect(
+                page.rect.x0,
+                max(page.rect.y0, heading_rect.y0 - 1),
+                page.rect.x1,
+                page.rect.y1,
+            )
+        else:
+            rect = page.rect
+        page.add_redact_annot(rect, fill=None, cross_out=False)
+        regions.append(_RedactionRegion(page_index=page_index, rect=tuple(rect)))
+    return regions
+
+
+def _exact_line_rect(page: pymupdf.Page, label: str) -> pymupdf.Rect | None:
+    payload = page.get_text("dict", sort=True)
+    for block in payload.get("blocks", []):
+        for line in block.get("lines", []):
+            text = "".join(span.get("text", "") for span in line.get("spans", [])).strip()
+            if text.casefold() == label.casefold():
+                return pymupdf.Rect(line["bbox"])
+    return None
+
+
+def _validate_publish_variant(variant: Variant, publish: PublishConfig) -> None:
+    if variant.id not in publish.variants:
+        raise PublicPdfError(f"Variant '{variant.id}' is not allowed by publish policy")
+    missing_tags = sorted(set(publish.required_exclude_tags) - set(variant.exclude_tags))
+    if missing_tags:
+        raise PublicPdfError(
+            f"Publish variant is missing required exclude tags: {', '.join(missing_tags)}"
+        )
+    forbidden_contacts = sorted(set(variant.contact_fields) & set(publish.forbidden_contact_fields))
+    if forbidden_contacts:
+        raise PublicPdfError(
+            "Publish variant includes forbidden contact fields: " + ", ".join(forbidden_contacts)
+        )
+    forbidden_sections = sorted(set(variant.order) & set(publish.forbidden_sections))
+    if forbidden_sections:
+        raise PublicPdfError(
+            f"Publish variant includes forbidden sections: {', '.join(forbidden_sections)}"
+        )
+
+
+def _open_pdf(path: Path) -> pymupdf.Document:
+    try:
+        document = pymupdf.open(path)
+    except (pymupdf.FileDataError, RuntimeError) as exc:
+        raise PublicPdfError(f"Invalid PDF artifact: {path}") from exc
+    if not document.is_pdf:
+        document.close()
+        raise PublicPdfError(f"Public artifact is not a PDF: {path}")
+    return document
+
+
+def _load_person(sot_path: Path) -> dict[str, Any]:
+    person_path = sot_path / "person.yaml"
+    if not person_path.exists():
+        raise PublicPdfError(f"Person Source of Truth not found: {person_path}")
+    raw = yaml.safe_load(person_path.read_text())
+    if not isinstance(raw, dict):
+        raise PublicPdfError(f"Invalid person Source of Truth: {person_path}")
+    return raw
+
+
+def _section_label(section: str) -> str:
+    return section.replace("_", " ").replace("-", " ").strip().title()
+
+
+def _validate_authored_source(authored_source: Path, source_pdf: Path) -> _SourceMatch:
+    if not authored_source.exists():
+        raise PublicPdfError(f"Authored source not found: {authored_source}")
+    if authored_source.suffix.casefold() != ".docx":
+        raise PublicPdfError("Authored source must be a DOCX file")
+    try:
+        with zipfile.ZipFile(authored_source) as archive:
+            names = set(archive.namelist())
+            if "word/document.xml" not in names:
+                raise PublicPdfError(f"Invalid authored DOCX: {authored_source}")
+            if "word/vbaProject.bin" in names:
+                raise PublicPdfError("Authored DOCX must not contain macros")
+            root = ElementTree.fromstring(archive.read("word/document.xml"))
+    except (zipfile.BadZipFile, ElementTree.ParseError, KeyError) as exc:
+        raise PublicPdfError(f"Invalid authored DOCX: {authored_source}") from exc
+
+    authored_text = " ".join(
+        element.text or "" for element in root.iter() if element.tag.endswith("}t")
+    )
+    source_document = _open_pdf(source_pdf)
+    try:
+        source_text = " ".join(page.get_text() for page in source_document)
+    finally:
+        source_document.close()
+
+    authored_tokens = Counter(_normalized_tokens(authored_text))
+    source_tokens = Counter(_normalized_tokens(source_text))
+    if not authored_tokens or not source_tokens:
+        raise PublicPdfError("Authored DOCX and exported PDF must both contain extractable text")
+    overlap = sum((authored_tokens & source_tokens).values())
+    pdf_coverage = overlap / source_tokens.total()
+    docx_coverage = overlap / authored_tokens.total()
+    if pdf_coverage < MIN_SOURCE_TOKEN_COVERAGE or docx_coverage < MIN_SOURCE_TOKEN_COVERAGE:
+        raise PublicPdfError("Exported PDF does not correspond closely enough to the authored DOCX")
+    return _SourceMatch(
+        pdf_token_coverage=pdf_coverage,
+        docx_token_coverage=docx_coverage,
+    )
+
+
+def _normalized_tokens(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", text.casefold())
+
+
+def _temporary_pdf_path(output_pdf: Path) -> Path:
+    descriptor, value = tempfile.mkstemp(
+        prefix=f".{output_pdf.stem}.",
+        suffix=output_pdf.suffix,
+        dir=output_pdf.parent,
+    )
+    os.close(descriptor)
+    return Path(value)

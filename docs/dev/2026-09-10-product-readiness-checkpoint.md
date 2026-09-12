@@ -1,0 +1,182 @@
+---
+id: dev-2026-09-10-product-readiness-checkpoint
+intent: Connect the hardening effort to user outcomes and a bounded next phase.
+audience: [operator, maintainer]
+status: historical
+navigation:
+  parent: ../readme.md
+---
+
+# Product readiness checkpoint — 2026-09-10
+
+This dated decision surface explains the product value and remaining acceptance
+work. The live [product overview](../concepts/overview.md) routes workflows;
+the [detailed audit](2026-09-09-information-architecture-audit.md) retains earlier
+findings and verification records. Runtime behavior belongs to the linked live
+contracts.
+
+## Value proposition
+
+Maintain trusted career information, reuse it in professional documents, review
+edits without losing the baseline, and publish exactly the intended artifact.
+The value is less manual rebuilding, fewer ambiguous versions, useful previews,
+and confidence that private source material stays private.
+
+There are two explicit source authorities. Structured facts produce generated
+resumes and cover letters; an authored DOCX controls the faithful public CV's
+wording and layout. They share review and artifact-integrity principles.
+Automatic bidirectional editing between these authorities is not promised.
+
+The product should make a small sequence dependable: **choose a source → propose
+an edit → preview → apply deliberately → review the exact public artifact →
+publish**. Completion is a useful, approved document with a repeatable revision
+path. More modules, tests, or audit findings are not completion criteria.
+
+## Readiness by user journey
+
+| Journey | Verified support | Remaining acceptance |
+| --- | --- | --- |
+| Generate and inspect a useful document | Concise contact links, readable paragraphs, stable pagination; preview controls keep the document visible at inspected narrow widths | Review real wording and appearance; no full accessibility conformance claim |
+| Explain and revise a cover letter | [Selection evidence](../reference/selection-contract.md) describes the chosen letter's paragraphs and tag decisions; manual revision/rebuild retains prior run evidence | DOCX letter imports remain review-only comparisons; accepted wording is edited manually in source |
+| Return supported Word edits to the right source | Guarded bullet patches, unchanged-import no-ops, shared [source selection](../reference/patch-application.md#source-selection), explicit version pins | Broader editing coverage remains limited to supported operations; no bidirectional authored-CV conversion |
+| Create and compare a source experiment | [Pack initialization](../howto/sot-versions.md#initialization-contract) creates a separate validated copy; comparison includes snippets and machine-readable JSON; [lifecycle recovery](../howto/sot-versions.md#lifecycle-contract) preserves baselines and selection after failed writes | Fresh destination and regular files required; configuration selection remains deliberate; source-schema validation and concurrent-writer limits remain explicit |
+| Keep edits and their baselines recoverable | Expected-content guards and shared recoverable writes; [draft dependencies](../reference/artifact-retention.md#import-draft-dependencies) preserve exact source runs | No universal concurrent-writer or crash-durability guarantee; preserve ambiguous legacy imports |
+| Publish exactly the reviewed public CV | [Captured inputs](../reference/publication-contract.md#input-lifetime), disclosure checks, source freshness, artifact hashes, and exact-PDF review | Current candidate requires human review; site update remains on hold |
+
+## What the current work buys
+
+Version experiments now support creation, comparison, guarded cloning, and
+activation through the CLI/API. Named operations can repair a damaged or missing
+selection while builds from the pack continue to require a valid selection.
+A configured version pin remains authoritative in preview; non-strict context
+reports damaged pack metadata without losing the valid pinned source.
+
+The audit reproduced repair commands blocked by the selection they needed to
+repair, preview silently switching a configured pin to another version, context
+aborting on pack metadata errors, and JSON inventory flattening version names
+into ambiguous text. Configuration now resolves source references separately
+from input-owned active selection. Preview retains the reference, inspection
+reports domain errors, and inventory JSON preserves an array of names.
+
+The existing source-version API keeps separate initialization, lifecycle,
+comparison, copying, and result owners. Readers share name/selection/containment
+checks; copy and mutation paths reuse shared capture and storage recovery.
+Prior linked-file and partial-write regressions remain covered. The current
+12-step CLI journey rejected an unselected build, compared and cloned explicit
+versions, inspected and previewed a pin, restored selection, then built and
+explained the recovered document. Original source/base bytes and configuration
+were preserved by the commands. Source locking and crash durability remain
+outside these guarantees.
+
+The final code suite passed **1,259 tests**, with one existing opt-in integration
+skip and five upstream warnings. The seven-step isolated CLI harness also passed.
+Evidence: `/tmp/cvw-pack-routing-full.log`,
+`/tmp/cvw-pack-routing-harness.json`, and `/tmp/cvw-pack-routing-journey.json` (the latter
+locates the real journey workspace and logs). Earlier retained evidence includes
+`/tmp/cvw-cover-letter-journey.json`, `/tmp/cvw-draft-retention-import-journey.json`,
+and `/tmp/cvw-publication-authority-real-journey.json`. The cover-letter descriptor
+retains the initial failing reproduction; its workspace's `journey-result.json`
+records the final successful checks. These are local session artifacts; live
+contracts above remain the durable behavior authority.
+
+Before/after inventories confirm unchanged regular-file paths and bytes under
+`local/` and `var/`, along with unchanged canonical master and public PDF hashes.
+Context reports a ready source with no issues and publication still requiring
+review. `/tmp/cvw-pack-routing-invariants.json` records those checks. The website
+working tree remains clean; no source promotion, site sync, or push occurred.
+
+## Engineering acceptance
+
+The acceptance audit checked what each test and journey actually establishes.
+The current code baseline is `3560278`; passing checks support the bounded
+contracts below, not a blanket claim of product or security completeness.
+
+| Requirement | Evidence and practical limit |
+| --- | --- |
+| Usable installation and compilation | The [installed-wheel journey](../reference/verify-contract.md#installed-distribution) builds resume and letter Markdown/PDF/DOCX and HTML preview outside the checkout. It reuses locked test dependencies; fresh dependency resolution is a separate CI responsibility. |
+| Useful editing and versioning | The seven-step CLI harness verifies an unchanged DOCX import as a no-op. Real edited-document tests and the letter/version journeys cover changes; a successful no-op alone would not prove editing utility. |
+| Maintainable ownership and callable interfaces | [Architecture](../concepts/architecture.md) identifies source, build, operation, inspection, and adapter owners. Import-direction tests cover ordinary, relative, and local imports. Some adapter orchestration remains documented; file length or test count does not establish ease of change. |
+| Navigable documentation and automation | Repository/context checks verify unique live frontmatter, routed contract owners, compact context/workflow commands, and explicit editing limits. Architecture and security now consistently allow ignored private workspace inputs. |
+| Privacy and source preservation | Publication and mutation tests cover the documented disclosure, identity, and recovery boundaries. A fresh acceptance inventory confirms unchanged live inputs/artifacts and canonical/public hashes; private paths remain untracked. |
+| Release confidence | The single skipped test creates a real remote branch and PR when explicitly enabled. It remains unrun during this local audit, as do remote advisory checks. Neither is implied by the local suite result. |
+
+`/tmp/cvw-product-acceptance.json` maps these requirements to inspected evidence
+and distinguishes verified behavior, incomplete acceptance, and deferred release
+work. `/tmp/cvw-acceptance-invariants.json` records the fresh preservation check.
+These records help choose the next action; they do not replace the live contracts
+or the human review of the actual document.
+
+## Current public artifact review
+
+A fresh inspection of the exact public candidate confirms three pages, three
+contact links, and the corrected left-aligned header with concise link labels.
+The local Chrome packet loaded all three page images without horizontal overflow
+at 961 × 907 or console warnings/errors. Visual inspection found no clipping.
+This is a layout observation, not approval of the CV's facts or audience fit.
+
+Content review should confirm current roles, dates, and achievements, and decide
+whether to change the heading “Honors and Rewards” to “Honors and Awards.” The
+short standalone rule below the last section on page three is also an editorial
+choice to inspect in the authored source. These are review notes, not source edits.
+
+The public PDF has no bookmarks, document language, or structure tree; the
+generated PDF also lacks a structure tree. An unpromoted authored Word copy
+with title/heading styles preserved three-page rendering, text, and links, but
+did not establish tagged export. That copy contains private material and is not
+the sanitized public artifact. The installed Word AppleScript `save as` interface
+exposes no tagging option. A faithful, accessible PDF export remains unresolved.
+
+A non-Adobe feasibility experiment used the installed Pandoc 2.10.1 and LuaHBTeX
+1.21.0 (TeX Live 2025), following the installed `tagpdf` example's `phase-III`
+configuration. It added a structure tree and `en-US` language to a generated
+public sample. Both outputs had two pages and three links, but spacing changed
+and the Conferences section moved to page two. The experiment therefore does
+not establish a layout-preserving export or PDF accessibility conformance.
+It also does not establish an export path for the separately authored DOCX.
+`/tmp/cvw-nonadobe-export.json` locates commands, TeX sources, PDFs, and page
+images. The prototype was not promoted into the renderer or theme. Adobe
+products are excluded by the user's tool constraint; no alternative converter
+or conformance validator was installed during this local-only audit.
+
+A controlled follow-up isolated the layout change. Metadata-only export and
+`phase-II` paragraph tagging preserved the sample's page text and pixels at
+96 DPI. Disabling tagging inside `phase-III` still changed layout, showing that
+its layout code, not emitted tags alone, causes the regression. Both full
+`phase-III` and the narrower `phase-II,sec` configuration reported failed
+`parskip` adjustments to `\@startsection` and `\@xsect`. The latter added heading
+roles but still changed layout. Paragraph-only output contains no heading or
+list roles, so it is not a substitute for semantic document acceptance.
+`/tmp/cvw-tagging-isolation.json` records the four controlled variants, commands,
+and decision. A tagged export route needs a compatible template/toolchain plus
+reading-structure validation; these experiments do not justify changing the
+current theme or claiming a faithful authored-DOCX export.
+
+The [non-page disclosure contract](../reference/publication-contract.md#non-page-disclosure)
+covers decoded PDF object strings and bookmark actions. Opaque streams and
+general malware assessment remain outside that claim.
+
+An isolated review packet, preservation proposal, PDF observations, and browser
+evidence are located by `/tmp/cvw-release-review-workspace.json`. The copied
+public PDF retains hash `556d1db9bf900aa4ea83156e3b1881647627e2e0a760f40d899e461ddfa7e712`.
+No review receipt, source promotion, or site update was performed.
+
+## Bounded remaining effort
+
+1. **Preserve history — decision recorded.** Keep the 20 legacy imports and run
+   store unchanged. Their notes identify 12 present possible baselines, but do
+   not establish provenance. The [preservation proposal](../plans/2026-09-10-artifact-retention.md#legacy-preservation-proposal)
+   defers cleanup; the storage cost is small and this does not block document review.
+2. **Approve a useful document — current milestone.** Review the actual public
+   candidate for wording and appearance. Resolve source changes through a fresh
+   export/preparation cycle, then review the resulting exact artifact.
+3. **Decide the PDF accessibility requirement.** Tagged, faithful export remains
+   unresolved. It is required before claiming an accessible PDF; it must remain
+   explicit in any release decision.
+4. **Release the approved artifact — subsequent phase.** Return to website
+   integration and repository gardening after the document decision.
+
+Remote advisory checks, branch consolidation, pushing, and site sync belong to
+the release phase; local tests cannot establish zero remote vulnerabilities.
+Additional refactors need a demonstrated workflow failure, maintenance cost,
+or privacy risk. Nonblocking ideas belong in follow-up work, not an expanding
+release checklist.

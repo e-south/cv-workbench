@@ -11,13 +11,45 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import ast
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_ACTION = re.compile(r"^\s*-?\s*uses:\s*[^@\s]+@([0-9a-f]{40})(?:\s+#.*)?$")
+
+
+def test_default_pytest_discovery_includes_every_test_bearing_file() -> None:
+    expected = set()
+    for path in (ROOT / "tests").rglob("test_*.py"):
+        nodes = ast.walk(ast.parse(path.read_text()))
+        if any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test_")
+            for node in nodes
+        ):
+            expected.add(path.relative_to(ROOT).as_posix())
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-o", "addopts="],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    collected = {
+        line.split("::", 1)[0]
+        for line in result.stdout.splitlines()
+        if line.startswith("tests/") and "::" in line
+    }
+    assert expected <= collected, (
+        f"Default pytest omitted test files: {sorted(expected - collected)}"
+    )
 
 
 def test_workflows_use_least_privilege_and_immutable_action_pins() -> None:
@@ -96,8 +128,220 @@ def test_live_documentation_has_unique_agent_routing_frontmatter() -> None:
 def test_scoped_agent_routes_keep_private_and_documentation_rules_local() -> None:
     docs_rules = (ROOT / "docs/AGENTS.md").read_text()
     ops_rules = (ROOT / "src/cvworkbench/ops/AGENTS.md").read_text()
+    test_rules = (ROOT / "tests/AGENTS.md").read_text()
 
     assert "frontmatter" in docs_rules
     assert "progressive disclosure" in docs_rules
     assert "publication boundary" in ops_rules
     assert "fail closed" in ops_rules
+    assert "sample_workspace" in test_rules
+    assert "../docs/reference/verify-contract.md#test-workspaces" in test_rules
+
+
+def test_docs_router_links_to_canonical_configuration_and_sample_sources() -> None:
+    router = ROOT / "docs/readme.md"
+    text = router.read_text()
+    links = dict(re.findall(r"\[([^\]]+)\]\(([^)]+)\)", text))
+    for path in (
+        "config/workbench.yaml",
+        "config/publish.yaml",
+        "config/site-sync.yaml",
+        "config/variants/base.yaml",
+        "build/themes/default/theme.yaml",
+        "sot.sample/",
+    ):
+        assert (router.parent / links[path]).resolve() == (ROOT / path).resolve()
+    assert "local/sot/" not in links
+
+
+def test_source_version_comparison_routes_one_workflow_owner() -> None:
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    guide = (ROOT / "docs/howto/sot-versions.md").read_text()
+    assert "howto/sot-versions.md" in architecture
+    assert "ops/sot_versions/comparison.py::diff_versions" in guide
+    assert "tests/ops/sot_versions/test_comparison.py" in guide
+    assert "## Initialization contract" in guide
+    assert "tests/ops/sot_versions/test_initialization.py" in guide
+    assert "## Lifecycle contract" in guide
+    assert "tests/ops/sot_versions/test_lifecycle.py" in guide
+    assert "## Repair a selection" in guide
+    assert "configuration-contract.md#source-references-and-active-selection" in guide
+    for owner in ("initialization.py", "lifecycle.py", "comparison.py", "copying.py", "records.py"):
+        assert owner in architecture
+        assert (ROOT / "src/cvworkbench/ops/sot_versions" / owner).is_file()
+
+
+def test_selection_contract_routes_build_and_review_evidence() -> None:
+    for relative in (
+        "docs/readme.md",
+        "docs/concepts/architecture.md",
+        "docs/reference/review-contract.md",
+    ):
+        assert "selection-contract.md" in (ROOT / relative).read_text()
+    contract = (ROOT / "docs/reference/selection-contract.md").read_text()
+    assert "build/selection.py::select_letter" in contract
+    assert "tests/build/test_selection.py" in contract
+    assert "quickstart.md#cover-letter-workflow" in contract
+
+
+def test_build_recovery_contract_routes_to_distinct_owners() -> None:
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    contract = (ROOT / "docs/reference/configuration-contract.md").read_text()
+    assert "configuration-contract.md#build-bundle-recovery" in architecture
+    for owner in ("build/planning.py", "build/artifacts.py", "build/pipeline.py", "storage.py"):
+        assert owner in architecture
+        assert (ROOT / "src/cvworkbench" / owner).is_file()
+    assert "### Build bundle recovery" in contract
+    assert "tests/build/test_bundle_recovery.py" in contract
+    assert "tests/test_storage.py" in contract
+    assert "not simultaneous visibility" in contract
+
+
+def test_preview_ownership_contract_routes_paths_and_retention() -> None:
+    preview = (ROOT / "docs/reference/preview-contract.md").read_text()
+    retention = (ROOT / "docs/reference/artifact-retention.md").read_text()
+    verification = (ROOT / "docs/reference/verify-contract.md").read_text()
+    assert "## Artifact ownership" in preview
+    assert "dev/preview_paths.py" in preview
+    assert "## Preview controls" in preview
+    assert "dev/assets/preview/index.html" in preview
+    assert "dev/presentation.py" in preview
+    assert "artifact-retention.md#preview-artifacts" in preview
+    assert "## Preview Artifacts" in retention
+    assert "preview-contract.md#artifact-ownership" in retention
+    assert "audited_build_artifacts: preserved" in verification
+    assert "var/dist/<variant>/cv.html" not in (ROOT / "docs/howto/styling.md").read_text()
+
+
+def test_import_draft_retention_routes_its_identity_owner_and_limits() -> None:
+    contract = (ROOT / "docs/reference/artifact-retention.md").read_text()
+    assert "## Import Draft Dependencies" in contract
+    assert "ops/review/drafts.py::load_import_draft_sources" in contract
+    assert "tests/ops/review/test_draft_retention.py" in contract
+    assert "draft:<draft-id>" in contract
+    for relative in (
+        "docs/reference/review-contract.md",
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/review/AGENTS.md",
+    ):
+        assert "artifact-retention.md#import-draft-dependencies" in (ROOT / relative).read_text()
+
+
+def test_render_asset_contract_routes_fingerprints_and_limits() -> None:
+    contract = (ROOT / "docs/reference/configuration-contract.md").read_text()
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    styling = (ROOT / "docs/howto/styling.md").read_text()
+    assert "### Render asset lifetime" in contract
+    assert "build/assets.py::capture_render_assets" in contract
+    assert "`render.filters`" in contract
+    assert "Transient edits reverted between checks can go undetected" in contract
+    assert "`build/assets.py`" in architecture
+    assert "configuration-contract.md#render-asset-lifetime" in styling
+
+
+def test_project_run_recovery_has_one_allocation_and_storage_contract() -> None:
+    project = (ROOT / "docs/reference/project-contract.md").read_text()
+    storage = (ROOT / "docs/reference/configuration-contract.md").read_text()
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    assert "build/runs.py::allocate_run" in project
+    assert "exception notes and CLI stderr" in project
+    assert "configuration-contract.md#build-bundle-recovery" in project
+    assert "`new_directories`" in storage
+    assert "Existing directory modes" in storage
+    assert "`build/runs.py`" in architecture
+
+
+def test_patch_application_routes_its_shared_execution_and_recovery_contract() -> None:
+    contract = (ROOT / "docs/reference/patch-application.md").read_text()
+    assert "`ops/patches.py`" in contract
+    assert "`delete_paths`" in contract
+    assert "inherited umask" in contract
+    assert "not writer" in contract
+    for relative in (
+        "docs/readme.md",
+        "docs/reference/project-contract.md",
+        "docs/reference/review-contract.md",
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/AGENTS.md",
+    ):
+        assert "patch-application.md" in (ROOT / relative).read_text()
+
+
+def test_apply_source_selection_routes_one_owner_and_version_usage() -> None:
+    contract = (ROOT / "docs/reference/patch-application.md").read_text()
+    assert "## Source selection" in contract
+    assert "inputs/sot_versions.py::resolve_active_sot_path" in contract
+    assert "ApplyResult.sot_path" in contract
+    assert "tests/ops/test_apply_selection.py" in contract
+    for relative in (
+        "docs/howto/sot-versions.md",
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/projects/AGENTS.md",
+    ):
+        assert "patch-application.md#source-selection" in (ROOT / relative).read_text()
+
+
+def test_proposal_authoring_routes_its_owner_and_recovery_contract() -> None:
+    contract = (ROOT / "docs/reference/project-contract.md").read_text()
+    rules = (ROOT / "src/cvworkbench/ops/projects/AGENTS.md").read_text()
+    assert "### Proposal authoring" in contract
+    assert "patches.py::read_project_patch_document" in contract
+    assert "`patch_authoring.py`" in contract
+    assert "configuration-contract.md#build-bundle-recovery" in contract
+    assert "tests/ops/test_project_patch_authoring.py" in contract
+    assert "project-contract.md#proposal-authoring" in rules
+
+
+def test_contact_presentation_routes_one_owner_and_export_contract() -> None:
+    styling = (ROOT / "docs/howto/styling.md").read_text()
+    architecture = (ROOT / "docs/concepts/architecture.md").read_text()
+    assert "## Contact presentation" in styling
+    assert "build/contacts.py" in styling
+    assert "tests/build/test_contacts.py" in styling
+    assert "publication-contract.md" in styling
+    assert "styling.md#contact-presentation" in architecture
+
+
+def test_non_page_pdf_disclosure_has_one_decoder_and_routed_contract() -> None:
+    contract = (ROOT / "docs/reference/publication-contract.md").read_text()
+    rules = (ROOT / "src/cvworkbench/ops/publication/AGENTS.md").read_text()
+    security = (ROOT / "docs/reference/security.md").read_text()
+    assert "## Non-page disclosure" in contract
+    assert "object_text.py::pdf_object_text" in contract
+    assert "tests/ops/publication/test_object_text.py" in contract
+    assert "Opaque stream bytes" in contract
+    assert "publication-contract.md#non-page-disclosure" in rules
+    assert "publication-contract.md#non-page-disclosure" in security
+
+
+def test_publication_input_lifetime_routes_capture_and_provenance_owners() -> None:
+    contract = (ROOT / "docs/reference/publication-contract.md").read_text()
+    assert "native_inputs.py::capture_native_build" in contract
+    assert "NativePreparationRecord" in contract
+    assert "tests/ops/publication/test_native.py" in contract
+    assert "## Native source builds" in (ROOT / "docs/howto/publish-site.md").read_text()
+    assert "## Input lifetime" in contract
+    assert "inputs.py::capture_publication_inputs" in contract
+    assert "record.py::PreparationInputs" in contract
+    assert "tests/ops/publication/test_authority.py" in contract
+    for relative in (
+        "docs/reference/configuration-contract.md",
+        "src/cvworkbench/ops/publication/AGENTS.md",
+    ):
+        assert "publication-contract.md#input-lifetime" in (ROOT / relative).read_text()
+
+
+def test_entry_layout_and_review_normalization_have_routed_owners() -> None:
+    styling = (ROOT / "docs/howto/styling.md").read_text()
+    review = (ROOT / "docs/reference/review-contract.md").read_text()
+    rules = (ROOT / "src/cvworkbench/ops/review/AGENTS.md").read_text()
+    assert "build/entry_layout.py" in styling
+    assert "tests/build/test_publication_status.py" in styling
+    assert "variant.render.entry_layout" in styling
+    assert "tests/build/test_entry_projection.py" in styling
+    assert "entry_projection.lua" in styling
+    assert "review-contract.md#markdown-comparison" in styling
+    assert "ops/review/markdown.py" in review
+    assert "tests/ops/review/test_conversion.py" in review
+    assert "tests/build/test_entry_layout.py" in review
+    assert "review-contract.md#markdown-comparison" in rules

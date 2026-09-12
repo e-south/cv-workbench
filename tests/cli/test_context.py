@@ -131,6 +131,27 @@ def _write_minimal_sot(root: Path) -> Path:
     return sot_path
 
 
+def test_context_lists_nested_content_and_publication_reviews(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+    reviews = tmp_path / "var/reviews"
+    content_review = reviews / "projects/job/run-1"
+    publication_review = reviews / "publication" / ("a" * 64)
+    content_review.mkdir(parents=True)
+    publication_review.mkdir(parents=True)
+    (reviews / "empty").mkdir()
+    (content_review / "review.md").write_text("Review content edits")
+    (publication_review / "review.html").write_text("Review required")
+    result = CliRunner().invoke(app, ["context", "--json", "--config", str(config)])
+    assert result.exit_code == 0
+    entries = json.loads(result.stdout)["reviews"]["items"]
+    assert {entry["review_id"] for entry in entries} == {
+        "projects/job/run-1",
+        "publication/" + "a" * 64,
+    }
+    assert {entry["kind"] for entry in entries} == {"content", "publication"}
+    assert all(Path(entry["review"]).is_file() for entry in entries)
+
+
 def test_context_reports_missing_sot_and_recipes(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
 
@@ -289,7 +310,7 @@ def test_context_recipe_steps_expose_machine_actionable_metadata(tmp_path: Path)
     review_edit_step = review_recipe["steps"][1]
     assert review_edit_step["kind"] == "manual"
     assert review_edit_step["runnable"] is False
-    assert review_edit_step["placeholders"] == ["<variant>"]
+    assert review_edit_step["placeholders"] == []
 
 
 def test_bootstrap_json_matches_compact_context_payload(tmp_path: Path) -> None:
@@ -430,7 +451,10 @@ def test_context_compact_limits_run_scan_to_latest(tmp_path: Path, monkeypatch) 
 
     seen: dict[str, int] = {}
 
-    def fake_latest_runs_by_variant(
+    runs_module = importlib.import_module("cvworkbench.workspace.runs")
+    original_latest_runs = runs_module.latest_runs_by_variant
+
+    def track_latest_runs_by_variant(
         config_path: Path,
         *,
         limit: int = 3,
@@ -438,10 +462,11 @@ def test_context_compact_limits_run_scan_to_latest(tmp_path: Path, monkeypatch) 
     ):
         seen["limit"] = limit
         seen["include_project_runs"] = int(include_project_runs)
-        return {}, []
+        return original_latest_runs(
+            config_path, limit=limit, include_project_runs=include_project_runs
+        )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
-    monkeypatch.setattr(app_module, "latest_runs_by_variant", fake_latest_runs_by_variant)
+    monkeypatch.setattr(runs_module, "latest_runs_by_variant", track_latest_runs_by_variant)
 
     runner = CliRunner()
     result = runner.invoke(app, ["context", "--json", "--compact", "--config", str(config_path)])
@@ -461,12 +486,16 @@ def test_context_uses_validated_payload_without_reloading_sot(tmp_path: Path, mo
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    reads: list[Path] = []
+    original_read_text = Path.read_text
+    source_root = (tmp_path / "sot.sample").resolve()
 
-    def fail_load_sot(*_args, **_kwargs):
-        raise AssertionError("context should not reload the SoT after validation")
+    def track_read_text(path, *args, **kwargs):
+        if path.resolve().parent == source_root and path.suffix == ".yaml":
+            reads.append(path.resolve())
+        return original_read_text(path, *args, **kwargs)
 
-    monkeypatch.setattr(app_module, "load_sot", fail_load_sot)
+    monkeypatch.setattr(Path, "read_text", track_read_text)
 
     runner = CliRunner()
     result = runner.invoke(app, ["context", "--json", "--config", str(config_path)])
@@ -474,6 +503,9 @@ def test_context_uses_validated_payload_without_reloading_sot(tmp_path: Path, mo
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["sot"]["status"] == "ready"
+
+    assert set(reads) == {path.resolve() for path in source_root.glob("*.yaml")}
+    assert len(reads) == len(set(reads))
 
 
 def test_status_uses_validated_payload_without_reloading_sot(tmp_path: Path, monkeypatch) -> None:
@@ -486,12 +518,16 @@ def test_status_uses_validated_payload_without_reloading_sot(tmp_path: Path, mon
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    reads: list[Path] = []
+    original_read_text = Path.read_text
+    source_root = (tmp_path / "sot.sample").resolve()
 
-    def fail_load_sot(*_args, **_kwargs):
-        raise AssertionError("status should not reload the SoT after validation")
+    def track_read_text(path, *args, **kwargs):
+        if path.resolve().parent == source_root and path.suffix == ".yaml":
+            reads.append(path.resolve())
+        return original_read_text(path, *args, **kwargs)
 
-    monkeypatch.setattr(app_module, "load_sot", fail_load_sot)
+    monkeypatch.setattr(Path, "read_text", track_read_text)
 
     runner = CliRunner()
     result = runner.invoke(app, ["status", "--json", "--config", str(config_path)])
@@ -499,6 +535,9 @@ def test_status_uses_validated_payload_without_reloading_sot(tmp_path: Path, mon
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["sot"]["path"] == str((tmp_path / "sot.sample").resolve())
+
+    assert set(reads) == {path.resolve() for path in source_root.glob("*.yaml")}
+    assert len(reads) == len(set(reads))
 
 
 def test_context_compact_rejects_plain_output(tmp_path: Path) -> None:
@@ -599,11 +638,13 @@ def test_context_recipes_preserve_explicit_paths_when_supported(
         config_path=config_path,
     )
     assert review_recipe["steps"][2]["command"] == _recipe_command(
-        "import-docx --from var/reviews/base/cv.docx --variant base",
+        f"import-docx --from {shlex.quote(str(tmp_path / 'var/reviews/base/cv.docx'))} --variant base",
         config_path=config_path,
     )
-    assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
-    assert "var/drafts/import-*/draft.json" in review_recipe["outputs"]
+    assert review_recipe["steps"][3]["command"] == shlex.join(
+        ["edit", str(tmp_path / "var/drafts/import-*/notes.md")]
+    )
+    assert str(tmp_path / "var/drafts/import-*/draft.json") in review_recipe["outputs"]
     assert review_recipe["steps"][4]["command"] == _recipe_command(
         "apply --draft <draft-dir>",
         sot_path=sot_path,
@@ -807,11 +848,13 @@ def test_context_recipes_preserve_external_config_for_review_and_project(tmp_pat
         config_path=config_path,
     )
     assert review_recipe["steps"][2]["command"] == _recipe_command(
-        "import-docx --from var/reviews/base/cv.docx --variant base",
+        f"import-docx --from {shlex.quote(str(tmp_path / 'var/reviews/base/cv.docx'))} --variant base",
         config_path=config_path,
     )
-    assert review_recipe["steps"][3]["command"] == "edit var/drafts/import-*/notes.md"
-    assert "var/drafts/import-*/draft.json" in review_recipe["outputs"]
+    assert review_recipe["steps"][3]["command"] == shlex.join(
+        ["edit", str(tmp_path / "var/drafts/import-*/notes.md")]
+    )
+    assert str(tmp_path / "var/drafts/import-*/draft.json") in review_recipe["outputs"]
     assert review_recipe["steps"][4]["command"] == _recipe_command(
         "apply --draft <draft-dir>",
         sot_path=sot_path,
@@ -938,7 +981,7 @@ def test_context_recommended_workflows_ignore_review_ready_nondefault_variants(
 
 
 def test_run_is_review_ready_rejects_outputs_outside_run_dir(tmp_path: Path) -> None:
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    runs_module = importlib.import_module("cvworkbench.workspace.runs")
     run_dir = tmp_path / "var" / "runs" / "2026-03-10T00-00-00Z"
     run_dir.mkdir(parents=True, exist_ok=True)
     outside_dir = tmp_path / "shared"
@@ -948,7 +991,7 @@ def test_run_is_review_ready_rejects_outputs_outside_run_dir(tmp_path: Path) -> 
     (run_dir / "selection.json").write_text('{"items": []}\n')
 
     assert (
-        app_module._run_is_review_ready(
+        runs_module.run_is_review_ready(
             {
                 "path": str(run_dir),
                 "outputs": {"pdf": "../shared/cv.pdf", "docx": "../shared/cv.docx"},

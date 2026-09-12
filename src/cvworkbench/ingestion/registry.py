@@ -19,7 +19,7 @@ from pathlib import Path
 
 import yaml
 
-from cvworkbench.config import load_config, resolve_registry_path
+from cvworkbench.config import ConfigSource, load_config, resolve_registry_path
 from cvworkbench.ingestion.ingest import ExtractResult, IngestError, fetch_and_extract
 from cvworkbench.ingestion.signals import build_signals
 from cvworkbench.ingestion.strategy import build_strategy
@@ -50,7 +50,7 @@ def context_id_from_url(url: str) -> str:
     return f"context-{digest[:8]}"
 
 
-def load_registry_settings(config_path: Path) -> RegistrySettings:
+def load_registry_settings(config_path: ConfigSource) -> RegistrySettings:
     root = resolve_registry_path(config_path)
     config = load_config(config_path)
     registry = config.get("registry", {})

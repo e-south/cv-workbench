@@ -19,9 +19,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+import cvworkbench.build.artifacts as artifacts_module
 import cvworkbench.build.pipeline as pipeline_module
+import cvworkbench.build.runs as runs_module
 from cvworkbench.build.rendering import RenderError
 from cvworkbench.cli import app
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_build_generates_markdown() -> None:
@@ -58,7 +62,7 @@ def test_build_marks_publication_roles() -> None:
     assert "Alex Example\\*" in content
 
 
-def test_create_run_dir_adds_suffix_when_timestamp_collides(
+def test_run_allocation_adds_suffix_when_timestamp_collides(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -67,11 +71,13 @@ def test_create_run_dir_adds_suffix_when_timestamp_collides(
         def now(cls, tz=None):  # type: ignore[override]
             return cls(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
-    monkeypatch.setattr(pipeline_module, "datetime", FrozenDateTime)
+    monkeypatch.setattr(runs_module, "datetime", FrozenDateTime)
 
     runs_root = tmp_path / "var" / "runs"
-    first = pipeline_module.create_run_dir(runs_root)
-    second = pipeline_module.create_run_dir(runs_root)
+    with runs_module.allocate_run(runs_root) as first:
+        pass
+    with runs_module.allocate_run(runs_root) as second:
+        pass
 
     assert first.name == "2026-01-01T00-00-00Z"
     assert second.name == "2026-01-01T00-00-00Z-01"
@@ -289,25 +295,29 @@ def test_build_render_failure_does_not_wait_for_manifest_metadata(
     metadata_release = threading.Event()
     metadata_finished = threading.Event()
 
-    def fake_collect_manifest_metadata(**kwargs):
-        metadata_started.set()
-        metadata_release.wait(timeout=1.0)
-        metadata_finished.set()
-        return None
+    collect = artifacts_module.collect_manifest_metadata
+    render = artifacts_module.render_documents
+    completed = []
+    staging = []
 
-    def fake_render_documents(requests, **kwargs) -> None:
-        first = list(requests)[0]
-        first.output_path.write_text("rendered")
-        after_each_success = kwargs.get("after_each_success")
-        if after_each_success is not None:
-            after_each_success(first)
+    def delayed_collect_manifest_metadata(**kwargs):
+        metadata_started.set()
+        metadata_release.wait(timeout=2.0)
+        try:
+            completed.append(collect(**kwargs))
+        finally:
+            metadata_finished.set()
+
+    def fail_after_real_render(requests, **kwargs) -> None:
+        staging.append(requests[0].input_path)
+        render(requests, **kwargs)
         assert metadata_started.wait(timeout=0.2)
         raise RenderError("render failed")
 
     monkeypatch.setattr(
-        pipeline_module, "collect_manifest_metadata", fake_collect_manifest_metadata
+        artifacts_module, "collect_manifest_metadata", delayed_collect_manifest_metadata
     )
-    monkeypatch.setattr(pipeline_module, "render_documents", fake_render_documents)
+    monkeypatch.setattr(artifacts_module, "render_documents", fail_after_real_render)
 
     start = time.monotonic()
     with pytest.raises(RenderError, match="render failed"):
@@ -321,9 +331,15 @@ def test_build_render_failure_does_not_wait_for_manifest_metadata(
         )
     elapsed = time.monotonic() - start
 
-    assert elapsed < 0.5
-    metadata_release.set()
+    try:
+        assert elapsed < 0.5
+        assert staging and not staging[0].exists()
+    finally:
+        metadata_release.set()
     assert metadata_finished.wait(timeout=1.0)
+    assert len(completed) == 1
+    assert completed[0].resume_name == "resume.json"
+    assert len(completed[0].resume_hash) == 64
 
 
 def test_build_project_applies_project_ops_without_mutating_base_sot(tmp_path: Path) -> None:

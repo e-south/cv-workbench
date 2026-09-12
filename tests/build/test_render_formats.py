@@ -14,9 +14,12 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_render_writes_html_and_docx(tmp_path: Path) -> None:
@@ -86,7 +89,7 @@ def test_render_normalizes_duplicate_variant_outputs(tmp_path: Path, monkeypatch
     )
 
     captured_formats: list[str] = []
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.documents.build")
 
     def fake_render_documents(requests, **kwargs) -> None:
         after_each_success = kwargs.get("after_each_success")

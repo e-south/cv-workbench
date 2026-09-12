@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from cvworkbench.build.paths import filters_dir, output_path
 from cvworkbench.variants import Variant
 
@@ -42,3 +44,13 @@ def test_output_path_ats_extension() -> None:
     path = output_path(Path("dist"), variant, "ats")
 
     assert path.name == "cv.ats.txt"
+
+
+def test_output_format_cannot_introduce_a_path(tmp_path):
+    from cvworkbench.variants import load_variant
+
+    config = tmp_path / "variant.yaml"
+    config.write_text("variant:\n  id: base\n  outputs: [md]\n")
+    variant = load_variant(config)
+    with pytest.raises(ValueError, match="format"):
+        output_path(tmp_path, variant, "md/../../escaped")

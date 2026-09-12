@@ -11,8 +11,14 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
+from cvworkbench.build.contacts import build_contact_line
+from cvworkbench.build.entry_layout import append_entry_text, entry_metadata
+from cvworkbench.build.links import http_link, literal_text, title_text
+from cvworkbench.build.selection import select_letter
+from cvworkbench.build.teaching import append_teaching_entries
 from cvworkbench.text import slugify, tag_classes
 from cvworkbench.variants import Variant
 
@@ -37,7 +43,7 @@ def _build_resume_markdown(
         lines.append(f"# {name}")
         lines.append("")
 
-    contact_line = _build_contact_line(person, variant.contact_fields)
+    contact_line = build_contact_line(person, variant.contact_fields)
     if contact_line:
         lines.append(contact_line)
         lines.append("")
@@ -56,11 +62,23 @@ def _build_resume_markdown(
         "references": _build_references,
     }
 
+    previous_explicit_title = None
     for section in variant.order:
         builder = section_builders.get(section)
         if builder is None:
             continue
+        start = len(lines)
         builder(lines, sot, variant, snippets)
+        if len(lines) == start:
+            continue
+        if section in variant.section_titles:
+            title = literal_text(variant.section_titles[section])
+            lines[start] = f"## {title}"
+            if title == previous_explicit_title:
+                del lines[start : start + 2]
+            previous_explicit_title = title
+        else:
+            previous_explicit_title = None
 
     content = "\n".join(lines).strip()
     if not content.endswith("\n"):
@@ -73,8 +91,7 @@ def _build_cover_letter_markdown(
     variant: Variant,
     snippets: list[dict[str, Any]],
 ) -> str:
-    if not variant.letter_id:
-        raise ValueError("Cover letter variants must define letter_id")
+    letters = select_letter(sot, variant.letter_id)
 
     lines: list[str] = []
     person = sot.get("person", {})
@@ -83,12 +100,11 @@ def _build_cover_letter_markdown(
         lines.append(f"# {name}")
         lines.append("")
 
-    contact_line = _build_contact_line(person, variant.contact_fields)
+    contact_line = build_contact_line(person, variant.contact_fields)
     if contact_line:
         lines.append(contact_line)
         lines.append("")
 
-    letters = _find_letter(sot, variant.letter_id)
     title = _string(letters.get("title"))
     if title:
         lines.append(f"## {title}")
@@ -141,55 +157,6 @@ def _build_cover_letter_markdown(
     return content
 
 
-def _find_letter(sot: dict[str, Any], letter_id: str) -> dict[str, Any]:
-    letters_data = sot.get("letters", {})
-    letters = letters_data.get("letters")
-    if not isinstance(letters, list):
-        raise ValueError("letters.letters must be a list")
-    for letter in letters:
-        if not isinstance(letter, dict):
-            continue
-        if letter.get("id") == letter_id:
-            return letter
-    raise ValueError(f"Letter not found: {letter_id}")
-
-
-def _build_contact_line(person: dict[str, Any], contact_fields: list[str]) -> str:
-    parts: list[str] = []
-    label = person.get("label")
-    if "label" in contact_fields and isinstance(label, str) and label.strip():
-        parts.append(label.strip())
-
-    email = person.get("email")
-    if "email" in contact_fields and isinstance(email, str) and email.strip():
-        parts.append(email.strip())
-
-    phone = person.get("phone")
-    if "phone" in contact_fields and isinstance(phone, str) and phone.strip():
-        parts.append(phone.strip())
-
-    location = person.get("location")
-    if "location" in contact_fields and isinstance(location, dict):
-        city = location.get("city")
-        region = location.get("region")
-        country = location.get("country")
-        location_bits = [bit for bit in [city, region, country] if isinstance(bit, str)]
-        if location_bits:
-            parts.append(", ".join(location_bits))
-
-    links = person.get("links")
-    if "links" in contact_fields and isinstance(links, list):
-        for link in links:
-            if not isinstance(link, dict):
-                continue
-            label_text = link.get("label")
-            url = link.get("url")
-            if isinstance(label_text, str) and isinstance(url, str):
-                parts.append(f"{label_text}: {url}")
-
-    return " | ".join(parts)
-
-
 def _build_summary(
     lines: list[str],
     sot: dict[str, Any],
@@ -232,15 +199,20 @@ def _build_experience(
 
         title = _string(role.get("title"))
         company = _string(role.get("company"))
-        heading = " - ".join([part for part in [title, company] if part])
+        heading = " - ".join(
+            part
+            for part in (
+                f"[{title}]{{.entry-role}}" if title else "",
+                f"[{company}]{{.entry-organization}}" if company else "",
+            )
+            if part
+        )
         if heading:
             lines.append(f"### {heading}")
 
         dates = _format_dates(role)
         location = _string(role.get("location"))
-        if dates or location:
-            line = " | ".join([part for part in [location, dates] if part])
-            lines.append(line)
+        append_entry_text(lines, metadata=entry_metadata(location=location, dates=dates))
 
         bullets = role.get("bullets")
         if isinstance(bullets, list) and bullets:
@@ -325,15 +297,16 @@ def _build_skills(
     lines.append("## Skills")
     lines.append("")
     _append_section_intro(lines, "skills", variant, snippets)
+    lines.extend(("::: {.skills-list}", ""))
     for item in items:
         if not isinstance(item, dict):
             continue
         name = _string(item.get("name"))
         keywords = item.get("keywords")
         if name and isinstance(keywords, list):
-            keywords_text = ", ".join(_string(keyword) for keyword in keywords if _string(keyword))
+            keywords_text = "; ".join(_string(keyword) for keyword in keywords if _string(keyword))
             lines.append(f"- **{name}**: {keywords_text}")
-    lines.append("")
+    lines.extend(("", ":::", ""))
 
 
 def _build_education(
@@ -366,22 +339,23 @@ def _build_education(
         heading = " - ".join([part for part in [study_type, area] if part])
         if institution:
             lines.append(f"### {institution}")
-        if heading:
-            lines.append(heading)
         location = _string(item.get("location"))
-        if location:
-            lines.append(location)
         dates = _format_dates(item)
-        if dates:
-            lines.append(dates)
+        if item.get("start") and not item.get("end"):
+            dates = f"Started {_date_string(item['start'])}"
         advisors = item.get("advisors")
+        advisors_text = ""
         if isinstance(advisors, list) and advisors:
             advisors_text = ", ".join(_string(advisor) for advisor in advisors if _string(advisor))
-            if advisors_text:
-                lines.append(f"Advisors: {advisors_text}")
         thesis_title = _string(item.get("thesis_title"))
-        if thesis_title:
-            lines.append(f'Thesis: "{thesis_title}"')
+        append_entry_text(
+            lines,
+            metadata=entry_metadata(heading, location=location, dates=dates),
+            paragraphs=(
+                f"Advisors: {advisors_text}" if advisors_text else "",
+                f'Thesis: "{thesis_title}"' if thesis_title else "",
+            ),
+        )
         highlights = item.get("highlights")
         if isinstance(highlights, list) and highlights:
             lines.append("")
@@ -414,24 +388,40 @@ def _build_publications(
             continue
         entry_id = slugify(item.get("id", ""))
         tag_list = _tag_classes(item.get("tags"))
-        div_attr = _format_div_attributes(f"publication-{entry_id}", ["section", *tag_list])
+        status = item.get("status", "published")
+        if status not in {"published", "in_preparation"}:
+            raise ValueError(f"Unsupported publication status: {status}")
+        publication_classes = ["section", *tag_list]
+        if status == "in_preparation":
+            publication_classes.append("publication-in-preparation")
+            if _format_authors(item.get("authors")) and _date_string(item.get("year")):
+                publication_classes.append("publication-citation-complete")
+        div_attr = _format_div_attributes(f"publication-{entry_id}", publication_classes)
         lines.append(f"::: {div_attr}")
 
         title = _string(item.get("title"))
         if title:
+            url = _string(item.get("url"))
+            if url:
+                title = http_link(
+                    title, url, field="Publication URL", italics=item.get("title_italics") or ()
+                )
+            elif item.get("title_italics"):
+                title = title_text(title, item["title_italics"])
             lines.append(f"### {title}")
 
         authors_text = _format_authors(item.get("authors"))
-        if authors_text:
-            lines.append(authors_text)
-
         venue_line = _format_publication_venue(item)
-        if venue_line:
-            lines.append(venue_line)
-
         notes = _string(item.get("notes"))
+        status_text = "Manuscript in preparation" if status == "in_preparation" else ""
+        if status == "published" and "status" in item and not _string(item.get("venue")):
+            status_text = "Published"
         if notes:
-            lines.append(notes)
+            notes = f"[{notes}]{{.entry-note}}"
+            if authors_text:
+                authors_text = f"[{authors_text}]{{.entry-authors}}"
+        citation = ". ".join(part for part in (authors_text, venue_line, status_text) if part)
+        append_entry_text(lines, metadata=(citation,), paragraphs=(notes,))
 
         lines.append(":::")
         lines.append("")
@@ -461,21 +451,32 @@ def _build_conferences(
         div_attr = _format_div_attributes(f"conference-{entry_id}", ["section", *tag_list])
         lines.append(f"::: {div_attr}")
 
-        title = _string(item.get("title"))
-        if title:
-            lines.append(f"### {title}")
-
         event = _string(item.get("event"))
+        title = _string(item.get("title"))
+        series = _string(item.get("series"))
+        if series:
+            if not event:
+                raise ValueError("Conference series requires an explicit meeting event")
+            lines.append(
+                f"### [{literal_text(series)}]{{.entry-series}}: "
+                f"[{literal_text(event)}]{{.entry-topic}}"
+            )
+        elif event or title:
+            lines.append(f"### {event or title}")
         year = _date_string(item.get("year"))
         presentation_type = _string(item.get("presentation_type"))
         location = _string(item.get("location"))
-        line_bits = [bit for bit in [event, presentation_type, location, year] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
         notes = _string(item.get("notes"))
-        if notes:
-            lines.append(notes)
+        append_entry_text(
+            lines,
+            metadata=entry_metadata(
+                title if event else "",
+                role=presentation_type,
+                location=location,
+                dates=year,
+            ),
+            paragraphs=(notes,),
+        )
 
         lines.append(":::")
         lines.append("")
@@ -511,13 +512,10 @@ def _build_honors(
 
         issuer = _string(item.get("issuer"))
         year = _date_string(item.get("year"))
-        line_bits = [bit for bit in [issuer, year] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
         summary = _string(item.get("summary"))
-        if summary:
-            lines.append(summary)
+        append_entry_text(
+            lines, metadata=entry_metadata(issuer=issuer, dates=year), paragraphs=(summary,)
+        )
 
         lines.append(":::")
         lines.append("")
@@ -549,17 +547,17 @@ def _build_service(
 
         role = _string(item.get("role"))
         organization = _string(item.get("organization"))
-        heading = " - ".join([part for part in [role, organization] if part])
+        heading = organization or role
         if heading:
             lines.append(f"### {heading}")
 
         dates = _format_dates(item)
-        if dates:
-            lines.append(dates)
-
         summary = _string(item.get("summary"))
-        if summary:
-            lines.append(summary)
+        append_entry_text(
+            lines,
+            metadata=entry_metadata(role=role if organization else "", dates=dates),
+            paragraphs=(summary,),
+        )
 
         lines.append(":::")
         lines.append("")
@@ -579,35 +577,12 @@ def _build_teaching(
     lines.append("## Teaching")
     lines.append("")
     _append_section_intro(lines, "teaching", variant, snippets)
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        if not _tags_match_variant(item.get("tags"), variant):
-            continue
-        entry_id = slugify(item.get("id", ""))
-        tag_list = _tag_classes(item.get("tags"))
-        div_attr = _format_div_attributes(f"teaching-{entry_id}", ["section", *tag_list])
-        lines.append(f"::: {div_attr}")
-
-        course = _string(item.get("course"))
-        if course:
-            lines.append(f"### {course}")
-
-        role = _string(item.get("role"))
-        term = _string(item.get("term"))
-        enrollment = item.get("enrollment")
-        enrollment_text = str(enrollment) if isinstance(enrollment, int) else ""
-        evaluation = _string(item.get("evaluation"))
-        line_bits = [bit for bit in [role, term, enrollment_text, evaluation] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
-        summary = _string(item.get("summary"))
-        if summary:
-            lines.append(summary)
-
-        lines.append(":::")
-        lines.append("")
+    selected = [
+        item
+        for item in items
+        if isinstance(item, dict) and _tags_match_variant(item.get("tags"), variant)
+    ]
+    append_teaching_entries(lines, selected)
 
 
 def _build_references(
@@ -640,19 +615,12 @@ def _build_references(
 
         title = _string(item.get("title"))
         organization = _string(item.get("organization"))
-        line_bits = [bit for bit in [title, organization] if bit]
-        if line_bits:
-            lines.append(" | ".join(line_bits))
-
         email = _string(item.get("email"))
         relationship = _string(item.get("relationship"))
-        contact_bits = [bit for bit in [relationship, email] if bit]
-        if contact_bits:
-            lines.append(" | ".join(contact_bits))
-
         notes = _string(item.get("notes"))
-        if notes:
-            lines.append(notes)
+        append_entry_text(
+            lines, metadata=(title, organization, relationship, email), paragraphs=(notes,)
+        )
 
         lines.append(":::")
         lines.append("")
@@ -780,22 +748,26 @@ def _format_publication_venue(item: dict[str, Any]) -> str:
     volume = _string(item.get("volume"))
     issue = _string(item.get("issue"))
     pages = _string(item.get("pages"))
-    venue_bits = [bit for bit in [venue, year] if bit]
-    if volume or issue or pages:
-        details = ", ".join(bit for bit in [volume, issue, pages] if bit)
-        if details:
-            venue_bits.append(details)
-    return " | ".join(venue_bits)
+    locator = volume
+    if issue:
+        locator += f"({issue})" if volume else f"issue {issue}"
+    if pages:
+        locator = f"{locator}: {pages}" if locator else pages
+    if year:
+        venue = f"{venue} ({year})" if venue else year
+    return ", ".join(part for part in (venue, locator) if part)
 
 
 def _format_dates(item: dict[str, Any]) -> str:
     start = _date_string(item.get("start"))
     end = _date_string(item.get("end"))
     if start and end:
+        if start == end:
+            return start
         return f"{start} — {end}"
     if start:
         return f"{start} — Present"
-    return ""
+    return end
 
 
 def _string(value: Any) -> str:
@@ -808,7 +780,25 @@ def _date_string(value: Any) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, str):
-        return value.strip()
+        text = value.strip()
+        match = re.fullmatch(r"(\d{4})-(0[1-9]|1[0-2])", text)
+        if match:
+            months = (
+                "Jan.",
+                "Feb.",
+                "Mar.",
+                "Apr.",
+                "May",
+                "June",
+                "July",
+                "Aug.",
+                "Sept.",
+                "Oct.",
+                "Nov.",
+                "Dec.",
+            )
+            return f"{months[int(match[2]) - 1]} {match[1]}"
+        return text
     return ""
 
 

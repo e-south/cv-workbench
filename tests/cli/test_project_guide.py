@@ -11,11 +11,13 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import shlex
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -155,6 +157,7 @@ def _write_ranked_project_guide_fixture(tmp_path: Path) -> tuple[Path, Path, Pat
     return config_path, sot_path, job_path
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_guide_creates_project_and_recommends_variants(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     job_path = tmp_path / "job.txt"
@@ -277,7 +280,7 @@ def test_project_guide_rolls_back_project_when_retargeting_fails(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.ops.projects.workflow")
 
     def _boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
         raise app_module.ProjectError("retarget failed")
@@ -310,7 +313,7 @@ def test_project_guide_rolls_back_project_when_retargeting_raises_value_error(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.ops.projects.workflow")
 
     def _boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
         raise ValueError("retarget failed")
@@ -344,7 +347,7 @@ def test_project_guide_reports_cleanup_failure_without_leaking_exception(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path, sot_path, job_path = _write_ranked_project_guide_fixture(tmp_path)
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.ops.projects.workflow")
 
     def _retarget_boom(*, project_dir: Path, base_variant_id: str, config_path: Path) -> None:
         raise ValueError("retarget failed")
@@ -376,6 +379,7 @@ def test_project_guide_reports_cleanup_failure_without_leaking_exception(
     assert "cleanup failed" in result.output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     job_path = tmp_path / "job.txt"
@@ -405,6 +409,7 @@ def test_project_guide_plain_output_reports_proposal_variant(tmp_path: Path) -> 
     assert result.stdout.count("preview_step:") == 1
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_guide_rejects_unsafe_job_url(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
 
@@ -428,6 +433,7 @@ def test_project_guide_rejects_unsafe_job_url(tmp_path: Path) -> None:
     assert "https" in (result.stderr or "")
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_project_new_rejects_unsafe_job_url(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
 
@@ -496,11 +502,11 @@ def test_project_show_reports_proposal_summary_and_commands(tmp_path: Path) -> N
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -599,11 +605,11 @@ def test_project_show_surfaces_invalid_proposal_plan_without_failing(tmp_path: P
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -664,11 +670,11 @@ def test_project_show_suggests_safe_keep_id_for_legacy_base_proposal(tmp_path: P
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -722,11 +728,11 @@ def test_project_show_reports_project_ops_patch_metadata(tmp_path: Path) -> None
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -826,11 +832,11 @@ def test_project_show_warns_when_resume_patch_is_hidden_by_cover_letter_variant(
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -1206,7 +1212,7 @@ def test_project_patch_replace_experience_bullet_rejects_legacy_patch_format(
     )
 
     assert result.exit_code != 0
-    assert "requires format=project-ops" in (result.stderr or "")
+    assert "format must be project-ops" in (result.stderr or "")
 
 
 def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready(
@@ -1235,11 +1241,11 @@ def test_project_show_reports_pinned_reviewpack_when_latest_project_run_is_ready
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -1312,11 +1318,11 @@ def test_project_show_requires_review_artifact_files_for_ready_status(tmp_path: 
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"

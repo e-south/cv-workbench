@@ -1,0 +1,188 @@
+"""
+--------------------------------------------------------------------------------
+cv-workbench
+cv-workbench/src/cvworkbench/ops/review/importing.py
+
+Converts reviewed DOCX edits into guarded patch proposals.
+
+Module Author(s): Eric J. South
+--------------------------------------------------------------------------------
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+from cvworkbench.config import resolve_drafts_path
+from cvworkbench.ops.review import ReviewError, markdown
+from cvworkbench.ops.review.patches import build_import_patch
+from cvworkbench.ops.review.record import (
+    SOURCE_RECORD_NAME,
+    load_source_record,
+    validate_source_artifacts,
+)
+from cvworkbench.ops.review.targets import resolve_review_target
+from cvworkbench.storage import AtomicWriteError, replace_files_atomically
+
+
+@dataclass(frozen=True)
+class ImportResult:
+    draft_dir: Path
+    patch_path: Path
+    metadata_path: Path
+    notes_path: Path
+    imported_path: Path
+    run_id: str
+    apply_status: str
+
+
+def import_docx_review(
+    *,
+    docx_path: Path,
+    config_path: Path,
+    run: str | None,
+    variant_id: str | None,
+    project_dir: Path | None,
+) -> ImportResult:
+    if not docx_path.exists():
+        raise ReviewError(f"DOCX file not found: {docx_path}")
+    if project_dir is not None and variant_id is not None:
+        raise ReviewError("--project cannot be combined with --variant")
+
+    source_path = docx_path.parent / SOURCE_RECORD_NAME
+    source = load_source_record(source_path) if source_path.exists() else None
+    if source is None and not run:
+        raise ReviewError("DOCX without a review source record requires an explicit --run")
+    if source is not None:
+        validate_source_artifacts(source)
+    resolution = resolve_review_target(
+        config_path=config_path,
+        run=run or (source.run_path if source is not None else None),
+        variant_id=None if source is not None else variant_id,
+        project_dir=project_dir,
+    )
+    if source is not None:
+        if (
+            resolution.run.path.resolve() != Path(source.run_path).resolve()
+            or resolution.run_id != source.run_id
+        ):
+            raise ReviewError("Selected run conflicts with review source")
+        if variant_id is not None and resolution.run.variant_id != variant_id:
+            raise ReviewError("Selected variant conflicts with review source")
+    run_id = resolution.run_id
+    run_dir = resolution.run.path
+    canonical_path = run_dir / "canonical.md"
+    if not canonical_path.exists():
+        raise ReviewError(f"Canonical markdown not found: {canonical_path}")
+
+    canonical_bytes = canonical_path.read_bytes()
+    canonical_hash = hashlib.sha256(canonical_bytes).hexdigest()
+    if source is not None and canonical_hash != source.files["canonical.md"]:
+        raise ReviewError("Review baseline changed before conversion")
+    imported_markdown = markdown.convert_docx_to_markdown(docx_path)
+    patch_name, patch_text, apply_status, note_lines = build_import_patch(
+        canonical_path=canonical_path,
+        imported_markdown=imported_markdown,
+        sot_path=resolution.sot_path,
+        variant=resolution.variant,
+        project_patch=resolution.project_patch,
+        canonical_markdown=canonical_bytes.decode("utf-8"),
+    )
+    if canonical_path.read_bytes() != canonical_bytes:
+        raise ReviewError("Review baseline changed during conversion")
+    if source is not None:
+        validate_source_artifacts(source)
+    drafts_root = resolve_drafts_path(config_path)
+    draft_dir = _create_import_draft_dir(drafts_root)
+    imported_path = draft_dir / "imported.md"
+    patch_path = draft_dir / patch_name
+
+    metadata_path = draft_dir / "draft.json"
+    metadata_content = (
+        json.dumps(
+            {
+                "source": "import-docx",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "run_id": run_id,
+                "variant_id": resolution.variant.id,
+                "review_dir": str(resolution.review_dir),
+                "canonical_path": str(canonical_path),
+                "canonical_hash": canonical_hash,
+                "imported_path": str(imported_path),
+                "patch_path": patch_name,
+                "apply_status": apply_status,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+    notes_path = draft_dir / "notes.md"
+    notes_content = (
+        "\n".join(
+            [
+                "# Import Notes",
+                "",
+                f"- source: {docx_path}",
+                f"- canonical: {canonical_path}",
+                f"- apply_status: {apply_status}",
+                "",
+                *note_lines,
+            ]
+        )
+        + "\n"
+    )
+
+    writes = [
+        (imported_path, imported_markdown.encode()),
+        (patch_path, patch_text.encode()),
+        (metadata_path, metadata_content.encode()),
+        (notes_path, notes_content.encode()),
+    ]
+    try:
+        replace_files_atomically(
+            writes,
+            file_modes={path: 0o600 for path, _ in writes},
+            expected_contents={path: None for path, _ in writes},
+        )
+    except (AtomicWriteError, OSError) as exc:
+        try:
+            draft_dir.rmdir()
+        except OSError:
+            pass  # Preserve unexpected files or recovery evidence rather than deleting them.
+        raise ReviewError("Could not commit the import draft; prior files were preserved") from exc
+
+    return ImportResult(
+        draft_dir=draft_dir,
+        patch_path=patch_path,
+        metadata_path=metadata_path,
+        notes_path=notes_path,
+        imported_path=imported_path,
+        run_id=run_id,
+        apply_status=apply_status,
+    )
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+
+
+def _create_import_draft_dir(drafts_root: Path) -> Path:
+    drafts_root.mkdir(parents=True, exist_ok=True)
+    base_name = f"import-{_timestamp()}"
+    for suffix in range(0, 1000):
+        name = base_name if suffix == 0 else f"{base_name}-{suffix:02d}"
+        candidate = drafts_root / name
+        try:
+            candidate.mkdir(parents=False, exist_ok=False, mode=0o700)
+        except FileExistsError:
+            continue
+        return candidate
+    raise ReviewError(
+        f"Could not allocate unique import draft directory for timestamp: {base_name}"
+    )

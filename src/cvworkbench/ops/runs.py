@@ -18,7 +18,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cvworkbench.config import resolve_runs_path
+from cvworkbench.config import (
+    ConfigSource,
+    read_config,
+    resolve_drafts_path,
+    resolve_reviews_path,
+    resolve_runs_path,
+    resolve_var_root,
+)
+from cvworkbench.ops.documents.retention import promotion_run_references
+from cvworkbench.ops.publication.retention import publication_run_references
+from cvworkbench.ops.review import ReviewError
+from cvworkbench.ops.review.catalog import load_review_sources
+from cvworkbench.ops.review.drafts import load_import_draft_sources
 
 
 class RunError(RuntimeError):
@@ -55,12 +67,14 @@ class RunGcSummary:
     candidates: list[RunGcCandidate]
     kept: list[RunInfo]
     invalid: list[Path]
+    invalid_candidates: list[Path]
+    keep_reasons: dict[str, list[str]]
     removed: int
     status: str
 
 
 def scan_runs(
-    config_path: Path,
+    config_path: ConfigSource,
     *,
     strict: bool = False,
     include_project_runs: bool = True,
@@ -128,7 +142,7 @@ def group_runs_by_variant(runs: list[RunInfo]) -> dict[str, list[RunInfo]]:
 
 
 def latest_runs_by_variant(
-    config_path: Path,
+    config_path: ConfigSource,
     *,
     limit: int = 3,
     include_project_runs: bool = False,
@@ -178,7 +192,7 @@ def resolve_latest_run(
 
 
 def resolve_latest_project_run(
-    config_path: Path,
+    config_path: ConfigSource,
     project_id: str,
     *,
     variant_id: str | None = None,
@@ -209,6 +223,8 @@ def resolve_run(config_path: Path, run: str | Path) -> RunInfo:
 
     if run_dir is None:
         raise RunError(f"Run not found: {run}")
+
+    run_dir = run_dir.resolve()
 
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.exists():
@@ -250,7 +266,7 @@ def _parse_manifest(manifest_path: Path, run_id: str) -> RunInfo:
 
 def gc_runs(
     *,
-    config_path: Path,
+    config_path: ConfigSource,
     keep_latest: int,
     keep: list[str],
     include_invalid: bool,
@@ -259,27 +275,76 @@ def gc_runs(
     if keep_latest < 0:
         raise RunError("keep_latest must be zero or greater")
 
-    catalog = scan_runs(config_path, strict=False)
+    configuration = read_config(config_path)
+    runs_root = resolve_runs_path(configuration)
+    var_root = resolve_var_root(configuration).resolve()
+    if runs_root.resolve() == var_root or not runs_root.resolve().is_relative_to(var_root):
+        raise RunError(f"Configured runs root must be a directory beneath var: {runs_root}")
+
+    catalog = scan_runs(configuration, strict=False)
     runs = catalog.runs
     invalid = catalog.invalid
 
-    if not runs and not invalid:
-        return RunGcSummary(candidates=[], kept=[], invalid=[], removed=0, status="empty")
-
     run_by_id = {run.run_id: run for run in runs}
-    invalid_ids = {path.name for path in invalid}
+    invalid_ids = {_run_id(runs_root, path) for path in invalid}
     unknown = [run_id for run_id in keep if run_id not in run_by_id and run_id not in invalid_ids]
     if unknown:
         raise RunError(f"Unknown run id(s): {', '.join(sorted(unknown))}")
 
     keep_ids = set(keep)
+    try:
+        review_sources = load_review_sources(configuration)
+        draft_sources = load_import_draft_sources(configuration)
+    except ReviewError as exc:
+        raise RunError(str(exc)) from exc
+    reference_reasons: dict[str, list[str]] = {}
+    reviews_root = resolve_reviews_path(configuration)
+    source_paths = {run.path.resolve(): run.run_id for run in runs}
+    source_paths.update({path.resolve(): _run_id(runs_root, path) for path in invalid})
+    try:
+        dependencies = [
+            promotion_run_references(configuration),
+            publication_run_references(configuration),
+        ]
+    except (ValueError, OSError) as exc:
+        raise RunError(str(exc)) from exc
+    for references in dependencies:
+        for path, reasons in references.items():
+            for candidate, run_id in source_paths.items():
+                if path == candidate or path.is_relative_to(candidate):
+                    reference_reasons.setdefault(run_id, []).extend(reasons)
+    for directory, source in review_sources.items():
+        run_id = source_paths.get(Path(source.run_path).resolve())
+        if run_id is not None:
+            reference_reasons.setdefault(run_id, []).append(
+                f"review:{directory.relative_to(reviews_root).as_posix()}"
+            )
+    drafts_root = resolve_drafts_path(configuration)
+    for directory, source in draft_sources.items():
+        run_id = source_paths.get(source.run_path)
+        if run_id is not None:
+            reference_reasons.setdefault(run_id, []).append(
+                f"draft:{directory.relative_to(drafts_root).as_posix()}"
+            )
     kept_by_latest: set[str] = set()
-    grouped = group_runs_by_variant(runs)
+    grouped: dict[tuple[str, str], list[RunInfo]] = {}
+    for run in sorted(runs, key=lambda item: item.created_at, reverse=True):
+        scope = run.path.parent.as_posix()
+        grouped.setdefault((scope, run.variant_id), []).append(run)
     for variant_runs in grouped.values():
         for run in variant_runs[:keep_latest]:
             kept_by_latest.add(run.run_id)
 
-    kept_ids = keep_ids | kept_by_latest
+    kept_ids = keep_ids | kept_by_latest | reference_reasons.keys()
+    keep_reasons = {
+        run_id: (["explicit_keep"] if run_id in keep_ids else [])
+        + (["latest_in_scope"] if run_id in kept_by_latest else [])
+        + reference_reasons.get(run_id, [])
+        for run_id in sorted(kept_ids)
+    }
+    invalid_candidates = [
+        path for path in invalid if include_invalid and _run_id(runs_root, path) not in kept_ids
+    ]
     candidates: list[RunGcCandidate] = []
     kept: list[RunInfo] = []
     for run in runs:
@@ -299,39 +364,27 @@ def gc_runs(
     candidates.sort(key=lambda item: item.created_at)
     kept.sort(key=lambda item: item.created_at, reverse=True)
 
-    if not candidates and not (include_invalid and invalid):
-        return RunGcSummary(
-            candidates=[],
-            kept=kept,
-            invalid=invalid,
-            removed=0,
-            status="empty",
-        )
-
-    if not confirm:
-        return RunGcSummary(
-            candidates=candidates,
-            kept=kept,
-            invalid=invalid,
-            removed=0,
-            status="dry_run",
-        )
+    cleanup_paths = [candidate.path for candidate in candidates] + invalid_candidates
+    for path in cleanup_paths:
+        _require_run_cleanup_path(path, runs_root)
 
     removed = 0
-    for candidate in candidates:
-        _remove_run_dir(candidate.path)
-        removed += 1
-    if include_invalid:
-        for path in invalid:
+    status = "dry_run" if candidates or invalid_candidates else "empty"
+    if confirm and status == "dry_run":
+        for path in cleanup_paths:
+            _require_run_cleanup_path(path, runs_root)
             _remove_run_dir(path)
             removed += 1
+        status = "cleaned"
 
     return RunGcSummary(
         candidates=candidates,
         kept=kept,
         invalid=invalid,
+        invalid_candidates=invalid_candidates,
+        keep_reasons=keep_reasons,
         removed=removed,
-        status="cleaned",
+        status=status,
     )
 
 
@@ -383,3 +436,15 @@ def _remove_run_dir(path: Path) -> None:
     if not path.is_dir():
         raise RunError(f"Run path is not a directory: {path}")
     shutil.rmtree(path)
+
+
+def _require_run_cleanup_path(path: Path, runs_root: Path) -> None:
+    if path == runs_root or not path.resolve().is_relative_to(runs_root):
+        raise RunError(f"Run cleanup path is outside the runs root: {path}")
+    current = runs_root
+    for part in path.relative_to(runs_root).parts:
+        current /= part
+        if current.is_symlink():
+            raise RunError(f"Run cleanup path traverses a symlink: {path}")
+    if not path.is_dir():
+        raise RunError(f"Run cleanup path is not a directory: {path}")

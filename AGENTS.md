@@ -6,8 +6,12 @@ Primary rule: prefer deterministic CLI artifacts (manifest.json, selection.json,
 
 ## Agent startup context
 
+For private document work, read `local/README.md` if present. It may route to a
+private workspace configuration; use that explicit `--config` for context and
+subsequent commands instead of assuming the repository default owns the document.
+
 On session start, run:
-- `uv run cvw context --json`
+- `uv run cvw context --json` (with the routed `--config`, when applicable)
 
 Use the `recipes` block in the context payload to choose commands for any
 user intent. Do not guess paths or commands before reading context. If context

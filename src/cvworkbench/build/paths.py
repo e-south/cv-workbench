@@ -13,14 +13,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cvworkbench.resources import distribution_path
 from cvworkbench.variants import Variant
 
 
 def filters_dir() -> Path:
-    return Path(__file__).resolve().parents[3] / "build" / "filters"
+    return distribution_path("filters")
 
 
 def output_path(dist_dir: Path, variant: Variant, fmt: str) -> Path:
+    if not isinstance(fmt, str) or not fmt.isascii() or not fmt.isalnum():
+        raise ValueError("Output format must be an alphanumeric extension")
     if fmt == "ats":
         filename = f"{variant.output_name}.ats.txt"
     else:

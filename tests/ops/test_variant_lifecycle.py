@@ -18,15 +18,118 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 import yaml
 
 from cvworkbench.ops.variant_lifecycle import (
+    VariantLifecycleError,
     discard_variant,
     gc_variants,
     keep_variant,
     load_variant_registry,
     register_variant,
 )
+
+
+def _expired_entry(root: Path, config_path: Path, name: str) -> Path:
+    variant = root / "var" / "drafts" / name / "variant.yaml"
+    _write_variant(variant, name)
+    register_variant(
+        variant_path=variant,
+        cleanup_path=variant.parent,
+        source="draft",
+        config_path=config_path,
+        label=None,
+    )
+    registry_path = root / "var" / "variants" / "registry.json"
+    raw = json.loads(registry_path.read_text())
+    raw["entries"][-1]["expires_at"] = "2020-01-01T00:00:00+00:00"
+    registry_path.write_text(json.dumps(raw))
+    return variant
+
+
+def test_gc_variants_plans_missing_record_reconciliation(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    missing = _expired_entry(tmp_path, config_path, "missing")
+    present = _expired_entry(tmp_path, config_path, "present")
+    missing.unlink()
+    missing.parent.rmdir()
+    registry = tmp_path / "var" / "variants" / "registry.json"
+    before = registry.read_bytes()
+
+    preview = gc_variants(config_path=config_path, confirm=False)
+
+    assert preview.status == "dry_run"
+    assert preview.reconciled == 1
+    assert {item.variant_id: item.action for item in preview.candidates} == {
+        "missing": "reconcile",
+        "present": "remove",
+    }
+    assert registry.read_bytes() == before
+    assert present.is_file()
+
+    result = gc_variants(config_path=config_path, confirm=True)
+    assert result.expired == 2
+    assert result.reconciled == 1
+    assert not present.parent.exists()
+    assert {entry.status for entry in load_variant_registry(config_path).entries} == {"expired"}
+    assert gc_variants(config_path=config_path, confirm=True).status == "empty"
+
+
+@pytest.mark.parametrize("confirm", [False, True])
+@pytest.mark.parametrize("unsafe_path", ["var", "outside", "outside/missing"])
+def test_gc_variants_preflights_all_paths_before_changes(
+    tmp_path: Path, confirm: bool, unsafe_path: str
+) -> None:
+    config_path = _write_config(tmp_path)
+    first = _expired_entry(tmp_path, config_path, "first")
+    _expired_entry(tmp_path, config_path, "unsafe")
+    (tmp_path / "outside").mkdir()
+    registry = tmp_path / "var" / "variants" / "registry.json"
+    raw = json.loads(registry.read_text())
+    raw["entries"][-1]["cleanup_path"] = unsafe_path
+    registry.write_text(json.dumps(raw))
+    before = registry.read_bytes()
+
+    with pytest.raises(VariantLifecycleError, match="Cleanup path"):
+        gc_variants(config_path=config_path, confirm=confirm)
+
+    assert first.is_file()
+    assert registry.read_bytes() == before
+
+
+def test_gc_variants_kept_sources_are_pruned_once(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    variant = _expired_entry(tmp_path, config_path, "demo")
+    kept = keep_variant(
+        variant_path=variant, config_path=config_path, variant_id="kept", label=None
+    )
+
+    first = gc_variants(config_path=config_path, confirm=True)
+    second = gc_variants(config_path=config_path, confirm=True)
+
+    assert first.kept_pruned == 1
+    assert second.status == "empty"
+    assert second.kept_pruned == 0
+    assert kept.variant_path.is_file()
+
+
+def test_gc_variants_rejects_shared_container_cleanup(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path)
+    variant = _expired_entry(tmp_path, config_path, "demo")
+    sibling = tmp_path / "var" / "drafts" / "retained" / "notes.md"
+    sibling.parent.mkdir()
+    sibling.write_text("Retained work")
+    registry = tmp_path / "var" / "variants" / "registry.json"
+    raw = json.loads(registry.read_text())
+    raw["entries"][0]["cleanup_path"] = "var/drafts"
+    registry.write_text(json.dumps(raw))
+
+    with pytest.raises(VariantLifecycleError, match="Cleanup path must own"):
+        gc_variants(config_path=config_path, confirm=True)
+
+    assert sibling.is_file()
+    assert variant.is_file()
 
 
 def _write_config(root: Path) -> Path:

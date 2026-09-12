@@ -14,13 +14,17 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import shlex
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
 from cvworkbench.dev.preview import PreviewSession
 from tests.utils import strip_ansi
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def _write_preview_config(config_path: Path) -> None:
@@ -56,10 +60,6 @@ def _write_preview_config(config_path: Path) -> None:
 
 
 def test_dev_serve_builds_html() -> None:
-    html_path = Path("var/dist/base/cv.html")
-    if html_path.exists():
-        html_path.unlink()
-
     runner = CliRunner()
     env = os.environ.copy()
     env["CVW_DEV_ONCE"] = "1"
@@ -73,11 +73,15 @@ def test_dev_serve_builds_html() -> None:
             "base",
             "--sot-path",
             "sot.sample",
+            "--json",
         ],
         env=env,
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.stdout
+    html_path = Path(json.loads(result.stdout)["data"]["output_html"])
+    assert html_path.is_relative_to(Path.cwd() / "var/runs/preview/variants/base")
+    assert not Path("var/dist/base/cv.html").exists()
     assert html_path.exists()
     assert html_path.stat().st_size > 0
 
@@ -88,7 +92,7 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
     def _fake_serve(*_args, **_kwargs) -> None:
         raise OSError(48, "Address already in use")
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(app_module, "serve_preview", _fake_serve)
 
     result = runner.invoke(
@@ -106,7 +110,16 @@ def test_dev_serve_reports_port_in_use(monkeypatch) -> None:
 
     assert result.exit_code == 1
     assert "Address already in use" in result.stderr
-    assert "uv run cvw dev stop" in result.stderr
+    stop_command = result.stderr.split("Run `", 1)[1].split("`", 1)[0]
+    assert shlex.split(stop_command) == [
+        "uv",
+        "run",
+        "--project",
+        str(Path(__file__).resolve().parents[2]),
+        "cvw",
+        "dev",
+        "stop",
+    ]
 
 
 def test_dev_serve_rejects_legacy_preview_env() -> None:
@@ -176,7 +189,7 @@ def test_dev_serve_rejects_live_existing_session(tmp_path: Path, monkeypatch) ->
         )
     )
 
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(
         app_module,
         "_preview_session_conflict",
@@ -207,7 +220,7 @@ def test_dev_serve_rejects_live_existing_session(tmp_path: Path, monkeypatch) ->
 def test_preview_session_conflict_treats_reused_live_pid_without_preview_port_as_stale(
     monkeypatch,
 ) -> None:
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.preview")
     monkeypatch.setattr(
         app_module, "_preview_api_reachable", lambda *_: (False, "connection refused")
     )

@@ -1,6 +1,6 @@
 ---
 id: concepts-overview
-intent: Explain the workbench capabilities and primary command surfaces.
+intent: Explain the workbench value, document workflows, and capability boundaries.
 audience: [operator, agent, maintainer]
 status: active
 navigation:
@@ -9,37 +9,43 @@ navigation:
 
 # Overview
 
-cv-workbench is a public, deterministic CV/resume build engine. Personal content
-lives in a private SoT directory and is never committed here.
+cv-workbench turns private career records into tailored, reviewable professional
+documents. Its value is reducing repeated formatting and selection work while
+making the source, proposed changes, rendered version, and publication decision
+traceable. The public repository contains the engine and examples; personal
+content lives outside git.
 
-The CLI is designed as a clean tool surface for MCP and other orchestration:
-- validate
-- init
-- quickstart
-- doctor
-- context
-- workflow
-- status
-- build
-- render
-- preview
-- dev serve
-- clean (var/runs, var/dist, var/drafts, var/reviews, var/registry, var/projects)
-- tailor
-- diff
-- sync
-- explain
-- reviewpack
-- import-docx
-- job add
-- theme (list/info)
-- variant (list/promote/keep/discard/gc/inbox)
-- runs (gc)
-- project (new/guide/show/apply)
-- tags (list/lint/stats)
-- sot (list/new/activate/diff)
+## Choose the document workflow
 
-Each command is single-purpose and composable.
+| Intended outcome | Editable authority | Workflow and next reference |
+| --- | --- | --- |
+| Generate a resume or cover letter with repeatable selection and styling | Structured Source of Truth (SoT), variant, and theme | [Build and preview](../howto/quickstart.md), then [styling](../howto/styling.md) |
+| Tailor content for an opportunity without changing the career record during review | Project proposal over the structured SoT | [Guide, author, build, review, and apply](../reference/project-contract.md) |
+| Publish a CV that retains an authored Word layout | Private DOCX and its corresponding local PDF export | [Prepare, inspect, review the exact PDF, and sync](../howto/publish-site.md) |
+
+Generated resume preview and authored CV publication use different source
+authorities. A generated preview cannot establish the layout quality of the
+authored public CV. Project application changes the structured source; it does
+not rewrite the authored DOCX.
+
+## What makes the workflow dependable
+
+- Source facts, proposed edits, retained runs, previews, and publication records
+  have distinct owners. See [architecture](architecture.md).
+- Supported edits name stable targets and expected source text. Review can
+  precede source changes; see [project editing](../reference/project-contract.md#patch-format).
+- A build records selection and provenance so a reviewer can identify the
+  artifact and inputs. Local [verification](../reference/verify-contract.md)
+  exercises complete CLI journeys as well as boundary tests.
+- Public preparation checks disclosure and fidelity; a separate review binds
+  to the exact PDF. See [publication](../reference/publication-contract.md).
+
+The CLI exposes callable operations through explicit commands and JSON results
+for both operators and automation. Use [the workflow router](../readme.md#usage-flows)
+for an outcome, `cvw workflow` for available recipes, and `cvw --help` for the
+current verb list.
+
+## Capabilities and limits
 
 Primary feature lanes:
 - `tailor` scaffolds a deterministic draft from a job file. It copies the base
@@ -84,6 +90,22 @@ rules like `domain`.
 
 Publication author roles are rendered via `build/filters/author_roles.lua` with
 default markers (co-first `*`, corresponding `†`, senior `‡`).
+
+Publication records support `status: published` and `status: in_preparation`.
+Omitted status means `published` for compatibility with existing source versions.
+Published records require a nonempty author list; an in-preparation manuscript
+may omit unknown authorship. Supplied author lists remain nonempty and validated.
+Unknown statuses fail validation. Markdown and JSON Resume exports retain the
+status; entry-level labels let one Publications section include both kinds.
+Publication status is an author-supplied fact, not inferred from tags or a project
+directory. `notes` can identify a working title without inventing bibliographic
+fields. Keep manuscripts in `publications.yaml`; `projects.yaml` accepts
+`projects: []` when no separate projects remain.
+
+Conference records require the event name but may omit an unknown presentation
+title. `presentation_type: Poster` establishes the activity, not a title. Keep
+the conference's topic in `event`; do not invent a title or repeat the event name
+to satisfy the schema. Supplied titles must remain nonempty.
 
 ## Dependency management
 

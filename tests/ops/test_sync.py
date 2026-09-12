@@ -13,15 +13,26 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pymupdf
 import pytest
 from typer.testing import CliRunner
 
+from cvworkbench import storage as atomic
 from cvworkbench.cli import app
-from cvworkbench.ops import atomic
-from cvworkbench.ops.syncing import load_site_sync
+from cvworkbench.ops.publication.packet import publication_review_files
+from cvworkbench.ops.publication.record import (
+    PreparationInputs,
+    ReviewReceipt,
+    hash_file,
+    json_bytes,
+    preparation_bytes,
+    stamp_file,
+)
+from cvworkbench.ops.syncing import SyncError, load_site_sync, sync_site
+from tests.ops.publication.test_pdf import _write_docx
 from tests.utils import strip_ansi
 
 
@@ -35,6 +46,24 @@ def _pdf_bytes(text: str = "Public artifact") -> bytes:
 
 
 PDF_BYTES = _pdf_bytes()
+
+
+def test_sync_api_enforces_policy_when_path_is_omitted(tmp_path: Path) -> None:
+    site, config, site_config = _write_workspace(
+        tmp_path, pdf_bytes=_pdf_bytes("Example Person | 555.867.5309")
+    )
+    before = (site / "public/cv/cv.pdf").read_bytes()
+    with pytest.raises(SyncError, match="forbidden phone"):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+    assert (site / "public/cv/cv.pdf").read_bytes() == before
+
+
+def test_sync_api_requires_configured_publication_policy(tmp_path: Path) -> None:
+    site, config, site_config = _write_workspace(tmp_path)
+    (tmp_path / "publish.yaml").unlink()
+    with pytest.raises(SyncError, match="Publish config not found"):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+    assert (site / "public/cv/cv.pdf").read_bytes() == b"old"
 
 
 def _write_workspace(
@@ -70,6 +99,10 @@ def _write_workspace(
     publish_dir = root / "var" / "publish" / "base"
     publish_dir.mkdir(parents=True, exist_ok=True)
     (publish_dir / "cv.pdf").write_bytes(pdf_bytes)
+    authored = root / "authored.docx"
+    exported = root / "exported.pdf"
+    _write_docx(authored, "Public artifact")
+    exported.write_bytes(pdf_bytes)
     pdf_hash = manifest_pdf_hash or hashlib.sha256(pdf_bytes).hexdigest()
     (publish_dir / "manifest.json").write_text(
         json.dumps(
@@ -86,9 +119,15 @@ def _write_workspace(
                 "outputs": {"pdf": "cv.pdf"},
                 "output_hashes": {"pdf": pdf_hash},
                 "source": {
+                    "authored_name": authored.name,
+                    "authored_sha256": hash_file(authored),
+                    "exported_pdf_name": exported.name,
+                    "exported_pdf_sha256": hash_file(exported),
+                    "pdf_token_coverage": 1.0,
+                    "docx_token_coverage": 1.0,
                     "visual_fingerprint_sha256": (
                         "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
-                    )
+                    ),
                 },
                 "transformation": {
                     "kind": "semantic-redaction",
@@ -163,6 +202,37 @@ def _write_workspace(
         )
         + "\n"
     )
+    if pdf_bytes.startswith(b"%PDF-"):
+        # Arrange a reviewed publication; malformed artifacts remain intentionally unprepared.
+        packet = publication_review_files(pdf_bytes)
+        artifact_hash = hashlib.sha256(pdf_bytes).hexdigest()
+        review_dir = root / "var/reviews/publication" / artifact_hash
+        review_dir.mkdir(parents=True)
+        for name, content in packet.items():
+            (review_dir / name).write_bytes(content)
+        preparation = preparation_bytes(
+            inputs=PreparationInputs(
+                authored_source=stamp_file(authored),
+                exported_pdf=stamp_file(exported),
+                policy=stamp_file(root / "publish.yaml"),
+                variant_config=stamp_file(variants_dir / "base.yaml"),
+                person=stamp_file(root / "local/sot/person.yaml"),
+            ),
+            variant="base",
+            pdf_hash=artifact_hash,
+            manifest_content=(publish_dir / "manifest.json").read_text(),
+            review_files=packet,
+        )
+        (publish_dir / "preparation.json").write_bytes(preparation)
+        receipt = ReviewReceipt(
+            schema_version=1,
+            pdf_sha256=artifact_hash,
+            preparation_sha256=hashlib.sha256(preparation).hexdigest(),
+            reviewed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        (publish_dir / "review-receipt.json").write_bytes(
+            json_bytes(receipt.model_dump(mode="json"))
+        )
     return site_repo, workbench_config, site_config
 
 
@@ -231,6 +301,66 @@ def test_sync_local_publishes_only_pdf_and_sanitized_manifest(tmp_path: Path) ->
     assert '"forbidden_contact_fields": ["phone"]' in manifest_text
     assert '"forbidden_sections": ["references"]' in manifest_text
     assert '"required_exclude_tags": ["private"]' in manifest_text
+
+
+def test_sync_copies_the_validated_pdf_when_source_changes_after_planning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cvworkbench.ops import syncing
+
+    site, config, site_config = _write_workspace(tmp_path)
+    source = tmp_path / "var/publish/base/cv.pdf"
+    original_plan = syncing._plan_sync
+    unreviewed = _pdf_bytes("Unreviewed contact 555.867.5309")
+
+    def change_source_after_planning(*args, **kwargs):
+        plan = original_plan(*args, **kwargs)
+        source.write_bytes(unreviewed)
+        return plan
+
+    monkeypatch.setattr(syncing, "_plan_sync", change_source_after_planning)
+    sync_site(config_path=config, site_config_path=site_config, mode="local")
+
+    assert source.read_bytes() == unreviewed
+    assert (site / "public/cv/cv.pdf").read_bytes() == PDF_BYTES
+    manifest = json.loads((site / "scripts/cv/public-cv-manifest.json").read_text())
+    assert manifest["pdf_sha256"] == hashlib.sha256(PDF_BYTES).hexdigest()
+
+
+def test_sync_rejects_a_review_for_a_different_publication_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cvworkbench.ops import syncing
+    from cvworkbench.ops.publication.pdf import prepare_public_pdf
+    from cvworkbench.ops.publication.state import record_publication_review
+
+    site, config, site_config = _write_workspace(tmp_path)
+    inspect = syncing.inspect_publication
+
+    def prepare_and_review_another_generation(*args, **kwargs):
+        authored = tmp_path / "authored.docx"
+        exported = tmp_path / "exported.pdf"
+        _write_docx(authored, "Public artifact revised")
+        exported.write_bytes(_pdf_bytes("Public artifact revised"))
+        prepare_public_pdf(
+            authored_source=authored,
+            source_pdf=exported,
+            config_path=config,
+            variant_id="base",
+            publish_config_path=tmp_path / "publish.yaml",
+            sot_path=tmp_path / "local/sot",
+        )
+        updated = inspect(*args, **kwargs)
+        assert updated.pdf_sha256 != hashlib.sha256(PDF_BYTES).hexdigest()
+        record_publication_review(config, "base", updated.pdf_sha256)
+        return inspect(*args, **kwargs)
+
+    monkeypatch.setattr(syncing, "inspect_publication", prepare_and_review_another_generation)
+    with pytest.raises(SyncError, match="Reviewed PDF does not match captured artifact"):
+        sync_site(config_path=config, site_config_path=site_config, mode="local")
+
+    assert (site / "public/cv/cv.pdf").read_bytes() == b"old"
+    assert not (site / "scripts/cv/public-cv-manifest.json").exists()
 
 
 def test_sync_local_rolls_back_every_artifact_when_replace_fails(

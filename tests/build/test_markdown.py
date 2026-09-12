@@ -13,9 +13,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from cvworkbench.build.markdown import build_markdown
 from cvworkbench.inputs.sot import load_sot
 from cvworkbench.variants import load_variant
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_markdown_includes_role_divs_and_tags() -> None:
@@ -97,7 +101,7 @@ def test_markdown_only_renders_configured_contact_fields(tmp_path: Path) -> None
             "label": "Private label",
             "email": "alex@example.com",
             "phone": "+1 555 555 0100",
-            "location": {"city": "Boston", "region": "MA"},
+            "location": {"city": "Example City", "region": "EX"},
             "links": [{"label": "Profile", "url": "https://example.com"}],
         }
     }
@@ -105,7 +109,44 @@ def test_markdown_only_renders_configured_contact_fields(tmp_path: Path) -> None
     content = build_markdown(sot, variant)
 
     assert "alex@example.com" in content
-    assert "Boston, MA" in content
+    assert "Example City, EX" in content
     assert "+1 555 555 0100" not in content
     assert "Private label" not in content
     assert "https://example.com" not in content
+
+
+def test_adjacent_sections_can_share_one_explicit_display_heading():
+    from cvworkbench.variants import parse_variant
+
+    variant = parse_variant(
+        {
+            "variant": {
+                "id": "cv",
+                "outputs": ["md"],
+                "order": ["service", "conferences", "honors"],
+                "section_titles": {
+                    "service": "Professional Activities",
+                    "conferences": "Professional Activities",
+                },
+            }
+        }
+    )
+    source = {
+        "service": {
+            "service": [{"id": "chair", "organization": "Seminar", "role": "Chair", "start": 2027}]
+        },
+        "conferences": {
+            "conferences": [
+                {"id": "poster", "event": "Conference", "year": 2024, "presentation_type": "Poster"}
+            ]
+        },
+        "honors": {"honors": [{"id": "prize", "title": "Prize", "year": 2023}]},
+    }
+    text = build_markdown(source, variant)
+    assert text.count("## Professional Activities\n") == 1
+    assert text.index("service-chair") < text.index("conference-poster") < text.index("honor-prize")
+    assert "Chair" in text and "Poster" in text and "2027" in text and "2024" in text
+    from dataclasses import replace
+
+    variant = replace(variant, order=["service", "honors", "conferences"])
+    assert build_markdown(source, variant).count("## Professional Activities\n") == 2

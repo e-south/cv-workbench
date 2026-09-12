@@ -7,4 +7,4 @@ publish:
     - phone
   forbidden_sections:
     - references
-  approved_visual_fingerprint_sha256: f4d2a9eded96294f4ac72baac804417d5484af6ff6d71ee0cb75b3286002c91f
+  approved_visual_fingerprint_sha256: c15aa47ed138bdf6cc91fcaa03b5a7d57275c53bfc21943948e14b40b5923c8e

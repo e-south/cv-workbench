@@ -11,21 +11,26 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib import request as url_request
 
+import pytest
+
 from cvworkbench.config import resolve_config_path, resolve_themes_dir
+from cvworkbench.dev.presentation import preview_page_html
 from cvworkbench.dev.preview import (
     ClientActivity,
     PreviewController,
     PreviewIdleWatchdog,
     _load_project_context,
     _make_handler,
-    _preview_page_html,
 )
+
+pytestmark = pytest.mark.usefixtures("sample_workspace")
 
 
 def test_preview_controller_watch_paths() -> None:
@@ -248,11 +253,11 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
-                "    hash: cafebabe",
+                f"    hash: {hashlib.sha256((job_dir / 'signals.json').read_bytes()).hexdigest()}",
             ]
         )
         + "\n"
@@ -300,6 +305,18 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
     assert payload["project"] == "job"
     assert payload["project_context"] == {
         "project_id": "job",
+        "proposal_status": "available",
+        "job_artifact_status": "match saved record",
+        "guidance_inputs": {
+            "state": "unverifiable",
+            "changed": [],
+            "unavailable": [],
+            "errors": ["Saved guidance has no input provenance."],
+        },
+        "guidance_input_status": "unverifiable",
+        "guidance_input_warning": (
+            "Saved guidance has no input provenance. Review the recommendations before using them."
+        ),
         "proposal_document_type": "cover-letter",
         "patch_status": "1 op",
         "patch_operations": ["replace-project-summary"],
@@ -310,6 +327,10 @@ def test_preview_controller_state_payload_includes_project_guidance(tmp_path: Pa
         "recommended_variant": "project-focus",
         "recommendation_status": "targeted",
         "recommendation_summary": "matched include tags: leadership",
+        "proposal_plan_warning": (
+            "Saved guidance does not identify an applied variant. "
+            "Compare its recommendations with the current proposal before using them."
+        ),
         "job_keywords_missing": ["stakeholder-management"],
         "steps": [
             "Inspect `project show job` and preview the proposal variant.",
@@ -325,6 +346,7 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
     proposals_dir.mkdir(parents=True, exist_ok=True)
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / "signals.json").write_text('{"keywords": ["leadership"]}\n')
+    (job_dir / "extracted.txt").write_text("Leadership role.\n")
     (project_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -338,7 +360,7 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
                 "      type: file",
                 f"      value: {tmp_path / 'job.txt'}",
                 "    extracted_path: job/extracted.txt",
-                "    extracted_hash: deadbeef",
+                f"    extracted_hash: {hashlib.sha256((job_dir / 'extracted.txt').read_bytes()).hexdigest()}",
                 "    raw_path: null",
                 "  signals:",
                 "    path: job/signals.json",
@@ -373,12 +395,12 @@ def test_load_project_context_surfaces_guidance_error(tmp_path: Path) -> None:
 
     assert payload == {
         "project_id": "job",
-        "project_context_error": "Project signals hash is required",
+        "project_context_error": "Project signals.hash must be a nonempty string",
     }
 
 
 def test_preview_page_html_contains_controls() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
     assert 'id="sidebar"' in html
     assert 'id="hero"' in html
@@ -394,25 +416,25 @@ def test_preview_page_html_contains_controls() -> None:
 
 
 def test_preview_page_sidebar_left() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
     assert "left: 0" in html
     assert "width:" in html
 
 
 def test_preview_page_html_includes_responsive_layout_breakpoints() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
     assert "@media (max-width: 1024px)" in html
     assert "@media (max-width: 640px)" in html
-    assert "grid-template-columns: repeat(2, 1fr);" in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
 
 
 def test_preview_keyboard_shortcuts_ignore_interactive_controls() -> None:
-    html = _preview_page_html()
+    html = preview_page_html()
 
-    assert "['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A']" in html
-    assert 'button,select,input,textarea,a,[role="button"],[role="tab"]' in html
+    assert "['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A', 'SUMMARY']" in html
+    assert 'button,select,input,textarea,a,summary,[role="button"],[role="tab"]' in html
 
 
 class _StubState:

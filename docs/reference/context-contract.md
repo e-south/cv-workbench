@@ -13,6 +13,12 @@ navigation:
 the current workspace state without guessing paths or falling back to defaults.
 Missing inputs are surfaced explicitly in the payload.
 
+When `documents.root` is configured, the `documents` block exposes the private
+library, current-file states, and an explicit `documents list` command. An absent
+setting reports `unconfigured`; context never searches the home directory for
+career files. Both full and compact JSON preserve this route. See the
+[document-library contract](document-library.md) for discovery and promotion.
+
 ## Guarantees
 
 - Local-only inspection (no network access).
@@ -44,6 +50,72 @@ Missing inputs are surfaced explicitly in the payload.
 - `recipes` includes an explicit `project.inspect` lane so agents can inspect a
   proposal before previewing, reviewing, or applying it.
 
+## Python inspection API
+
+```python
+from pathlib import Path
+from cvworkbench.workspace.context import inspect_workspace
+
+state = inspect_workspace(
+    config=Path("config/workbench.yaml"),
+    sot_path=None,
+    strict=False,
+    compact=False,
+)
+```
+
+The API returns the context state without a CLI `command` envelope. It performs
+local reads and returns data without printing or writing workspace files. With
+`strict=False`, recoverable inventory problems appear in `issues` and the
+corresponding section. With `strict=True`, the first such problem raises
+`ValueError`. An unreadable or invalid workbench configuration fails in either
+mode. CLI adapters translate these errors into their terminal message and exit
+code; Python callers handle the exception themselves.
+
+A pinned source can remain `ready` while its pack's selection metadata is
+damaged. Non-strict inspection reports that metadata problem in `issues` and
+continues inspecting the pinned source; strict inspection raises `ValueError`.
+Source readiness and pack metadata health are separate observations.
+
+One inspection uses one immutable workbench configuration snapshot. Source
+selection, configured artifact locations, default variant, retention settings,
+and publication inventory share that snapshot. The API also accepts an explicit
+`ConfigSnapshot` as `config`. A later path-based call captures updated settings.
+This is a settings guarantee, not a transaction over all source and artifact
+files; see the [configuration contract](configuration-contract.md).
+
+`compact=True` limits inventory work (for example, one recent run per variant)
+and omits detailed run/project/review items. The API still returns full recipe
+descriptions. CLI compact presentation additionally reduces source/variant
+details and recipes to the documented summary representation. See the
+[architecture owner map](../concepts/architecture.md#workspace-inspection-and-command-adapters)
+before extending inspection or recipe behavior.
+
+### Validated-source status
+
+```python
+from pathlib import Path
+from cvworkbench.workspace.status import inspect_status
+
+status = inspect_status(config=Path("config/workbench.yaml"), sot_path=None)
+```
+
+`inspect_status` supplies the data behind `cvw status` without its CLI `command`
+envelope, terminal output, or workspace writes. It requires a valid selected
+source and reports its sections, variants, runs, projects, reviews, and authored
+publication. It accepts a config path or snapshot and shares inventory owners
+with `inspect_workspace`. Status does not require a default build variant and
+does not produce repair recipes; context owns repair and workflow guidance.
+
+Source/version validation raises `StatusInspectionError` with an `errors`
+tuple preserving individual diagnostics. Configuration and inventory exceptions
+remain available to Python callers. The CLI prints each diagnostic and exits
+with code 1. Missing configuration also produces an explicit CLI error.
+
+For a single project, use the [project inspection APIs](project-inspection.md).
+They supply full CLI state and compact preview observations without requiring
+workspace-wide inspection.
+
 ## Payload (JSON)
 
 Top-level keys:
@@ -57,9 +129,32 @@ Top-level keys:
   Project-scoped runs are inspected via `project show` or explicit
   `reviewpack --project/--run` resolution so variant inventory is not polluted
   by newer project-only runs.
-- `projects`: local projects list and invalid entries.
-- `reviews`: review packs inventory.
+- `projects`: local projects list and invalid-identity entries. Identifiable
+  projects stay visible when displayed metadata is malformed; full items carry
+  `metadata_errors`, and full/compact output includes `metadata_error_count`
+  and a summary hint when such errors exist. These per-project diagnostics
+  remain in the inventory in both strict modes. They do not establish detailed
+  project or review readiness; see the
+  [descriptive metadata contract](project-contract.md#descriptive-metadata).
+- `reviews`: actual review packets, including nested project/run packs and
+  publication packets. Each full entry includes `kind` (`content` or
+  `publication`) and its review path. Container directories are not review
+  items. Inventory presence is not proof of publication approval or freshness.
+  Partial packets remain visible with an explicit `missing_files` list.
+  Content entries include a `source` object reporting the recorded run and its
+  baseline state (`ready`, `changed`, `missing`, `invalid`, or `untracked`).
+  Plain/compact summaries include that state. See
+  [Content Review](review-contract.md#provenance-and-health) for its meaning;
+  `ready` does not mean human approval.
+- `publication`: the declared site's authored publication, including current
+  source/export paths, PDF hash, packet path, phase and explicit reasons.
+  It remains present in compact output. Inspection hashes current files and
+  verifies packet integrity; the default generated-document variant does not
+  select this publication. Missing configuration is reported without guessing.
 - `recipes`: ordered command sequences for common workflows.
+  `authored.publish` routes source preparation, a non-runnable manual review
+  step, exact-hash review recording, and guarded local sync. Configured
+  publications receive a recommendation when the structured workspace is ready.
 - `recommended_workflows`: the next workflow recipes to inspect first.
 - `issues`: any non-fatal problems detected during inspection.
 
@@ -103,3 +198,8 @@ Recipe ordering prioritizes:
 
 `uv run cvw context --strict` fails fast if required inputs are missing or invalid.
 Use this when automation depends on a valid SoT.
+
+Source recovery recipes preserve the selected configuration: sample builds pass
+its explicit `--sot-path`, and manual repair names the inspected config file.
+Review/import recipes resolve review and draft stores from the same captured
+configuration used by context, including paths outside the checkout.

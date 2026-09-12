@@ -13,6 +13,10 @@ Variant drafts and project proposals are treated as ephemeral until you
 explicitly keep them. The lifecycle is tracked locally so you can prune
 inconsequential variants and keep only intentional ones.
 
+Variant selectors and promotion IDs follow the
+[variant and artifact name contract](configuration-contract.md#variant-and-artifact-names).
+They are identifiers, not filesystem paths.
+
 ## Configuration
 
 Set the retention window in `config/workbench.yaml`:
@@ -33,6 +37,38 @@ var/variants/registry.json
 Entries include the source (`draft` or `project`), the variant file path, and
 expiration metadata. The registry is local-only and gitignored.
 
+Cleanup owns the variant file itself or its immediate bundle directory. Shared
+containers such as `var/`, `var/drafts/`, and a project's parent directory are
+not cleanup targets for a nested proposal.
+
+### Inbox project identity
+
+For a registered `source: project` entry at `proposals/variant.yaml`, the inbox
+reads the owning project's validated manifest identity. It reports `project_id`
+and `project_dir`; it does not infer identity from a `var/projects` directory
+name. Project commands follow the [project selector contract](project-contract.md#project-selectors),
+so custom stores and archived directories retain their actual selection.
+
+If the proposal location or manifest cannot establish project identity, the
+entry retains concrete `--path` lifecycle commands and reports `project_error`
+in JSON and terminal summaries. `project_id` is null, and no project preview
+command is suggested. This diagnostic does not hide or remove the registered
+proposal. Lifecycle execution still validates the selected artifact and cleanup
+ownership; the command description is not permission to delete it.
+
+## Registration preflight
+
+`ops.variant_lifecycle.preflight_variant_registration` checks a prospective
+variant/cleanup path pair, registration source, configured lifetime, registry
+structure, and eligibility without creating files or reserving an entry. The
+target files need not exist yet. The lifetime must be a positive integer that
+produces a representable expiration date; booleans are invalid.
+
+Project creation calls this owner before staging. `register_variant` applies
+the same checks, requires the actual artifacts, and rechecks registry eligibility
+under its write lock before saving. Preflight does not establish a transaction
+with subsequent filesystem writes or hold the lock across project creation.
+
 ## Commands
 
 - `uv run cvw variant list`: show configured variants alongside pending lifecycle entries.
@@ -51,7 +87,33 @@ expiration metadata. The registry is local-only and gitignored.
   and delete its artifacts.
 - `uv run cvw variant discard --project <project-id> --yes`: discard a project proposal by
   project selector instead of a raw path.
-- `uv run cvw variant gc --yes`: remove expired draft/proposal artifacts.
+- `uv run cvw variant gc --json`: inspect expired entries without removing files
+  or updating registry records. Each candidate reports `variant_id`,
+  `cleanup_path`, `action`, and `reason`. A pending plan exits with code 2;
+  an empty plan exits with code 0.
+- `uv run cvw variant gc --yes`: apply the inspected lifecycle actions.
+
+## Cleanup Plan
+
+All eligible cleanup paths are validated before deletion starts. Paths outside
+the workspace's `var/` root, the root itself, and paths that do not own the
+registered variant bundle are rejected in both preview and apply modes.
+
+- `action=remove` deletes an existing expired bundle.
+- `action=reconcile` updates an expired record whose bundle is already absent;
+  it does not delete a replacement or inferred target.
+- `reason=expired` transitions an ephemeral entry to `expired`.
+- `reason=kept_source` records source pruning while preserving the promoted
+  variant and its `kept` status. Already-pruned sources are excluded from later
+  plans.
+
+`expired` and `kept_pruned` count planned lifecycle transitions in a dry run and
+completed transitions on success. `reconciled` counts the subset whose targets
+were already missing. A missing target remains visible in the inbox until an
+explicit apply updates its record. No private workspace cleanup runs implicitly.
+
+Filesystem failures during deletion still stop the operation; the preflight
+does not promise transactional rollback of deleted directories.
 
 Use `uv run cvw variant promote` only for legacy scripts; `uv run cvw variant keep` is the
 preferred path because it updates lifecycle state.

@@ -23,9 +23,10 @@ task instead of browsing the whole docs tree.
 
 ## Most Common Routes
 
+- Current files, manual variants, and local promotion: [reference/document-library.md](reference/document-library.md)
 - First local build: [howto/quickstart.md](howto/quickstart.md) -> [reference/preview-contract.md](reference/preview-contract.md)
 - Job tailoring and project preview: [howto/ingestion.md](howto/ingestion.md) -> [reference/project-contract.md](reference/project-contract.md)
-- Review/import loop: [reference/project-contract.md](reference/project-contract.md) -> [reference/variant-lifecycle.md](reference/variant-lifecycle.md)
+- Review/import loop: [reference/review-contract.md](reference/review-contract.md) -> [reference/project-contract.md](reference/project-contract.md)
 - Publish the faithful authored CV: [howto/publish-site.md](howto/publish-site.md) -> [reference/site-contract.md](reference/site-contract.md)
 - Automation/bootstrap: [reference/context-contract.md](reference/context-contract.md) -> [reference/verify-contract.md](reference/verify-contract.md)
 
@@ -48,16 +49,19 @@ task instead of browsing the whole docs tree.
 | Compare themes, presets, and export styling | [howto/styling.md](howto/styling.md) | [reference/preview-contract.md](reference/preview-contract.md) |
 | Prepare and sync the faithful authored CV | [howto/publish-site.md](howto/publish-site.md) | [reference/site-contract.md](reference/site-contract.md) |
 | Work with versioned SoT directories or packs | [howto/sot-versions.md](howto/sot-versions.md) | [reference/context-contract.md](reference/context-contract.md) |
+| Build and revise a cover letter, or explain its selected paragraphs | [howto/quickstart.md#cover-letter-workflow](howto/quickstart.md#cover-letter-workflow) | [reference/selection-contract.md](reference/selection-contract.md) |
 
 ### Project Tailoring And Review
 
 | Need | Start here | Verify next |
 | --- | --- | --- |
 | Ingest a job and create a project-scoped proposal | [howto/ingestion.md](howto/ingestion.md) | [reference/project-contract.md](reference/project-contract.md) |
-| Inspect project guidance, patch status, and next commands | [reference/project-contract.md](reference/project-contract.md) | [reference/preview-contract.md](reference/preview-contract.md) |
+| Inspect project guidance, patch status, and next commands | [reference/project-contract.md](reference/project-contract.md) | [reference/project-inspection.md](reference/project-inspection.md) |
 | Inspect, keep, discard, or clean up proposal variants | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) | [reference/project-contract.md](reference/project-contract.md) |
+| Retain project runs and inspect artifact cleanup plans | [reference/artifact-retention.md](reference/artifact-retention.md) | [reference/variant-lifecycle.md](reference/variant-lifecycle.md) |
 | Compare a project run against a baseline before export or review | [reference/project-contract.md](reference/project-contract.md) | [concepts/overview.md](concepts/overview.md) |
-| Package a review run and import reviewed DOCX edits | [reference/project-contract.md](reference/project-contract.md) | [howto/ingestion.md](howto/ingestion.md) |
+| Package a review run and import reviewed DOCX edits | [reference/review-contract.md](reference/review-contract.md) | [reference/project-contract.md](reference/project-contract.md) |
+| Apply reviewed source edits and understand failure recovery | [reference/patch-application.md](reference/patch-application.md) | [reference/project-contract.md](reference/project-contract.md) |
 
 ### Automation, Verification, And Performance
 
@@ -71,14 +75,20 @@ task instead of browsing the whole docs tree.
 
 Use these when the CLI contract matters more than the broader workflow:
 
-- [concepts/overview.md](concepts/overview.md): CLI surface, feature lanes, and bounded editing scope
+- [concepts/overview.md](concepts/overview.md): product value, document workflows, and bounded editing scope
 - [concepts/architecture.md](concepts/architecture.md): repo boundaries and design constraints
 - [reference/context-contract.md](reference/context-contract.md): bootstrap payload, recipes, and compact machine mode
+- [reference/configuration-contract.md](reference/configuration-contract.md): settings lifetime, explicit snapshots, resolution, and build preflight
+- [reference/document-library.md](reference/document-library.md): external career files, discovery, reviewed promotion, and predecessor recovery
+- [reference/selection-contract.md](reference/selection-contract.md): document-specific tag decisions, explanations, and review checklist inputs
 - [reference/preview-contract.md](reference/preview-contract.md): local-only preview server, API, session semantics, and UI control hooks
-- [reference/verify-contract.md](reference/verify-contract.md): repo-local tracer-bullet verification harness
+- [reference/verify-contract.md](reference/verify-contract.md): test isolation and repo-local CLI journey verification
 - [reference/project-contract.md](reference/project-contract.md): project layout, review/import invariants, guarded patch application, and proposal visibility rules
 - [reference/variant-lifecycle.md](reference/variant-lifecycle.md): ephemeral draft/project proposal lifecycle
+- [reference/artifact-retention.md](reference/artifact-retention.md): run ownership, retained IDs, cleanup plans, and review dependencies
+- [reference/review-contract.md](reference/review-contract.md): content-review source identity, safe imports, and baseline health
 - [reference/site-contract.md](reference/site-contract.md): local-first site sync contract
+- [reference/publication-contract.md](reference/publication-contract.md): authored sources, freshness and exact-PDF review receipts
 - [reference/security.md](reference/security.md): local/private content boundaries and security posture
 - [reference/documentation-contract.md](reference/documentation-contract.md): frontmatter, lifecycle, and progressive-disclosure rules
 - [reference/journal.md](reference/journal.md): operator and maintainer journal surface
@@ -108,12 +118,12 @@ Contributors and maintainers:
 ## Config And Example Surfaces
 
 Configuration and sample assets:
-- [config/workbench.yaml](config/workbench.yaml)
-- [config/publish.yaml](config/publish.yaml)
-- [config/site-sync.yaml](config/site-sync.yaml)
-- [config/variants/base.yaml](config/variants/base.yaml)
-- [local/sot/](local/sot/)
-- [build/themes/default/theme.yaml](build/themes/default/theme.yaml)
+- [config/workbench.yaml](../config/workbench.yaml)
+- [config/publish.yaml](../config/publish.yaml)
+- [config/site-sync.yaml](../config/site-sync.yaml)
+- [config/variants/base.yaml](../config/variants/base.yaml)
+- [sot.sample/](../sot.sample/): tracked examples; private inputs stay local
+- [build/themes/default/theme.yaml](../build/themes/default/theme.yaml)
 
 Top-level repo entry points:
 - [../README.md](../README.md)
@@ -122,6 +132,10 @@ Top-level repo entry points:
 ## Planning And Design Notes
 
 Use these when you need historical design context or open planning records:
+
+- [2026-09-10 product readiness checkpoint](dev/2026-09-10-product-readiness-checkpoint.md): user value, verified journeys, remaining product gaps, and completion criteria
+- [2026-09-10 artifact retention plan](plans/2026-09-10-artifact-retention.md): observed workspace inventory, import-dependency loss, and bounded cleanup criteria
+- [2026-09-09 information architecture audit](dev/2026-09-09-information-architecture-audit.md): findings, implemented hardening, and proposed next work
 
 - [plans/dev-plan.md](plans/dev-plan.md)
 - [plans/2026-01-29-cv-workbench-design.md](plans/2026-01-29-cv-workbench-design.md)

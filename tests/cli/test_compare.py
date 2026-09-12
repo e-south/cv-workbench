@@ -18,12 +18,13 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from cvworkbench.cli import app
 from cvworkbench.ops.render_compare import PageVisualDiff, RenderCompareResult
 from cvworkbench.ops.runs import RunInfo
 
 
 def test_compare_command_emits_json_summary(tmp_path: Path, monkeypatch) -> None:
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.documents.compare")
     config_dir = tmp_path / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path = config_dir / "workbench.yaml"
@@ -84,7 +85,7 @@ def test_compare_command_emits_json_summary(tmp_path: Path, monkeypatch) -> None
 
     runner = CliRunner()
     result = runner.invoke(
-        app_module.app,
+        app,
         [
             "compare",
             "--run-a",

@@ -1,6 +1,6 @@
 ---
 id: reference-preview-contract
-intent: Define the local-only preview server and browser-control boundary.
+intent: Define preview artifact ownership, local HTTP behavior, and browser control.
 audience: [operator, agent, maintainer]
 status: active
 navigation:
@@ -14,8 +14,44 @@ API for browser automation or manual inspection. The CLI is responsible for
 starting and stopping the server; Chrome DevTools MCP is the preferred
 interactive controller.
 
-Only loopback hosts are supported. `CVW_DEV_HOST` may be set to `localhost`,
-`127.0.0.1`, or `::1`; non-local bind addresses such as `0.0.0.0` are rejected.
+`CVW_DEV_HOST` may be set to `localhost` or `127.0.0.1`. The IPv4 server rejects
+alternate loopback addresses and IPv6 bindings, as well as non-local addresses
+such as `0.0.0.0`, before starting.
+
+Every GET, HEAD, and POST request must name the local server and its port in
+`Host`. Browser requests must have the same `Origin`, and cross-site fetches
+are rejected before reading state, rendering, or stopping the server. Local CLI
+clients may omit browser-origin headers. The response disallows cross-origin
+framing and browser caching of private preview content.
+
+## Artifact ownership
+
+`dev/preview_paths.py` owns preview locations beneath the configured runs root.
+Each controller gets a fresh opaque `preview-id`, independent of its browser
+control lease. Rebuilds in that controller reuse its preview directory; another
+invocation gets a different directory even for the same variant, project, or
+provided browser lease.
+
+- Variant previews: `var/runs/preview/variants/<variant-id>/<preview-id>/`
+- Project previews: `var/runs/preview/projects/<project-id>/<preview-id>/`
+
+Each directory separates `input/canonical.md` from `output/`, which contains
+rendered documents and their linked styles. Only `output/` is the static HTTP
+root; canonical input is not served. The configured `var/dist/<variant>/` and
+audited runs remain build-owned. Preview never refreshes or overwrites their
+files, selections, or manifests.
+
+Use the CLI's `output_html` and `preview_file` fields to find a one-shot result.
+For live preview, use the returned URL and the API's format-to-filename map;
+do not construct a filename from a guessed preview id. This layout replaces
+previous shared variant/project folders; existing folders are left untouched,
+without a fallback read or automatic migration.
+
+Successful preview outputs remain available after one-shot exit or server stop.
+They are disposable generated artifacts, not retained build or review records.
+Run inventory and `runs gc` exclude the preview tree. No age-based cleanup is
+performed by preview; see [retention](artifact-retention.md#preview-artifacts)
+before deliberate whole-store cleanup.
 
 ## Session record
 
@@ -36,10 +72,10 @@ Fields:
 
 `uv run cvw preview --once` builds the HTML preview output once and exits
 without starting the server. No session file is written in this mode. Pass
-`--with-pdf` when you also need a one-shot `cv.pdf`. With `--project`, the
-rendered files stay under `var/runs/preview/<project-id>/`. When `--sot-path`
-points at a concrete version directory, preview uses that exact directory
-instead of following `ACTIVE`.
+`--with-pdf` when you also need a one-shot `cv.pdf`. Both variant and project
+previews follow the artifact-ownership layout above. When `--sot-path` points at
+a concrete version directory, preview uses that exact directory instead of
+following `ACTIVE`.
 
 ## HTTP API
 
@@ -49,12 +85,30 @@ instead of following `ACTIVE`.
 - `themes`, `presets`, `variants`, `projects`, `project`
 - `format`, `auto_pdf`, `build_id`, `last_error`
 - `project_context` (when preview was started with `--project`):
-  `proposal_document_type`, `patch_status`, `patch_operations`,
+  `proposal_status`, `proposal_document_type`, `patch_status`, `patch_operations`,
   `render_warning`, plus any `proposal-plan.json` guidance fields that were
   available (`recommended_variant`, `recommendation_status`,
   `recommendation_summary`, `job_keywords_missing`, `steps`). If preview can
   still render the project patch but detailed project metadata is incomplete,
   `project_context_error` is returned instead of silently omitting the failure.
+  Unavailable proposal files instead produce `proposal_status: unavailable`,
+  null fields for the unavailable input, and `proposal_warning`, while retaining
+  job and guidance observations. The sidebar displays that warning as text.
+  These are observations at the last successful build, not permission to render
+  an incomplete proposal; startup and rebuild keep their execution requirements.
+  Optional `proposal_plan_error` and `proposal_plan_warning` identify unreadable
+  guidance or a changed/unverifiable recorded selection; see the
+  [saved-guidance contract](project-contract.md#saved-guidance). Both appear in
+  the existing project warning area as text.
+  `job_artifact_status` and optional `job_artifact_warning` report stored job-file
+  observations from the last successful rebuild. The sidebar labels this timing;
+  polling reuses the result, and job-file edits alone do not trigger a rebuild.
+  Use Rebuild to refresh. See [artifact inspection](project-contract.md#artifact-inspection)
+  for the comparison scope and limits.
+  Plans also expose `guidance_inputs`, `guidance_input_status`, and optional
+  `guidance_input_warning`. These compare the saved provenance with local inputs
+  selected for this preview, including an explicit source override. Their timing
+  is also the last successful rebuild; see [guidance provenance](guidance-provenance.md).
 - `outputs` (format -> filename)
 
 `POST /api/render` rebuilds with optional overrides:
@@ -73,6 +127,32 @@ Returns the same payload as `/api/state` on success; on failure returns
 `{"error": "<message>"}` with a `400` status.
 
 `POST /api/stop` stops the preview server and returns `{"status": "stopping"}`.
+
+API routes match exact paths; query strings are permitted. Render request bodies
+must use one valid `Content-Length`, contain at most 16,384 bytes, arrive in full,
+and decode as UTF-8 JSON. Chunked, malformed, oversized, and truncated bodies
+fail before rebuilding. Socket reads have a 10-second timeout.
+
+## Preview controls
+
+Start with the document: active project, variant selection, format buttons,
+Rebuild, Stop, and current status remain visible. **Document settings** expands
+theme, preset, and automatic PDF option. **Build details** expands the selected
+configuration, project guidance, recent builds, and keyboard shortcuts. Both
+sections start closed and use native keyboard-operable disclosure controls.
+Errors and project warnings stay outside the collapsed sections.
+
+At narrow widths the controls move above the document. The initial view reserves
+space for the document by collapsing secondary information, rather than hiding
+controls behind a custom drawer. A **Skip to document** link is available on
+keyboard focus. Opening details changes layout only; it does not rebuild.
+Build and warning content can increase the controls' height when needed.
+
+`dev/assets/preview/index.html` owns the semantic structure, `layout.css` owns
+spacing, color, and responsive rules, and `controller.js` owns existing state and
+actions. `dev/presentation.py` inlines these package assets; the shell requires
+no external fonts, scripts, or styling requests. The document's own typography
+belongs to its selected theme, separately from the preview controls.
 
 ## UI control selectors (stable)
 
@@ -100,8 +180,15 @@ content editor.
 
 ## Interaction semantics
 
+- Each project rebuild prepares its edits in a temporary source copy, which is
+  released after success or failure. The source profile remains unchanged;
+  generated preview outputs retain their configured locations. This follows the
+  [source preparation contract](project-contract.md#source-preparation).
 - `build_id` increments after each successful rebuild and is used to cache-bust
-  the iframe URL.
+  the iframe URL. Rendering and commit failures retain the previous build id,
+  documents, and canonical input, and populate `last_error`. The CLI reports the
+  error; `/api/render` returns its normal `400` error response. Initial source
+  validation failures do not allocate persistent preview directories.
 - UI controls call `/api/render`; state updates are visible via `/api/state`.
 - Non-force theme, preset, variant, format, and auto-PDF changes are briefly
   debounced and coalesced in the browser so rapid control changes collapse into
@@ -124,7 +211,7 @@ content editor.
   tabs for the same `session_id`; the tabs remain open but visibly disabled.
 - Keyboard shortcuts are ignored while focus is inside interactive controls so
   agents/operators do not accidentally rebuild or switch variants while
-  navigating the sidebar.
+  navigating the sidebar. This includes expandable section headings.
 - Browser inactivity auto-stops the preview server after 30 seconds by default.
   Set `CVW_DEV_IDLE_TIMEOUT_SECONDS=0` to disable the idle timeout.
 - If the preview API becomes unreachable, the error status shows a

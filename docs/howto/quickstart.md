@@ -36,6 +36,11 @@ eval "$(/usr/libexec/path_helper)"
 uv sync --locked
 ```
 
+These examples use a source checkout. A wheel installation exposes the same
+commands directly as `cvw`; initialize a new directory with
+`cvw init --workspace /path/to/workspace --sample-default`, then run commands
+inside that workspace. Python, Pandoc, and LaTeX remain runtime requirements.
+
 ## 2) Initialize the workspace
 
 ```bash
@@ -49,6 +54,13 @@ is present in the repo. If hook installation fails, `init` prints
 Use `--sample-default` in this public repo when you want the configured default
 SoT to be `./sot.sample`. Omit the flag when you want the scaffold to copy the
 sample data into `./local/sot` for later replacement with private data.
+
+Initialization preserves existing configuration and theme files. To change the
+source path in an existing workspace, edit `paths.sot` in
+`config/workbench.yaml`; repeating `--sample-default` does not change that
+setting. New workspaces include base and cover-letter variants. Publication
+starts unconfigured: follow [the authored CV guide](publish-site.md) to select
+and review your own source/export pair and destination before syncing.
 
 ## 3) Confirm the runtime toolchain
 
@@ -128,13 +140,39 @@ uv run cvw build --plain --sot-path ./sot.sample --variant base --format md
 uv run cvw build --json --sot-path ./sot.sample --variant base --format md
 ```
 
-## 7) Follow-up: sync to your site (local-first)
+### Cover-letter workflow
+
+The starter `cover-letter` variant selects `default-cover-letter` from
+`letters.yaml`. Its paragraphs have stable section IDs, text, and tags. Set
+`variant.letter_id` to choose another authored letter; include/exclude tags
+select its paragraphs.
 
 ```bash
-uv run cvw sync --variant base --site /path/to/astro-site
+uv run cvw build --sot-path ./sot.sample --variant cover-letter --format md,pdf,docx
+uv run cvw explain --variant cover-letter --type section --id opening
+uv run cvw reviewpack --variant cover-letter --json
 ```
 
-`uv run cvw sync` defaults to local mode. PR sync is opt-in via `--mode pr`.
+For personal content, use your configured private source in place of
+`./sot.sample`. To revise a letter, edit its text in that source's `letters.yaml`
+and rebuild. When exploring an alternative, first create or select an explicit
+[source version](sot-versions.md); generated DOCX/PDF outputs are review artifacts.
+The review packet keeps the original run and lists selected letter paragraphs.
+Use [selection evidence](../reference/selection-contract.md) to explain filtering
+or inspect a retained run after another build.
+
+Reviewing edits in Word remains supported as a comparison workflow. Letter
+imports report `review_diff_only`; apply accepted wording manually to
+`letters.yaml` and rebuild. Executable import patches currently cover the
+documented resume surfaces only. See [import outputs](../reference/review-contract.md#import-outputs).
+
+## 7) Follow-up: prepare your authored CV for publication
+
+The generated sample build is a rendering demonstration. For a faithful public
+CV, follow [Publish the authored CV](publish-site.md) to verify the editable
+DOCX and its PDF export, prepare the sanitized artifact, review it, and sync
+that validated PDF. The site is a downstream presentation surface.
+`sync` defaults to local mode; PR sync remains explicit via `--mode pr`.
 
 ## 8) Follow-up: preview styling quickly
 
@@ -289,8 +327,12 @@ To package a specific project build deterministically, use the run path emitted 
 ```bash
 uv run cvw build --project <project-id> --format md,pdf,docx
 uv run cvw reviewpack --run projects/<project-id>/<run-id>
-uv run cvw import-docx --from ./var/reviews/projects/<project-id>/cv.docx --project <project-id> --run projects/<project-id>/<run-id>
+uv run cvw import-docx --from ./var/reviews/projects/<project-id>/cv.docx
 ```
+
+The bundle's `review-source.json` pins the source run. Keep it beside the edited
+DOCX. A standalone DOCX without that record requires explicit `--run <run-id>`.
+See [Content Review](../reference/review-contract.md) for source-health checks.
 
 If you need to refresh an existing review pack for the same run, rerun
 `reviewpack` explicitly with `--force`:
@@ -338,21 +380,13 @@ review_diff_only`.
 
 ## 11) Follow-up: clean generated artifacts
 
-```bash
-uv run cvw clean runs --yes
-uv run cvw clean dist --yes
-uv run cvw clean drafts --yes
-uv run cvw clean reviews --yes
-uv run cvw clean registry --yes
-uv run cvw clean projects --yes
-```
-
-To prune old runs without wiping everything, keep the most recent runs per
-variant:
+Start with a run-retention preview. Keep recent runs separately for each
+project and variant, and retain any exact run still needed by a review/import:
 
 ```bash
-uv run cvw runs gc --keep-latest 2
-uv run cvw runs gc --keep-latest 2 --yes
+uv run cvw runs gc --keep-latest 2 --json
 ```
 
-Clean commands default to a dry run unless `--yes` is provided.
+Add `--keep <run-id>` for an outstanding review and `--yes` only to apply the
+chosen cleanup. See [Artifact retention](../reference/artifact-retention.md)
+for plan fields, project-scoped IDs, invalid manifests, and whole-store cleanup.

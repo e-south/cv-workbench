@@ -11,6 +11,7 @@ Module Author(s): Codex
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -469,6 +470,8 @@ def _verify_build(
         f"build run_dir outside isolated workspace: {run_dir}",
     )
     state["build_run_id"] = run_dir.name
+    state["build_artifact_roots"] = (output_md.parent, run_dir)
+    state["build_artifact_fingerprints"] = _artifact_fingerprints(state["build_artifact_roots"])
     return {
         "run_dir": str(run_dir),
         "run_id": run_dir.name,
@@ -479,11 +482,22 @@ def _verify_build(
 
 
 def _verify_preview_once(
-    payload: dict[str, Any], workspace: VerifyWorkspace, _state: dict[str, Any]
+    payload: dict[str, Any], workspace: VerifyWorkspace, state: dict[str, Any]
 ) -> dict[str, str]:
     data = _expect_summary_payload(payload, "serve")
     html_path = _require_path(data, "output_html")
     _require(html_path.exists(), f"preview output missing: {html_path}")
+    preview_root = workspace.root / "var/runs/preview/variants/base"
+    _require(
+        html_path.resolve().is_relative_to(preview_root.resolve())
+        and html_path.parent.name == "output",
+        f"preview output outside its owned rendered directory: {html_path}",
+    )
+    _require(
+        _artifact_fingerprints(state["build_artifact_roots"])
+        == state["build_artifact_fingerprints"],
+        "preview changed audited build artifacts",
+    )
     preview_path = data.get("preview_file") or data.get("preview_url")
     _require(preview_path == str(html_path), "preview --once should return the local HTML path")
     _require(
@@ -495,6 +509,16 @@ def _verify_preview_once(
         "output_html": str(html_path),
         "preview_file": str(preview_path),
         "session_path": str(session_path),
+        "audited_build_artifacts": "preserved",
+    }
+
+
+def _artifact_fingerprints(roots: tuple[Path, ...]) -> dict[str, str]:
+    return {
+        str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+        for root in roots
+        for path in root.rglob("*")
+        if path.is_file()
     }
 
 
@@ -569,11 +593,30 @@ def _verify_import_docx(
         data.get("run_id") == expected_run_id,
         f"import-docx resolved unexpected run_id: {data.get('run_id')} != {expected_run_id}",
     )
+    try:
+        metadata = json.loads(metadata_path.read_text())
+        patch = yaml.safe_load(patch_path.read_text())
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise VerifyError("unchanged DOCX import metadata or patch could not be read") from exc
+    _require(
+        isinstance(metadata, dict)
+        and metadata.get("apply_status") == "ready_no_changes"
+        and metadata.get("patch_path") == patch_path.name,
+        "unchanged DOCX import must report ready_no_changes and identify its patch",
+    )
+    _require(
+        isinstance(patch, dict)
+        and isinstance(patch.get("patch"), dict)
+        and patch["patch"].get("format") == "project-ops"
+        and patch["patch"].get("operations") == [],
+        "unchanged DOCX import must contain a project-ops patch with zero operations",
+    )
     return {
         "draft_dir": str(draft_dir),
         "patch": str(patch_path),
         "metadata": str(metadata_path),
         "run_id": str(data["run_id"]),
+        "apply_status": "ready_no_changes",
     }
 
 

@@ -11,6 +11,7 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 
@@ -79,7 +80,7 @@ def test_create_project_from_url(tmp_path: Path, monkeypatch) -> None:
             raw_html="<html></html>",
         )
 
-    monkeypatch.setattr("cvworkbench.ops.projects.fetch_and_extract", _fake_extract)
+    monkeypatch.setattr("cvworkbench.ops.projects.creation.fetch_and_extract", _fake_extract)
 
     result = create_project_from_url(
         url="https://example.com/jobs/1",
@@ -182,6 +183,51 @@ def test_retarget_project_variant_updates_project_manifest_and_preserves_proposa
     assert variant_payload["variant"]["include_tags"] == ["leadership"]
 
 
+def test_retarget_restores_both_files_when_manifest_save_fails(tmp_path: Path, monkeypatch) -> None:
+    config = _write_config(tmp_path)
+    (config.parent / "variants/focus.yaml").write_text(
+        "variant:\n  id: focus\n  outputs: [md]\n  include_tags: [leadership]\n"
+    )
+    source = tmp_path / "source"
+    source.mkdir()
+    job = tmp_path / "job.txt"
+    job.write_text("Research scientist with Python experience.\n")
+    project = create_project_from_file(
+        job_path=job,
+        slug="job",
+        base_variant_id="base",
+        config_path=config,
+        sot_path=source,
+        store_raw=False,
+    )
+    before = {path: path.read_bytes() for path in (project.variant_path, project.project_file)}
+    original_write = Path.write_text
+    original_replace = os.replace
+
+    def refuse_manifest_write(path, *args, **kwargs):
+        if path == project.project_file:
+            raise OSError("fixture manifest save denied")
+        return original_write(path, *args, **kwargs)
+
+    def refuse_manifest_replace(source, destination, *args, **kwargs):
+        if Path(destination) == project.project_file:
+            raise OSError("fixture manifest save denied")
+        return original_replace(source, destination, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "write_text", refuse_manifest_write)
+        patch.setattr(os, "replace", refuse_manifest_replace)
+        with pytest.raises((OSError, ProjectError)):
+            retarget_project_variant(
+                project_dir=project.project_dir,
+                base_variant_id="focus",
+                config_path=config,
+            )
+
+    assert {path: path.read_bytes() for path in before} == before
+    assert not list(project.project_dir.rglob("*.cvw-*"))
+
+
 def test_discard_project_workspace_removes_project_and_clears_inbox(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path)
     sot_path = tmp_path / "local" / "sot"
@@ -226,7 +272,7 @@ def test_discard_project_workspace_still_removes_project_when_registry_cleanup_f
     def _boom(**kwargs) -> None:
         raise VariantLifecycleError("registry unavailable")
 
-    monkeypatch.setattr("cvworkbench.ops.projects.discard_variant", _boom)
+    monkeypatch.setattr("cvworkbench.ops.projects.creation.discard_variant", _boom)
 
     with pytest.raises(ProjectError, match="registry unavailable"):
         discard_project_workspace(project_dir=result.project_dir, config_path=config_path)
@@ -246,7 +292,7 @@ def test_create_project_from_file_rolls_back_on_variant_registration_failure(
     def _boom(**kwargs) -> None:
         raise VariantLifecycleError("registry unavailable")
 
-    monkeypatch.setattr("cvworkbench.ops.projects.register_variant", _boom)
+    monkeypatch.setattr("cvworkbench.ops.projects.creation.register_variant", _boom)
 
     with pytest.raises(ProjectError, match="registry unavailable"):
         create_project_from_file(
@@ -262,7 +308,7 @@ def test_create_project_from_file_rolls_back_on_variant_registration_failure(
     assert not project_dir.exists()
     assert not any(path.name.startswith(".orbit.tmp-") for path in project_dir.parent.iterdir())
 
-    monkeypatch.setattr("cvworkbench.ops.projects.register_variant", register_variant)
+    monkeypatch.setattr("cvworkbench.ops.projects.creation.register_variant", register_variant)
     result = create_project_from_file(
         job_path=job_path,
         slug="orbit",
@@ -599,9 +645,9 @@ def test_append_project_operations_serializes_concurrent_writers(
 
     barrier = threading.Barrier(2)
     projects_module = __import__(
-        "cvworkbench.ops.projects", fromlist=["_load_project_patch_authoring_state"]
+        "cvworkbench.ops.projects.patch_authoring", fromlist=["read_project_patch_document"]
     )
-    original_loader = projects_module._load_project_patch_authoring_state
+    original_loader = projects_module.read_project_patch_document
 
     def _delayed_loader(project_dir: Path):
         state = original_loader(project_dir)
@@ -612,7 +658,7 @@ def test_append_project_operations_serializes_concurrent_writers(
         return state
 
     monkeypatch.setattr(
-        "cvworkbench.ops.projects._load_project_patch_authoring_state",
+        "cvworkbench.ops.projects.patch_authoring.read_project_patch_document",
         _delayed_loader,
     )
 

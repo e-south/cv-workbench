@@ -11,6 +11,25 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
+
+
+def title_italic_spans(title: str, phrases: Sequence[str]) -> list[tuple[int, int]]:
+    """Locate explicit literal phrases; reject stale or overlapping formatting."""
+    spans: list[tuple[int, int]] = []
+    for phrase in phrases:
+        if not phrase or phrase not in title:
+            raise ValueError("title italics must match nonempty text in the title")
+        spans.extend(
+            (match.start(), match.start() + len(phrase))
+            for match in re.finditer(f"(?={re.escape(phrase)})", title)
+        )
+    spans.sort()
+    if any(left[1] > right[0] for left, right in zip(spans, spans[1:], strict=False)):
+        raise ValueError("title italics must not overlap or repeat")
+    return spans
+
 
 def slugify(value: str | None) -> str:
     if not isinstance(value, str):

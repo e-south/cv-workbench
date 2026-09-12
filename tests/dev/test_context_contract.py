@@ -95,6 +95,64 @@ def test_project_review_docs_keep_build_before_reviewpack() -> None:
     assert "get the pinned `--run` command" in contract
 
 
+def test_project_docs_distinguish_identity_inventory_and_execution() -> None:
+    contract = (REPO_ROOT / "docs" / "reference" / "project-contract.md").read_text()
+
+    assert "cvworkbench.ops.projects.load_project_metadata" in contract
+    assert "`load_project`" in contract
+    assert "`load_project_details`" in contract
+    assert "`[A-Za-z0-9][A-Za-z0-9._-]*`" in contract
+    assert "`projects.invalid`" in contract
+    assert "without requiring proposal artifacts" in contract
+    assert "cvworkbench.ops.projects.guide_project" in contract
+    assert "`ProjectGuideResult`" in contract
+    assert "`ProjectGuideError`" in contract
+    assert "`errors` tuple" in contract
+    assert "## Mutation recovery" in contract
+    assert "original staging directory" in contract
+    assert "storage.replace_files_atomically" in contract
+    assert "concurrent writers" in contract
+    assert "## Creation preflight" in contract
+    assert "before\nfetching" in contract
+    assert "variant-lifecycle.md#registration-preflight" in contract
+    assert "not a snapshot of all source files" in contract
+    assert "`expected_contents`" in contract
+    assert "before the first replacement" in contract
+    assert "## Saved guidance" in contract
+    assert "`proposal_plan_warning`" in contract
+    assert "Matching IDs do" in contract
+    assert "### Descriptive metadata" in contract
+    assert "`load_project_summary`" in contract
+    assert "`ProjectSummary`" in contract
+    assert "64 hexadecimal characters" in contract
+    assert "`metadata_error_count`" in contract
+    assert "Format validation does not verify current file" in contract
+    assert "`load_project_plan(details)`" in contract
+    assert "before reading\nits contents" in contract
+    assert "### Artifact inspection" in contract
+    assert "cvworkbench.ops.projects.inspect_project_artifacts(project_dir)" in contract
+    assert "`ProjectArtifactCheck`" in contract
+    assert "`job_artifact_warning`" in contract
+    assert "Inventory remains lightweight" in contract
+    assert "guidance-provenance.md" in contract
+
+
+def test_guidance_provenance_contract_defines_scope_and_version_ownership() -> None:
+    contract = (REPO_ROOT / "docs/reference/guidance-provenance.md").read_text()
+    for term in (
+        "cvw-guidance-inputs-v1",
+        "tag-overlap-v1",
+        "GuidanceInputCheck",
+        "matches_inputs",
+        "unverifiable",
+        "guidance_catalog_inputs",
+        "ConfigSnapshot",
+        "not authenticated",
+        "Older plans remain readable",
+    ):
+        assert term in contract
+
+
 def test_docs_make_bounded_editing_scope_explicit() -> None:
     readme = (REPO_ROOT / "README.md").read_text()
     overview = (REPO_ROOT / "docs" / "concepts" / "overview.md").read_text()

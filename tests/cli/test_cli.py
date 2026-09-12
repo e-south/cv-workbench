@@ -18,6 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
@@ -54,6 +55,80 @@ def test_cli_help_lists_commands() -> None:
     assert "sot" in output
 
 
+def test_variant_gc_explains_record_only_reconciliation(tmp_path: Path) -> None:
+    from cvworkbench.ops.variant_lifecycle import register_variant
+
+    config = tmp_path / "config" / "workbench.yaml"
+    config.parent.mkdir()
+    config.write_text("variant_lifecycle:\n  ttl_days: 7\n")
+    variant = tmp_path / "var" / "drafts" / "gone" / "variant.yaml"
+    variant.parent.mkdir(parents=True)
+    variant.write_text("variant:\n  id: gone\n  outputs: [md]\n")
+    register_variant(
+        config_path=config,
+        variant_path=variant,
+        cleanup_path=variant.parent,
+        source="draft",
+        label=None,
+    )
+    registry = tmp_path / "var" / "variants" / "registry.json"
+    data = json.loads(registry.read_text())
+    data["entries"][0]["expires_at"] = "2020-01-01T00:00:00+00:00"
+    registry.write_text(json.dumps(data))
+    variant.unlink()
+    variant.parent.rmdir()
+    before = registry.read_bytes()
+
+    runner = CliRunner()
+    args = ["variant", "gc", "--config", str(config)]
+    result = runner.invoke(app, [*args, "--json"])
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    assert payload["reconciled"] == 1
+    assert payload["candidates"] == [
+        {
+            "variant_id": "gone",
+            "cleanup_path": str(variant.parent),
+            "action": "reconcile",
+            "reason": "expired",
+        }
+    ]
+    plain = runner.invoke(app, [*args, "--plain"])
+    assert plain.exit_code == 2
+    assert "reconcile" in plain.stdout and str(variant.parent) in plain.stdout
+    assert registry.read_bytes() == before
+
+
+def test_runs_gc_explains_retained_invalid_runs(tmp_path: Path) -> None:
+    config = tmp_path / "config" / "workbench.yaml"
+    config.parent.mkdir()
+    config.write_text("paths:\n  runs: ../var/runs\n")
+    kept = tmp_path / "var" / "runs" / "projects" / "alpha" / "damaged"
+    kept.mkdir(parents=True)
+    (kept / "notes.md").write_text("Retained")
+    removable = tmp_path / "var" / "runs" / "unneeded"
+    removable.mkdir()
+    result = CliRunner().invoke(
+        app,
+        [
+            "runs",
+            "gc",
+            "--config",
+            str(config),
+            "--keep",
+            "projects/alpha/damaged",
+            "--include-invalid",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    assert payload["invalid_candidates"] == [str(removable)]
+    assert payload["keep_reasons"] == {"projects/alpha/damaged": ["explicit_keep"]}
+    assert kept.is_dir() and removable.is_dir()
+
+
+@pytest.mark.usefixtures("sample_workspace")
 def test_validate_succeeds_with_sample_sot() -> None:
     runner = CliRunner()
 
@@ -158,6 +233,7 @@ def test_apply_prints_status(tmp_path: Path) -> None:
     assert "empty_patch" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_build_prints_output_locations() -> None:
     runner = CliRunner()
 
@@ -173,6 +249,7 @@ def test_build_prints_output_locations() -> None:
     assert "run_dir:" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_build_reports_unsupported_format_without_traceback() -> None:
     runner = CliRunner()
 
@@ -196,7 +273,7 @@ def test_build_reports_unsupported_format_without_traceback() -> None:
 
 
 def test_parse_formats_dedupes_preserving_first_seen_order() -> None:
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.documents.build")
 
     assert app_module._parse_formats(["md,pdf", "md", " docx , pdf "]) == [
         "md",
@@ -206,6 +283,7 @@ def test_parse_formats_dedupes_preserving_first_seen_order() -> None:
     assert app_module._parse_formats(["   "]) == []
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_build_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -256,6 +334,7 @@ def test_build_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
     assert "No output formats selected" in (result.stderr or "")
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_render_rejects_whitespace_only_format_argument(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -373,7 +452,7 @@ def test_import_docx_help_mentions_run_resolution() -> None:
     result = runner.invoke(app, ["import-docx", "--help"])
 
     assert result.exit_code == 0
-    output = strip_ansi(result.stdout)
+    output = " ".join(strip_ansi(result.stdout).split())
     assert "--from" in output
     assert "canonical.md" in output
     assert "patch.yaml using structured project-ops" in output
@@ -382,6 +461,7 @@ def test_import_docx_help_mentions_run_resolution() -> None:
     assert "--project" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_theme_list_ships_multiple_themes() -> None:
     runner = CliRunner()
 
@@ -394,6 +474,7 @@ def test_theme_list_ships_multiple_themes() -> None:
     assert "signal" in output
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_theme_info_reports_presets() -> None:
     runner = CliRunner()
 
@@ -511,7 +592,7 @@ def test_variant_keep_resolves_project_variant_path(tmp_path: Path, monkeypatch)
     )
 
     captured: dict[str, object] = {}
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
 
     def _fake_keep_variant(*, variant_path: Path, config_path: Path, variant_id, label):
         captured["variant_path"] = variant_path
@@ -568,7 +649,7 @@ def test_variant_discard_resolves_project_variant_path(tmp_path: Path, monkeypat
     )
 
     captured: dict[str, object] = {}
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
 
     def _fake_discard_variant(*, variant_path: Path, config_path: Path, confirm: bool):
         captured["variant_path"] = variant_path
@@ -603,6 +684,7 @@ def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, mo
     project_dir = tmp_path / "var" / "projects" / "job"
     proposals_dir = project_dir / "proposals"
     proposals_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.yaml").write_text("project:\n  id: job\n  base_variant: base\n")
     variant_path = proposals_dir / "variant.yaml"
     patch_path = proposals_dir / "patch.yaml"
     variant_path.write_text("variant:\n  id: base\n  outputs: [md]\n")
@@ -621,7 +703,7 @@ def test_variant_inbox_json_exposes_project_selector_commands(tmp_path: Path, mo
             "label": "job",
         },
     )()
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
     monkeypatch.setattr(app_module, "list_variant_inbox", lambda _config: [entry])
 
     runner = CliRunner()
@@ -669,7 +751,7 @@ def test_variant_inbox_json_flags_expired_entries_and_gc_hint(tmp_path: Path, mo
             "label": "job",
         },
     )()
-    app_module = importlib.import_module("cvworkbench.cli.app")
+    app_module = importlib.import_module("cvworkbench.cli.commands.variants")
     monkeypatch.setattr(app_module, "list_variant_inbox", lambda _config: [entry])
 
     runner = CliRunner()
@@ -700,3 +782,20 @@ def test_project_help_distinguishes_guide_and_new() -> None:
     assert "Create a project workspace directly" in new_output
     assert "Use `project guide`" in new_output
     assert "rank candidate variants" in guide_output
+
+
+def test_build_reports_recoverable_commit_failure(sample_workspace, monkeypatch):
+    from cvworkbench import storage
+
+    replace = storage.os.replace
+
+    def fail_commit(source, destination):
+        if Path(destination).name == "manifest.json" and "cvw-stage" in Path(source).name:
+            raise OSError("commit unavailable")
+        return replace(source, destination)
+
+    monkeypatch.setattr(storage.os, "replace", fail_commit)
+    result = CliRunner().invoke(app, ["build", "--format", "md"])
+    assert result.exit_code == 1
+    assert "ERROR: Atomic replacement failed; prior artifacts were restored" in result.output
+    assert not list((sample_workspace / "var/runs").iterdir())

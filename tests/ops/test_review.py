@@ -14,13 +14,87 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
-import cvworkbench.ops.review as review_module
+import cvworkbench.ops.review.markdown as review_markdown_module
 from cvworkbench.cli import app
 from cvworkbench.config import resolve_drafts_path, resolve_reviews_path
+from cvworkbench.ops.review.packs import build_review_pack
+from cvworkbench.ops.review.targets import resolve_review_target
 from tests.utils import isolated_filesystem
+
+
+def test_import_rejects_baseline_changed_during_conversion(tmp_path, monkeypatch):
+    from cvworkbench.ops.review import ReviewError
+    from cvworkbench.ops.review.importing import import_docx_review
+
+    config = _write_minimal_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    run = "2026-01-01T00-00-00Z"
+    _write_run_manifest(tmp_path, run, "base", "before\n")
+    reviewed = _pack_review_docx(config, variant_id="base")
+    baseline = tmp_path / "var/runs" / run / "canonical.md"
+
+    def convert(_path):
+        baseline.write_text("changed during conversion\n")
+        return "after\n"
+
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", convert)
+    with pytest.raises(ReviewError, match="changed|mismatch"):
+        import_docx_review(
+            docx_path=reviewed, config_path=config, run=None, variant_id="base", project_dir=None
+        )
+    assert not list(resolve_drafts_path(config).glob("import-*"))
+
+
+def test_failed_import_commit_removes_only_its_owned_draft(tmp_path, monkeypatch):
+    from cvworkbench import storage
+    from cvworkbench.ops.review import ReviewError
+    from cvworkbench.ops.review.importing import import_docx_review
+
+    config = _write_minimal_config(tmp_path)
+    _write_minimal_sot(tmp_path)
+    run = "2026-01-01T00-00-00Z"
+    _write_run_manifest(tmp_path, run, "base", "before\n")
+    reviewed = _pack_review_docx(config, variant_id="base")
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", lambda _: "after\n")
+    drafts = resolve_drafts_path(config)
+    drafts.mkdir(parents=True, exist_ok=True)
+    existing = drafts / "keep.md"
+    existing.write_text("Existing work\n")
+    real_replace = storage.os.replace
+
+    def replace(source, destination):
+        if Path(destination).name == "notes.md":
+            raise OSError("injected storage failure")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(storage.os, "replace", replace)
+    with pytest.raises(ReviewError, match="draft"):
+        import_docx_review(
+            docx_path=reviewed, config_path=config, run=None, variant_id="base", project_dir=None
+        )
+    assert existing.read_text() == "Existing work\n"
+    assert not list(drafts.glob("import-*"))
+
+
+def _pack_review_docx(config: Path, *, variant_id=None, project_dir=None) -> Path:
+    target = resolve_review_target(
+        config_path=config, run=None, variant_id=variant_id, project_dir=project_dir
+    )
+    manifest_path = target.run.path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for fmt in ("docx", "pdf"):
+        manifest["outputs"][fmt] = f"cv.{fmt}"
+        (target.run.path / f"cv.{fmt}").write_bytes(fmt.encode())
+    manifest["formats"] = list(manifest["outputs"])
+    manifest_path.write_text(json.dumps(manifest))
+    (target.run.path / "selection.json").write_text('{"items": []}')
+    return build_review_pack(
+        config_path=config, run=str(target.run.path), variant_id=None, project_dir=project_dir
+    ).docx_path
 
 
 def _write_minimal_config(root: Path) -> Path:
@@ -297,7 +371,7 @@ def test_import_docx_writes_patch(tmp_path: Path, monkeypatch) -> None:
     def fake_convert(_path: Path) -> str:
         return "after\n"
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -354,7 +428,7 @@ def test_import_docx_generates_applyable_patch_for_experience_bullet_edits(
     def fake_convert(_path: Path) -> str:
         return canonical.replace("Delivered outcomes.", "Delivered measurable outcomes.")
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -455,7 +529,7 @@ def test_import_docx_normalizes_wrapped_markdown_without_forcing_review_diff_onl
             ]
         )
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -561,7 +635,7 @@ def test_import_docx_normalizes_flattened_noneditable_sections_without_forcing_r
             ]
         )
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -641,7 +715,7 @@ def test_import_docx_maps_duplicate_experience_bullets_by_position(
             "- Delivered outcomes.\n\n- Delivered measurable outcomes.",
         )
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -733,7 +807,7 @@ def test_import_docx_generates_applyable_patch_for_filtered_project_summary_edit
     def fake_convert(_path: Path) -> str:
         return canonical.replace("Example summary.", "Tailored example summary.")
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -800,7 +874,7 @@ def test_import_docx_keeps_review_diff_only_for_unsupported_heading_edits(
     def fake_convert(_path: Path) -> str:
         return canonical.replace("Engineer - Example Co", "Principal Engineer - Example Co")
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -829,18 +903,17 @@ def test_import_docx_keeps_review_diff_only_for_unsupported_heading_edits(
     assert "- apply_status: review_diff_only" in notes_files[0].read_text()
 
 
-def test_import_docx_uses_variant_latest_run(tmp_path: Path, monkeypatch) -> None:
+def test_import_docx_uses_variant_review_source(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_run_manifest(tmp_path, "2026-01-01T00-00-00Z", "base", "base-before\n")
     _write_run_manifest(tmp_path, "2026-01-02T00-00-00Z", "cover", "cover-before\n")
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, variant_id="base")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -879,8 +952,8 @@ def test_import_docx_reports_hint_when_runs_are_missing(tmp_path: Path) -> None:
                 "import-docx",
                 "--from",
                 str(docx_path),
-                "--variant",
-                "base",
+                "--run",
+                "missing",
                 "--config",
                 str(config_path),
                 "--plain",
@@ -888,11 +961,11 @@ def test_import_docx_reports_hint_when_runs_are_missing(tmp_path: Path) -> None:
         )
 
     assert result.exit_code != 0
-    assert "No runs available" in (result.stderr or "")
+    assert "Run not found" in (result.stderr or "")
     assert "cvw reviewpack --variant" in (result.stderr or "")
 
 
-def test_import_docx_ignores_invalid_run_dirs_when_variant_resolves_latest_run(
+def test_import_docx_uses_recorded_run_with_unrelated_invalid_directories(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_path = _write_minimal_config(tmp_path)
@@ -900,13 +973,12 @@ def test_import_docx_ignores_invalid_run_dirs_when_variant_resolves_latest_run(
     invalid_dir = tmp_path / "var" / "runs" / "2026-01-01T00-00-00Z"
     invalid_dir.mkdir(parents=True, exist_ok=True)
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, variant_id="base")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -1113,13 +1185,12 @@ def test_import_docx_variant_ignores_project_scoped_runs(tmp_path: Path, monkeyp
         "project-before\n",
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, variant_id="base")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -1146,7 +1217,9 @@ def test_import_docx_variant_ignores_project_scoped_runs(tmp_path: Path, monkeyp
     assert "base-before" in patch_text
 
 
-def test_import_docx_variant_rejects_project_only_runs(tmp_path: Path, monkeypatch) -> None:
+def test_import_docx_requires_explicit_run_for_untracked_project_document(
+    tmp_path: Path, monkeypatch
+) -> None:
     config_path = _write_minimal_config(tmp_path)
     _write_project_run_manifest(
         tmp_path,
@@ -1162,7 +1235,7 @@ def test_import_docx_variant_rejects_project_only_runs(tmp_path: Path, monkeypat
     def fake_convert(_path: Path) -> str:
         return "after\n"
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -1181,7 +1254,7 @@ def test_import_docx_variant_rejects_project_only_runs(tmp_path: Path, monkeypat
         )
 
     assert result.exit_code != 0
-    assert "No non-project runs available for variant: base" in (result.stderr or "")
+    assert "requires an explicit --run" in (result.stderr or "")
     assert "--run <run-id>" in (result.stderr or "")
 
 
@@ -1196,13 +1269,12 @@ def test_import_docx_uses_project_selector(tmp_path: Path, monkeypatch) -> None:
         "project-before\n",
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, project_dir=tmp_path / "var" / "projects" / "job")
 
     def fake_convert(_path: Path) -> str:
         return "after\n"
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -1250,13 +1322,12 @@ def test_import_docx_project_selector_writes_project_ops_patch_for_summary_edits
         canonical,
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, project_dir=tmp_path / "var" / "projects" / "job")
 
     def fake_convert(_path: Path) -> str:
         return canonical.replace("Example summary.", "Tailored project summary.")
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -1340,13 +1411,12 @@ def test_import_docx_project_selector_reconciles_existing_project_summary_overla
         canonical,
     )
 
-    docx_path = tmp_path / "review.docx"
-    docx_path.write_bytes(b"docx")
+    docx_path = _pack_review_docx(config_path, project_dir=tmp_path / "var" / "projects" / "job")
 
     def fake_convert(_path: Path) -> str:
         return canonical.replace("Overlay summary.", "Reviewed summary.")
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):
@@ -1413,7 +1483,7 @@ def test_import_docx_project_run_override_uses_pinned_run(tmp_path: Path, monkey
     def fake_convert(_path: Path) -> str:
         return "after\n"
 
-    monkeypatch.setattr(review_module, "_convert_docx_to_markdown", fake_convert)
+    monkeypatch.setattr(review_markdown_module, "convert_docx_to_markdown", fake_convert)
 
     runner = CliRunner()
     with isolated_filesystem(temp_dir=tmp_path):

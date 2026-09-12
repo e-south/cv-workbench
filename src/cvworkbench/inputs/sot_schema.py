@@ -15,6 +15,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from cvworkbench.text import title_italic_spans
+
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 DateValue = (
     Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
@@ -77,7 +79,7 @@ class Project(StrictModel):
 
 
 class Projects(StrictModel):
-    projects: Annotated[list[Project], Field(min_length=1)]
+    projects: list[Project]
 
 
 class Skill(StrictModel):
@@ -182,7 +184,9 @@ class Author(StrictModel):
 class Publication(StrictModel):
     id: NonEmptyStr
     title: NonEmptyStr
-    authors: Annotated[list[Author], Field(min_length=1)]
+    title_italics: NonEmptyStrList | None = None
+    authors: Annotated[list[Author], Field(min_length=1)] | None = None
+    status: Literal["published", "in_preparation"] = "published"
     venue: NonEmptyStr | None = None
     year: DateValue | None = None
     volume: NonEmptyStr | None = None
@@ -192,6 +196,13 @@ class Publication(StrictModel):
     url: NonEmptyStr | None = None
     notes: NonEmptyStr | None = None
     tags: NonEmptyStrList
+
+    @model_validator(mode="after")
+    def _require_published_authors(self) -> "Publication":
+        if self.status == "published" and not self.authors:
+            raise ValueError("published publications require authors")
+        title_italic_spans(self.title, self.title_italics or ())
+        return self
 
 
 class Publications(StrictModel):
@@ -243,7 +254,8 @@ class Teaching(StrictModel):
 
 class ConferenceEntry(StrictModel):
     id: NonEmptyStr
-    title: NonEmptyStr
+    title: NonEmptyStr | None = None
+    series: NonEmptyStr | None = None
     event: NonEmptyStr
     year: DateValue | None = None
     location: NonEmptyStr | None = None

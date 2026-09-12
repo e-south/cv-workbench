@@ -13,11 +13,54 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+import yaml
 from typer.testing import CliRunner
 
 from cvworkbench.cli import app
+from cvworkbench.ops.sot_versions import create_version, initialize_pack
 
 
+def _preview_output(result) -> Path:
+    assert result.exit_code == 0, result.stdout
+    values = [
+        line.removeprefix("output_html: ")
+        for line in result.stdout.splitlines()
+        if line.startswith("output_html: ")
+    ]
+    assert len(values) == 1, result.stdout
+    return Path(values[0])
+
+
+@pytest.mark.usefixtures("sample_workspace")
+@pytest.mark.parametrize("selection", ["other", "missing"])
+def test_preview_keeps_a_configured_version_pin(tmp_path: Path, selection: str) -> None:
+    pack = initialize_pack(source=Path("sot.sample"), destination=tmp_path / "pack")
+    pinned = create_version(pack.root, "pinned", "base")
+    letters = pinned / "letters.yaml"
+    data = yaml.safe_load(letters.read_text())
+    data["letters"][0]["sections"][0]["text"] = "This paragraph belongs to the pinned version."
+    letters.write_text(yaml.safe_dump(data, sort_keys=False))
+    if selection == "missing":
+        (pack.root / "ACTIVE").unlink()
+    config = Path("config/workbench.yaml")
+    settings = yaml.safe_load(config.read_text())
+    settings["paths"]["sot"] = str(pinned)
+    config.write_text(yaml.safe_dump(settings, sort_keys=False))
+    before = {p.relative_to(pack.root): p.read_bytes() for p in pack.root.rglob("*") if p.is_file()}
+    configured = config.read_bytes()
+
+    result = CliRunner().invoke(app, ["preview", "--once", "--variant", "cover-letter", "--plain"])
+
+    assert result.exit_code == 0, result.output
+    assert "This paragraph belongs to the pinned version." in _preview_output(result).read_text()
+    assert config.read_bytes() == configured
+    assert {
+        p.relative_to(pack.root): p.read_bytes() for p in pack.root.rglob("*") if p.is_file()
+    } == before
+
+
+@pytest.mark.usefixtures("sample_workspace")
 def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -71,10 +114,11 @@ def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "preview_file:" in result.stdout
     assert "preview_url:" not in result.stdout
-    html_path = tmp_path / "var" / "dist" / "base" / "cv.html"
+    html_path = _preview_output(result)
+    assert html_path.is_relative_to(tmp_path / "var/runs/preview/variants/base")
     assert html_path.exists()
     assert not (tmp_path / "var" / "dist" / "base" / "cv.pdf").exists()
-    preview_run_dir = tmp_path / "var" / "runs" / "preview" / "base"
+    preview_run_dir = html_path.parent.parent / "input"
     assert (preview_run_dir / "canonical.md").exists()
     assert not (preview_run_dir / "resume.json").exists()
     assert not (preview_run_dir / "selection.json").exists()
@@ -83,6 +127,7 @@ def test_preview_once_builds_html_without_session(tmp_path: Path) -> None:
     assert not session_path.exists()
 
 
+@pytest.mark.usefixtures("sample_workspace")
 def test_preview_once_with_pdf_renders_pdf(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     variants_dir = config_dir / "variants"
@@ -135,8 +180,10 @@ def test_preview_once_with_pdf_renders_pdf(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
-    assert (tmp_path / "var" / "dist" / "base" / "cv.pdf").exists()
+    html_path = _preview_output(result)
+    assert html_path.is_file()
+    assert html_path.with_suffix(".pdf").read_bytes().startswith(b"%PDF-")
+    assert not (tmp_path / "var/dist/base").exists()
 
 
 def test_preview_once_reports_invalid_variant_catalog_without_traceback(tmp_path: Path) -> None:
@@ -301,7 +348,8 @@ def test_preview_once_allows_project_with_explicit_sot_path(tmp_path: Path) -> N
 
     assert result.exit_code == 0
     assert "preview_file:" in result.stdout
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     assert "Override work" in output_path.read_text()
     assert "Did work" not in output_path.read_text()
@@ -409,11 +457,12 @@ def test_preview_once_applies_project_ops_without_writing_shared_dist(tmp_path: 
     )
 
     assert result.exit_code == 0
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     assert "Delivered measurable outcomes" in output_path.read_text()
     assert not (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
-    assert not (tmp_path / "var" / "runs" / "preview" / "job" / "sot").exists()
+    assert not (output_path.parent.parent / "sot").exists()
 
 
 def test_preview_once_renders_project_summary_ops(tmp_path: Path) -> None:
@@ -516,11 +565,12 @@ def test_preview_once_renders_project_summary_ops(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     assert "Tailored project summary" in output_path.read_text()
     assert not (tmp_path / "var" / "dist" / "base" / "cv.html").exists()
-    assert not (tmp_path / "var" / "runs" / "preview" / "job" / "sot").exists()
+    assert not (output_path.parent.parent / "sot").exists()
 
 
 def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_path: Path) -> None:
@@ -631,16 +681,19 @@ def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_
     )
 
     assert result.exit_code == 0
-    output_path = tmp_path / "var" / "runs" / "preview" / "job" / "cv.html"
+    output_path = _preview_output(result)
+    assert output_path.is_relative_to(tmp_path / "var/runs/preview/projects/job")
     assert output_path.exists()
     html = output_path.read_text()
     assert "Pinned version work" in html
     assert "Active version work" not in html
 
 
-def test_preview_rejects_nonlocal_host_binding(monkeypatch) -> None:
+@pytest.mark.usefixtures("sample_workspace")
+@pytest.mark.parametrize("host", ["0.0.0.0", "127.0.0.2", "::1"])
+def test_preview_rejects_nonlocal_host_binding(monkeypatch, host) -> None:
     runner = CliRunner()
-    monkeypatch.setenv("CVW_DEV_HOST", "0.0.0.0")
+    monkeypatch.setenv("CVW_DEV_HOST", host)
 
     result = runner.invoke(
         app,
