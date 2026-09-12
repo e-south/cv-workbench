@@ -11,7 +11,6 @@ Module Author(s): Eric J. South
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import signal
 import socket
@@ -94,22 +93,15 @@ def _reject_legacy_preview_env() -> None:
 
 
 def _validate_preview_host(host: str) -> str:
-    normalized = host.strip()
+    normalized = host.strip().lower()
     if not normalized:
         raise ValueError("CVW_DEV_HOST must not be empty")
-    if normalized.lower() == "localhost":
+    if normalized in {"localhost", "127.0.0.1"}:
         return normalized
-    try:
-        address = ipaddress.ip_address(normalized)
-    except ValueError as exc:
-        raise ValueError(
-            "CVW_DEV_HOST must be localhost or a loopback address; non-local preview binding is not supported"
-        ) from exc
-    if not address.is_loopback:
-        raise ValueError(
-            "CVW_DEV_HOST must be localhost or a loopback address; non-local preview binding is not supported"
-        )
-    return normalized
+    raise ValueError(
+        "CVW_DEV_HOST must be localhost or 127.0.0.1; "
+        "non-local preview binding is not supported, nor are alternate loopback addresses"
+    )
 
 
 def _post_preview_stop(url: str, timeout: float = 2.0) -> tuple[bool, str | None]:

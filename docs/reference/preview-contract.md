@@ -14,8 +14,9 @@ API for browser automation or manual inspection. The CLI is responsible for
 starting and stopping the server; Chrome DevTools MCP is the preferred
 interactive controller.
 
-Only loopback hosts are supported. `CVW_DEV_HOST` may be set to `localhost`,
-`127.0.0.1`, or `::1`; non-local bind addresses such as `0.0.0.0` are rejected.
+`CVW_DEV_HOST` may be set to `localhost` or `127.0.0.1`. The IPv4 server rejects
+alternate loopback addresses and IPv6 bindings, as well as non-local addresses
+such as `0.0.0.0`, before starting.
 
 Every GET, HEAD, and POST request must name the local server and its port in
 `Host`. Browser requests must have the same `Origin`, and cross-site fetches

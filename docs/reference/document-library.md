@@ -164,3 +164,6 @@ explicitly selected private paths and identities; keep that output private.
 ```sh
 uv run pytest tests/ops/test_document_promotion.py tests/ops/test_document_retention.py tests/ops/test_document_privacy.py tests/workspace/test_documents.py tests/cli/test_documents.py
 ```
+
+Native promotion recognizes compound `.ats.txt` outputs as the manifest `ats`
+format and verifies them against the explicit run before copying.

@@ -66,7 +66,14 @@ def capture_source(
         )
     run = (base / source.run).resolve()
     path = (base / source.path).resolve()
-    formats = tuple(sorted({p.suffix.lstrip(".").lower() for p in artifacts}))
+    formats = tuple(
+        sorted(
+            {
+                "ats" if p.name.lower().endswith(".ats.txt") else p.suffix.lstrip(".").lower()
+                for p in artifacts
+            }
+        )
+    )
     captured = capture_native_run(
         configuration=config,
         run_path=run,

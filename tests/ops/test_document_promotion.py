@@ -123,11 +123,24 @@ def test_mismatched_file_extension_rejected(tmp_path: Path) -> None:
         plan_promotion(request_path=request, root=tmp_path)
 
 
-def test_native_source_requires_current_build_and_protects_run(tmp_path: Path) -> None:
+@pytest.mark.parametrize("filename", ["cv.pdf", "cv.ats.txt"])
+def test_native_source_requires_current_build_and_protects_run(
+    tmp_path: Path, filename: str
+) -> None:
     from cvworkbench.ops.documents.promotion import apply_promotion, plan_promotion
     from tests.ops.publication.test_native import native_workspace
 
     args = native_workspace(tmp_path)
+    if filename.endswith(".ats.txt"):
+        import hashlib
+
+        output = args["run_path"] / filename
+        output.write_text("Example Person\n")
+        manifest_path = args["run_path"] / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["outputs"]["ats"] = filename
+        manifest["output_hashes"]["ats"] = hashlib.sha256(output.read_bytes()).hexdigest()
+        manifest_path.write_text(json.dumps(manifest))
     request = tmp_path / "promotion.json"
     request.write_text(
         json.dumps(
@@ -148,8 +161,8 @@ def test_native_source_requires_current_build_and_protects_run(tmp_path: Path) -
                 },
                 "files": [
                     {
-                        "source": str(args["run_path"] / "cv.pdf"),
-                        "destination": "current/native/cv.pdf",
+                        "source": str(args["run_path"] / filename),
+                        "destination": f"current/native/{filename}",
                     }
                 ],
             }

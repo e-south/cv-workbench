@@ -690,9 +690,10 @@ def test_preview_once_project_override_stays_pinned_to_explicit_version_dir(tmp_
 
 
 @pytest.mark.usefixtures("sample_workspace")
-def test_preview_rejects_nonlocal_host_binding(monkeypatch) -> None:
+@pytest.mark.parametrize("host", ["0.0.0.0", "127.0.0.2", "::1"])
+def test_preview_rejects_nonlocal_host_binding(monkeypatch, host) -> None:
     runner = CliRunner()
-    monkeypatch.setenv("CVW_DEV_HOST", "0.0.0.0")
+    monkeypatch.setenv("CVW_DEV_HOST", host)
 
     result = runner.invoke(
         app,
