@@ -25,7 +25,7 @@ cvw publication status --config <workspace-config> --json
 Use the current source and an explicit native run. An older build, changed source,
 phone-bearing variant, or mismatched manifest fails before publication writes.
 Prepare prints the exact PDF and a local visual packet with a native HTML
-reading view when the explicit run includes HTML. To send that view to a site, set `site.cv_html_name: cv.html` in
+reading view when the explicit run includes HTML. To send that view to a site, set `site.cv_html: src/data/cv/cv.html` in
 its sync configuration. Review the HTML and every PDF page, and
 check bookmarks, links, typography, and disclosure. If section-rule graphics
 changed, visually inspect them before updating the policy fingerprint.

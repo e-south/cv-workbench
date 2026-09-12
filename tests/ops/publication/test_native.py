@@ -105,7 +105,7 @@ def test_native_prepare_review_sync_keeps_provenance_private(tmp_path):
                     "publish_variant": "base",
                     "cv_pdf_dir": "public/cv",
                     "cv_pdf_name": "cv.pdf",
-                    "cv_html_name": "cv.html",
+                    "cv_html": "content/cv.html",
                     "cv_manifest": "public/cv/manifest.json",
                     "cv_page": "page.md",
                     "cv_page_frontmatter_key": "cvPdf",
@@ -119,10 +119,10 @@ def test_native_prepare_review_sync_keeps_provenance_private(tmp_path):
     sync_site(config_path=config, site_config_path=site_config, mode="local")
     assert (site / "public/cv/cv.pdf").read_bytes() == result.output_pdf.read_bytes()
     assert str(tmp_path) not in (site / "public/cv/manifest.json").read_text()
-    assert (site / "public/cv/cv.html").read_bytes() == html_path.read_bytes()
+    assert (site / "content/cv.html").read_bytes() == html_path.read_bytes()
     public_manifest = json.loads((site / "public/cv/manifest.json").read_text())
     assert public_manifest["html_sha256"] == digest(html_path)
-    assert public_manifest["html_path"] == "public/cv/cv.html"
+    assert public_manifest["html_path"] == "content/cv.html"
     html_path.write_text("tampered")
     assert inspect_publication(config, "base").state == "invalid"
     before = {p: p.read_bytes() for p in site.rglob("*") if p.is_file()}

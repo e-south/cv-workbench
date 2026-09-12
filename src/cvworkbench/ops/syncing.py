@@ -55,7 +55,7 @@ class _SiteConfig(BaseModel):
     cv_manifest: str
     cv_page: str
     cv_page_frontmatter_key: str
-    cv_html_name: str | None = None
+    cv_html: str | None = None
 
 
 class _SiteSyncModel(BaseModel):
@@ -72,7 +72,7 @@ class SiteSyncConfig:
     cv_manifest: Path
     cv_page: Path
     cv_page_frontmatter_key: str
-    cv_html_name: str | None = None
+    cv_html: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -127,13 +127,8 @@ def load_site_sync(path: Path) -> SiteSyncConfig:
     cv_pdf_name = Path(site.cv_pdf_name)
     if cv_pdf_name.name != site.cv_pdf_name or cv_pdf_name.is_absolute():
         raise SyncError("Site cv_pdf_name must be a single filename")
-    if site.cv_html_name is not None and (
-        Path(site.cv_html_name).name != site.cv_html_name
-        or "\\" in site.cv_html_name
-        or Path(site.cv_html_name).suffix != ".html"
-        or site.cv_html_name == site.cv_pdf_name
-    ):
-        raise SyncError("Site cv_html_name must be a distinct HTML filename")
+    if site.cv_html is not None and Path(site.cv_html).suffix != ".html":
+        raise SyncError("Site cv_html must name an HTML destination")
     return SiteSyncConfig(
         repo_path=repo_path,
         publish_variant=site.publish_variant,
@@ -142,7 +137,7 @@ def load_site_sync(path: Path) -> SiteSyncConfig:
         cv_manifest=_site_relative_path(repo_path, site.cv_manifest, "cv_manifest"),
         cv_page=_site_relative_path(repo_path, site.cv_page, "cv_page"),
         cv_page_frontmatter_key=site.cv_page_frontmatter_key,
-        cv_html_name=site.cv_html_name,
+        cv_html=_site_relative_path(repo_path, site.cv_html, "cv_html") if site.cv_html else None,
     )
 
 
@@ -252,10 +247,10 @@ def _plan_sync(
     copy_ops: tuple[ArtifactCopy, ...] = ()
     if not dest_pdf.exists() or _hash_file(dest_pdf) != artifact.sha256:
         copy_ops = (ArtifactCopy(artifact.source, dest_pdf, artifact.content),)
-    if site.cv_html_name is not None:
+    if site.cv_html is not None:
         if artifact.reading_content is None or artifact.reading_source is None:
             raise SyncError("Site reading view requires a reviewed native HTML publication")
-        dest_html = site.repo_path / site.cv_pdf_dir / site.cv_html_name
+        dest_html = site.repo_path / site.cv_html
         if not dest_html.exists() or _hash_file(dest_html) != artifact.reading_sha256:
             copy_ops += (
                 ArtifactCopy(artifact.reading_source, dest_html, artifact.reading_content),
@@ -310,10 +305,10 @@ def _public_manifest(
         "forbidden_contact_fields": publish.forbidden_contact_fields,
         "forbidden_sections": publish.forbidden_sections,
     }
-    if site.cv_html_name is not None:
+    if site.cv_html is not None:
         if reading_hash is None:
             raise SyncError("Reading view has no publication hash")
-        payload["html_path"] = str((site.cv_pdf_dir / site.cv_html_name).as_posix())
+        payload["html_path"] = str(site.cv_html.as_posix())
         payload["html_sha256"] = reading_hash
     fields = [
         f"  {json.dumps(key)}: {json.dumps(value, sort_keys=True)}"

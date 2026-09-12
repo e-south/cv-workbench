@@ -68,7 +68,7 @@ from the primary PDF output. Preparation stores identical HTML in the review
 packet; review and sync bind its hash to the preparation receipt. Changing the
 native HTML, its stylesheet, or the prepared document invalidates review.
 
-A site opts in through `site.cv_html_name` and receives reviewed HTML plus its
+A site opts in through `site.cv_html` and receives reviewed HTML plus its
 sanitized path/hash. The consumer may scope that completed theme within its page;
 it must not reconstruct entry layout or compile Markdown. Inspect both native
 HTML and PDF before recording review. This does not add PDF structure tags or

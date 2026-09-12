@@ -16,9 +16,9 @@ Default sync expects a site repository with:
 - `src/content/page-cv/cv.md` (frontmatter references the PDF)
 
 The site owns presentation only. It must not copy canonical CV Markdown or
-re-render a second HTML CV. An optional `site.cv_html_name` selects a
-workbench-prepared self-contained native HTML reading document beside the PDF. The filename must be a
-single distinct `.html` filename; it requires a reviewed native preparation.
+re-render a second HTML CV. An optional `site.cv_html` selects a
+workbench-prepared self-contained native HTML reading document at an explicit
+repository-relative `.html` path; it requires a reviewed native preparation.
 The sanitized site manifest adds `html_path` and `html_sha256`. The site must
 validate that digest and passive markup before embedding it. The workbench owns selection, authored-artifact
 preparation, disclosure policy, and artifact provenance.
