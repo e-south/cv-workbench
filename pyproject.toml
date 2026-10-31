@@ -10,7 +10,7 @@ dependencies = [
   "PyYAML>=6.0.1",
   "rich>=15.0.0",
   "trafilatura>=2.2.0",
-  "pymupdf>=1.26,<2",
+  "pymupdf>=1.26,<3",
 ]
 
 [dependency-groups]
